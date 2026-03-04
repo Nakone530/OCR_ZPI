@@ -1,0 +1,171 @@
+================================================================================
+INSTRUKCJA URUCHOMIENIA LOKALNIE
+================================================================================
+
+WYMAGANIA:
+----------
+- Python 3.8+
+- PyTorch
+- torchvision
+- matplotlib
+- Pillow
+
+INSTALACJA ZALEŻNOŚCI:
+----------------------
+Otwórz terminal/cmd i wpisz:
+
+    pip install torch torchvision matplotlib pillow
+
+Lub jeśli masz GPU NVIDIA (szybsze trenowanie):
+
+    pip install torch torchvision --index-url https://download.pytorch.org/whl/cu118
+
+
+================================================================================
+JAK URUCHOMIĆ
+================================================================================
+
+KROK 1: Otwórz terminal w folderze projektu
+-------------------------------------------
+    cd C:\Users\User\Desktop\Czytanie
+
+
+KROK 2: Pobranie i przygotowanie danych
+--------------------------------
+    python run_local.py --prepare
+
+    To pobierze dataset Chars74K (~25 MB) i rozpakuje go.
+
+
+KROK 3: Wytrenowanie modelu 
+-------------------------------------------------
+    python run_local.py --train --epochs 10
+
+    Trenowanie na CPU może potrwać. Na GPU będzie szybciej.
+    Model zostanie zapisany do pliku: model_ocr.pth
+
+
+KROK 4: Rozpoznanie własnego zdjęcia
+--------------------------------
+    python run_local.py --image sciezka/do/zdjecia.png
+
+    Przykłady:
+    python run_local.py --image C:\Users\User\Desktop\litera_A.png
+    python run_local.py --image ./test_images/znak.jpg
+    python run_local.py -i moje_zdjecie.png
+
+
+================================================================================
+WSZYSTKIE OPCJE
+================================================================================
+
+    python run_local.py --help
+
+    --prepare, -p     Tylko pobierz i przygotuj dane
+    --train, -t       Trenuj model
+    --epochs, -e      Liczba epok trenowania (domyślnie 10)
+    --image, -i       Ścieżka do zdjęcia do rozpoznania
+
+
+================================================================================
+JAK DODAĆ WŁASNE ZDJĘCIE
+================================================================================
+
+1. PRZYGOTOWANIE ZDJĘCIA:
+   - Zdjęcie powinno zawierać JEDEN znak (literę lub cyfrę)
+   - Najlepiej na jasnym/białym tle
+   - Formaty: PNG, JPG, JPEG, BMP
+   - Dowolny rozmiar (zostanie przeskalowane do 48x48)
+
+2. PRZYKŁADOWE ZDJĘCIA TESTOWE:
+   Możesz stworzyć własne zdjęcia w programie Paint:
+   - Otwórz Paint
+   - Ustaw rozmiar obrazu np. 100x100 pikseli
+   - Napisz jedną literę lub cyfrę
+   - Zapisz jako PNG
+
+3. URUCHOMIENIE:
+   python run_local.py --image nazwa_pliku.png
+
+
+================================================================================
+STRUKTURA PLIKÓW
+================================================================================
+
+Czytanie/
+├── run_local.py              <- Główny skrypt (uruchamiasz ten plik)
+├── chars74k_ocr_preparation.py  <- Wersja jako moduł Python
+├── chars74k_ocr_colab.ipynb     <- Wersja dla Google Colab
+├── INSTRUKCJA.txt            <- Ta instrukcja
+├── model_ocr.pth             <- Wytrenowany model (po trenowaniu)
+├── prediction_result.png     <- Wynik rozpoznawania (po predykcji)
+└── data/                     <- Folder z danymi (tworzony automatycznie)
+    ├── EnglishFnt.tgz        <- Pobrany dataset
+    └── English/
+        └── Fnt/              <- Rozpakowane obrazy znaków
+
+
+================================================================================
+PRZYKŁAD SESJI
+================================================================================
+
+C:\Users\User\Desktop\Czytanie> python run_local.py --prepare
+Pobieranie datasetu z http://www.ee.surrey.ac.uk/CVSSP/demos/chars74k/EnglishFnt.tgz...
+Postęp: 100.0%
+Pobrano!
+Rozpakowywanie...
+Rozpakowano!
+Dane przygotowane!
+
+C:\Users\User\Desktop\Czytanie> python run_local.py --train --epochs 5
+============================================================
+TRENOWANIE MODELU
+============================================================
+Urządzenie: cpu
+Zbiór treningowy: 5765 obrazów
+Zbiór walidacyjny: 1442 obrazów
+Liczba klas: 62
+Epoch [1/5], Step [50/181], Loss: 2.3456
+...
+Trenowanie zakończone! Najlepsza dokładność: 85.23%
+Model zapisany do: ./model_ocr.pth
+
+C:\Users\User\Desktop\Czytanie> python run_local.py --image test_A.png
+Używane urządzenie: cpu
+Rozpoznawanie zdjęcia: test_A.png
+Wczytywanie modelu z ./model_ocr.pth...
+Model wczytany!
+
+========================================
+WYNIK: 'A' (pewność: 94.5%)
+========================================
+
+Top 5 predykcji:
+  1. 'A' - 94.5%
+  2. '4' - 2.1%
+  3. 'H' - 1.3%
+  4. 'a' - 0.8%
+  5. 'R' - 0.5%
+
+
+================================================================================
+ROZWIĄZYWANIE PROBLEMÓW
+================================================================================
+
+PROBLEM: "ModuleNotFoundError: No module named 'torch'"
+ROZWIĄZANIE: pip install torch torchvision
+
+PROBLEM: "No such file or directory"
+ROZWIĄZANIE: Upewnij się, że jesteś w folderze Czytanie
+             cd C:\Users\User\Desktop\Czytanie
+
+PROBLEM: "UWAGA: Nie znaleziono modelu model_ocr.pth"
+ROZWIĄZANIE: Najpierw wytrenuj model: python run_local.py --train
+
+PROBLEM: Rozpoznawanie słabe/niepoprawne
+ROZWIĄZANIE:
+- Upewnij się, że zdjęcie zawiera tylko jeden znak
+- Znak powinien być czytelny i na kontrastowym tle
+- Wytrenuj model dłużej: python run_local.py --train --epochs 20
+
+================================================================================

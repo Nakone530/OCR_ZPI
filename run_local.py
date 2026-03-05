@@ -1,7 +1,7 @@
 """
 Skrypt do uruchamiania lokalnie - przygotowanie danych + rozpoznawanie zdjęć
 """
-
+import numpy as np
 import os
 import sys
 import argparse
@@ -251,6 +251,71 @@ def train_model(epochs: int = 10, batch_size: int = 32):
     print(f"\nTrenowanie zakończone! Najlepsza dokładność: {best_acc:.2f}%")
     print(f"Model zapisany do: {MODEL_PATH}")
 
+# ============================================================================
+# Rozpoznanie wyrazu
+# ============================================================================
+def predict_word(image_path, model, device):
+    
+    # Wczytanie obrazu i konwersja do grayscale
+    image = Image.open(image_path).convert("L")  # grayscale
+    img_array = np.array(image)
+    
+    # Binaryzacja
+    binary = img_array < 128  # zakładamy, że ciemne litery <128
+    
+    # Projekcja pionowa do segmentacji liter
+    vertical_sum = np.sum(binary, axis=0)
+    
+    # Wykrycie granic liter
+    letters_bounds = []
+    in_letter = False
+    for i, val in enumerate(vertical_sum):
+        if val > 0 and not in_letter:
+            start = i
+            in_letter = True
+        elif val == 0 and in_letter:
+            end = i
+            letters_bounds.append((start, end))
+            in_letter = False
+    # jeśli ostatnia litera sięga końca obrazu
+    if in_letter:
+        letters_bounds.append((start, len(vertical_sum)))
+    
+    word = ""
+    
+    # Rozpoznanie każdej litery
+    model.eval()  # tryb ewaluacji
+    with torch.no_grad():
+        for (start, end) in letters_bounds:
+            letter_img = img_array[:, start:end]
+            
+            # usuń marginesy w pionie
+            rows = np.where(np.sum(letter_img < 128, axis=1) > 0)[0]
+            if len(rows) == 0:
+                continue
+            top, bottom = rows[0], rows[-1]
+            letter_img = letter_img[top:bottom, :]
+            plt.imshow(letter_img, cmap="gray")
+            plt.show()
+            # konwersja do PIL
+            letter_pil = Image.fromarray(letter_img)
+            letter_pil = letter_pil.resize((48, 48))
+            letter_pil = letter_pil.convert("RGB")
+            
+            # transformacja
+            transform = get_transform()
+            tensor = transform(letter_pil).unsqueeze(0).to(device)
+            
+            # predykcja
+            outputs = model(tensor)
+            probs = torch.softmax(outputs, dim=1)
+            confidence, predicted = torch.max(probs, 1)
+            predicted_char = CHARS[predicted.item()]
+            
+            word += predicted_char
+
+
+    return word
 
 # ============================================================================
 # MAIN
@@ -259,6 +324,7 @@ def train_model(epochs: int = 10, batch_size: int = 32):
 def main():
     parser = argparse.ArgumentParser(description="OCR - Rozpoznawanie znaków")
     parser.add_argument("--image", "-i", type=str, help="Ścieżka do zdjęcia do rozpoznania")
+    parser.add_argument("--word", "-w", type=str, help="Ścieżka do zdjęcia do rozpoznania wyrazów")
     parser.add_argument("--train", "-t", action="store_true", help="Trenuj model")
     parser.add_argument("--epochs", "-e", type=int, default=10, help="Liczba epok (domyślnie 10)")
     parser.add_argument("--prepare", "-p", action="store_true", help="Tylko pobierz i przygotuj dane")
@@ -305,7 +371,22 @@ def main():
 
         # Wizualizacja
         visualize_prediction(args.image, predicted_char, confidence)
+        
+    elif args.word:
 
+       # Rozpoznawanie zdjęcia
+        if not os.path.exists(args.word):
+            print(f"Błąd: Nie znaleziono pliku {args.image}")
+            sys.exit(1)
+
+        print(f"\nRozpoznawanie zdjęcia: {args.image}")
+
+        # Wczytaj model
+        model = load_model(MODEL_PATH, device)
+        word = predict_word(args.word, model, device);
+
+        print(f"wyraz : '{word}'")
+        
     else:
         # Domyślnie: pokaż pomoc
         parser.print_help()

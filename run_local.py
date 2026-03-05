@@ -27,8 +27,8 @@ IMAGE_SIZE = 48
 MEAN = [0.485, 0.456, 0.406]
 STD = [0.229, 0.224, 0.225]
 
-# Mapowanie klas na znaki (62 klasy: 0-9, A-Z, a-z)
-CHARS = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+# Mapowanie klas na znaki (52 klasy: A-Z, a-z)
+CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
 
 
 # ============================================================================
@@ -38,7 +38,7 @@ CHARS = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
 class SimpleCNN(nn.Module):
     """sieć CNN do rozpoznawania znaków."""
 
-    def __init__(self, num_classes=62):
+    def __init__(self, num_classes=52):
         super(SimpleCNN, self).__init__()
 
         self.features = nn.Sequential(
@@ -110,7 +110,7 @@ def get_transform():
 
 def load_model(model_path: str, device: torch.device) -> nn.Module:
     """Wczytuje wytrenowany model."""
-    model = SimpleCNN(num_classes=62)
+    model = SimpleCNN(num_classes=52)
 
     if os.path.exists(model_path):
         print(f"Wczytywanie modelu z {model_path}...")

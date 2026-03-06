@@ -405,6 +405,7 @@ def main():
         print("1. Pobierz dane:        python run_local.py --prepare")
         print("2. Trenuj model:        python run_local.py --train --epochs 15")
         print("3. Rozpoznaj zdjęcie:   python run_local.py --image moje_zdjecie.png")
+        print("4. Rozpoznaj wiele:     python run_local.py --multi *.png")
         print("=" * 60)
 
 

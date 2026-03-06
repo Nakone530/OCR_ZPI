@@ -10,6 +10,7 @@ import urllib.request
 import matplotlib.pyplot as plt
 import torch
 import torch.nn as nn
+import subprocess
 from torchvision import datasets, transforms
 from PIL import Image
 
@@ -328,7 +329,7 @@ def main():
     parser.add_argument("--train", "-t", action="store_true", help="Trenuj model")
     parser.add_argument("--epochs", "-e", type=int, default=10, help="Liczba epok (domyślnie 10)")
     parser.add_argument("--prepare", "-p", action="store_true", help="Tylko pobierz i przygotuj dane")
-
+    parser.add_argument("--multi", "-m", type=str, nargs="+", help="Ścieżka do zdjęcia do rozpoznania z wieloma argumentami")
     args = parser.parse_args()
 
     # Sprawdź CUDA
@@ -386,6 +387,14 @@ def main():
         word = predict_word(args.word, model, device);
 
         print(f"wyraz : '{word}'")
+
+    elif args.multi:
+
+        for n in args.multi:
+            subprocess.run([sys.executable, sys.argv[0], "-i", str(n)])
+        sys.exit()
+
+
         
     else:
         # Domyślnie: pokaż pomoc

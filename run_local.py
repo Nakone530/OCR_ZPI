@@ -10,7 +10,8 @@ import urllib.request
 import matplotlib.pyplot as plt
 import torch
 import torch.nn as nn
-import subprocess
+import shutil
+from datetime import date
 from torchvision import datasets, transforms
 from PIL import Image
 
@@ -74,6 +75,43 @@ class SimpleCNN(nn.Module):
         x = self.features(x)
         x = self.classifier(x)
         return x
+
+
+# ============================================================================
+# ZARZĄDZANIE FOLDEREM Z DATĄ
+# ============================================================================
+
+def get_today_folder() -> str:
+    """Zwraca ścieżkę do folderu z dzisiejszą datą, tworząc go jeśli nie istnieje."""
+    today = date.today().strftime("%Y-%m-%d")
+    folder = os.path.join(".", today)
+    os.makedirs(folder, exist_ok=True)
+    return folder
+
+
+def save_image_to_today_folder(image_path: str) -> str:
+    """
+    Zapisuje obraz do folderu z dzisiejszą datą jako kolejny plik PNG.
+    Nazwy plików: 1.png, 2.png, 3.png, ...
+    Zwraca ścieżkę docelową.
+    """
+    folder = get_today_folder()
+
+    # Wyznacz kolejny wolny numer
+    existing = [
+        int(os.path.splitext(f)[0])
+        for f in os.listdir(folder)
+        if f.endswith(".png") and os.path.splitext(f)[0].isdigit()
+    ]
+    next_num = max(existing, default=0) + 1
+    dest = os.path.join(folder, f"{next_num}.png")
+
+    # Zapisz jako PNG (konwersja na wypadek innego formatu wejściowego)
+    img = Image.open(image_path).convert("RGB")
+    img.save(dest, format="PNG")
+
+    print(f"Zapisano zdjęcie jako: {dest}")
+    return dest
 
 
 # ============================================================================
@@ -461,12 +499,15 @@ def main():
         train_model(epochs=args.epochs)
 
     elif args.image:
-        # Rozpoznawanie zdjęcia
+        # Rozpoznawanie zdjęcia (pojedyncza litera)
         if not os.path.exists(args.image):
             print(f"Błąd: Nie znaleziono pliku {args.image}")
             sys.exit(1)
 
         print(f"\nRozpoznawanie zdjęcia: {args.image}")
+
+        # Zapisz zdjęcie do folderu z dzisiejszą datą
+        save_image_to_today_folder(args.image)
 
         # Wczytaj model
         model = load_model(MODEL_PATH, device)
@@ -490,35 +531,59 @@ def main():
         
     elif args.word:
 
-       # Rozpoznawanie zdjęcia
+        # Rozpoznawanie zdjęcia (wyraz)
         if not os.path.exists(args.word):
-            print(f"Błąd: Nie znaleziono pliku {args.image}")
+            print(f"Błąd: Nie znaleziono pliku {args.word}")
             sys.exit(1)
 
-        print(f"\nRozpoznawanie zdjęcia: {args.image}")
+        print(f"\nRozpoznawanie zdjęcia: {args.word}")
+
+        # Zapisz zdjęcie do folderu z dzisiejszą datą
+        save_image_to_today_folder(args.word)
 
         # Wczytaj model
         model = load_model(MODEL_PATH, device)
-        word = predict_word(args.word, model, device);
+        word = predict_word(args.word, model, device)
 
         print(f"wyraz : '{word}'")
 
     elif args.lines:
 
-       # Rozpoznawanie zdjęcia
+        # Rozpoznawanie zdjęcia (linie/zdania)
         if not os.path.exists(args.lines):
-            print(f"Błąd: Nie znaleziono pliku {args.image}")
+            print(f"Błąd: Nie znaleziono pliku {args.lines}")
             sys.exit(1)
 
-        print(f"\nRozpoznawanie zdjęcia: {args.image}")
+        print(f"\nRozpoznawanie zdjęcia: {args.lines}")
+
+        # Zapisz zdjęcie do folderu z dzisiejszą datą
+        save_image_to_today_folder(args.lines)
 
         # Wczytaj model
         model = load_model(MODEL_PATH, device)
-        word = predict_segments(args.lines, model, device);
+        text = predict_segments(args.lines, model, device)
 
-        print(f"wyraz : '{word}'")
+        print(f"tekst:\n{text}")
         
         
+    elif args.multi:
+        # Rozpoznawanie wielu zdjęć
+        model = load_model(MODEL_PATH, device)
+
+        for img_path in args.multi:
+            if not os.path.exists(img_path):
+                print(f"Pominięto (nie znaleziono): {img_path}")
+                continue
+
+            print(f"\nRozpoznawanie zdjęcia: {img_path}")
+
+            # Zapisz do folderu z dzisiejszą datą
+            save_image_to_today_folder(img_path)
+
+            # Predykcja
+            predicted_char, confidence, probs = predict_image(img_path, model, device)
+            print(f"WYNIK: '{predicted_char}' (pewność: {confidence:.1f}%)")
+
     else:
         # Domyślnie: pokaż pomoc
         parser.print_help()

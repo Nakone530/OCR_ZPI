@@ -335,7 +335,7 @@ def predict_word(image_path, model, device):
             top, bottom = rows[0], rows[-1]
             letter_img = letter_img[top:bottom, :]
             plt.imshow(letter_img, cmap="gray")
-            plt.show()
+            #plt.show()
             # konwersja do PIL
             letter_pil = Image.fromarray(letter_img)
             letter_pil = letter_pil.resize((48, 48))
@@ -439,7 +439,14 @@ def predict_segments(image_path, model, device):
                 letters_bounds.append((start, len(vertical_sum)))
 
             # --- rozpoznanie liter w tej linii ---
-            for (start, end) in letters_bounds:
+            # Obliczamy średnią szerokość litery, aby heurystycznie wykrywać przerwy między wyrazami.
+            letter_widths = [end - start for (start, end) in letters_bounds] if letters_bounds else []
+            avg_letter_width = float(np.mean(letter_widths)) if letter_widths else 0.0
+            # Próg: jeśli przerwa między kolejnymi literami jest większa niż 1.5 szerokości litery,
+            # traktujemy ją jako spację między wyrazami.
+            gap_factor = 1.5
+
+            for idx, (start, end) in enumerate(letters_bounds):
                 letter_img = line_img[:, start:end]
 
                 rows = np.where(np.sum(letter_img < 128, axis=1) > 0)[0]
@@ -465,6 +472,13 @@ def predict_segments(image_path, model, device):
 
                 predicted_char = CHARS[predicted.item()]
                 line_word += predicted_char
+
+                # Sprawdź przerwę do następnej litery i dodaj spację, jeśli jest wystarczająco duża
+                if idx < len(letters_bounds) - 1 and avg_letter_width > 0:
+                    next_start, _ = letters_bounds[idx + 1]
+                    gap = next_start - end
+                    if gap > gap_factor * avg_letter_width:
+                        line_word += " "
 
             text += line_word + "\n"   # nowa linia w tekście
 

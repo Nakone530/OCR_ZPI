@@ -1,5 +1,6 @@
 """
 Skrypt do uruchamiania lokalnie - przygotowanie danych + rozpoznawanie zdjęć
+z opcjonalnym odszumianiem obrazu (OpenCV).
 """
 import numpy as np
 import os
@@ -14,6 +15,7 @@ import shutil
 from datetime import date
 from torchvision import datasets, transforms
 from PIL import Image
+import cv2
 
 # ============================================================================
 # KONFIGURACJA
@@ -147,6 +149,77 @@ def get_transform():
     ])
 
 
+# ============================================================================
+# ODSZUMIANIE (OpenCV)
+# ============================================================================
+
+def _pil_to_bgr(img_pil: Image.Image) -> np.ndarray:
+    """Konwersja PIL(RGB/L) -> OpenCV BGR."""
+    rgb = img_pil.convert("RGB")
+    return cv2.cvtColor(np.array(rgb), cv2.COLOR_RGB2BGR)
+
+def _bgr_to_pil(img_bgr: np.ndarray) -> Image.Image:
+    """Konwersja OpenCV BGR -> PIL(RGB)."""
+    return Image.fromarray(cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB))
+
+def denoise_nlm_color(img_bgr: np.ndarray, h=10, hColor=10, t=7, s=21) -> np.ndarray:
+    """Non-Local Means dla koloru – dobry start."""
+    return cv2.fastNlMeansDenoisingColored(img_bgr, None, h, hColor, t, s)
+
+def denoise_median(img_bgr: np.ndarray, ksize=3) -> np.ndarray:
+    """Median – najlepsza na szum typu 'sól i pieprz'."""
+    return cv2.medianBlur(img_bgr, ksize)
+
+def denoise_bilateral(img_bgr: np.ndarray, d=9, sigmaColor=75, sigmaSpace=75) -> np.ndarray:
+    """Bilateral – odszumia i zachowuje krawędzie."""
+    return cv2.bilateralFilter(img_bgr, d, sigmaColor, sigmaSpace)
+
+def denoise_gaussian(img_bgr: np.ndarray, ksize=3, sigma=0) -> np.ndarray:
+    """Gaussian – podstawowe wygładzenie."""
+    return cv2.GaussianBlur(img_bgr, (ksize, ksize), sigma)
+
+def denoise_pil(img_pil: Image.Image, method: str, h=10, hColor=10, ksize=3) -> Image.Image:
+    """
+    method: 'nlm-color' | 'median' | 'bilateral' | 'gaussian'
+    """
+    bgr = _pil_to_bgr(img_pil)
+    m = method.lower()
+    if m == "nlm-color":
+        out = denoise_nlm_color(bgr, h=h, hColor=hColor)
+    elif m == "median":
+        out = denoise_median(bgr, ksize=ksize)
+    elif m == "bilateral":
+        out = denoise_bilateral(bgr)
+    elif m == "gaussian":
+        out = denoise_gaussian(bgr, ksize=ksize)
+    else:
+        raise ValueError(f"Nieznana metoda odszumiania: {method}")
+    return _bgr_to_pil(out)
+
+def load_and_optionally_denoise(image_path: str, args, mode: str) -> Image.Image:
+    """
+    Ładuje obraz i (opcjonalnie) odszumia wg parametrów CLI.
+    mode: 'RGB' (klasyfikacja) lub 'L' (segmentacja).
+    """
+    img = Image.open(image_path).convert(mode)
+    if getattr(args, "denoise", False):
+        # Odszum w RGB, potem ewentualna konwersja do 'L'
+        img_rgb = Image.open(image_path).convert("RGB")
+        img_rgb = denoise_pil(
+            img_rgb,
+            method=args.denoise_method,
+            h=getattr(args, "h", 10),
+            hColor=getattr(args, "hColor", 10),
+            ksize=getattr(args, "ksize", 3),
+        )
+        img = img_rgb if mode == "RGB" else img_rgb.convert("L")
+    return img
+
+
+# ============================================================================
+# MODELE / ŁADOWANIE
+# ============================================================================
+
 def load_model(model_path: str, device: torch.device) -> nn.Module:
     """Wczytuje wytrenowany model."""
     model = SimpleCNN(num_classes=52)
@@ -165,15 +238,19 @@ def load_model(model_path: str, device: torch.device) -> nn.Module:
     return model
 
 
-def predict_image(image_path: str, model: nn.Module, device: torch.device) -> tuple:
+# ============================================================================
+# PREDYKCJA POJEDYNCZEJ LITERY + WIZUALIZACJA
+# ============================================================================
+
+def predict_image(image_path: str, model: nn.Module, device: torch.device, args) -> tuple:
     """
     Rozpoznaje znak na zdjęciu.
 
     Returns:
-        (predicted_char, confidence, all_probs)
+        (predicted_char, confidence, all_probs_tensor)
     """
-    # Wczytaj obraz
-    image = Image.open(image_path).convert('RGB')
+    # Wczytaj obraz (z ewentualnym odszumianiem)
+    image = load_and_optionally_denoise(image_path, args, mode='RGB')
 
     # Przetwórz
     transform = get_transform()
@@ -191,9 +268,9 @@ def predict_image(image_path: str, model: nn.Module, device: torch.device) -> tu
     return predicted_char, confidence_val, probs[0]
 
 
-def visualize_prediction(image_path: str, predicted_char: str, confidence: float):
+def visualize_prediction(image_path: str, predicted_char: str, confidence: float, args):
     """Wizualizuje predykcję."""
-    image = Image.open(image_path).convert('RGB')
+    image = load_and_optionally_denoise(image_path, args, mode='RGB')
 
     plt.figure(figsize=(8, 6))
     plt.imshow(image)
@@ -205,6 +282,10 @@ def visualize_prediction(image_path: str, predicted_char: str, confidence: float
     plt.show()
     print(f"Zapisano wizualizację do: prediction_result.png")
 
+
+# ============================================================================
+# TRAIN
+# ============================================================================
 
 def train_model(epochs: int = 10, batch_size: int = 32):
     """Trenuje model na datasecie Chars74K."""
@@ -290,21 +371,25 @@ def train_model(epochs: int = 10, batch_size: int = 32):
     print(f"\nTrenowanie zakończone! Najlepsza dokładność: {best_acc:.2f}%")
     print(f"Model zapisany do: {MODEL_PATH}")
 
+
 # ============================================================================
 # Rozpoznanie wyrazu
 # ============================================================================
-def predict_word(image_path, model, device):
-    
-    # Wczytanie obrazu i konwersja do grayscale
-    image = Image.open(image_path).convert("L")  # grayscale
+
+def predict_word(image_path, model, device, args):
+    """
+    Segmentacja prostą metodą projekcji + rozpoznanie liter i złożenie wyrazu.
+    """
+    # Wczytanie obrazu i (opcjonalnie) odszumianie, konwersja do grayscale
+    image = load_and_optionally_denoise(image_path, args, mode="L")  # grayscale
     img_array = np.array(image)
-    
-    # Binaryzacja
-    binary = img_array < 128  # zakładamy, że ciemne litery <128
-    
+
+    # Binaryzacja (zakładamy, że ciemne litery <128)
+    binary = img_array < 128
+
     # Projekcja pionowa do segmentacji liter
     vertical_sum = np.sum(binary, axis=0)
-    
+
     # Wykrycie granic liter
     letters_bounds = []
     in_letter = False
@@ -319,58 +404,57 @@ def predict_word(image_path, model, device):
     # jeśli ostatnia litera sięga końca obrazu
     if in_letter:
         letters_bounds.append((start, len(vertical_sum)))
-    
+
     word = ""
-    
+
     # Rozpoznanie każdej litery
     model.eval()  # tryb ewaluacji
     with torch.no_grad():
         for (start, end) in letters_bounds:
             letter_img = img_array[:, start:end]
-            
+
             # usuń marginesy w pionie
             rows = np.where(np.sum(letter_img < 128, axis=1) > 0)[0]
             if len(rows) == 0:
                 continue
             top, bottom = rows[0], rows[-1]
-            letter_img = letter_img[top:bottom, :]
-            plt.imshow(letter_img, cmap="gray")
-            plt.show()
+            letter_img = letter_img[top:bottom+1, :]
+
             # konwersja do PIL
             letter_pil = Image.fromarray(letter_img)
             letter_pil = letter_pil.resize((48, 48))
             letter_pil = letter_pil.convert("RGB")
-            
+
             # transformacja
             transform = get_transform()
             tensor = transform(letter_pil).unsqueeze(0).to(device)
-            
+
             # predykcja
             outputs = model(tensor)
             probs = torch.softmax(outputs, dim=1)
-            confidence, predicted = torch.max(probs, 1)
+            _, predicted = torch.max(probs, 1)
             predicted_char = CHARS[predicted.item()]
-            
-            word += predicted_char
 
+            word += predicted_char
 
     return word
 
-def predict_segments(image_path, model, device):
-    
-    # Wczytanie obrazu i konwersja do grayscale
-    image = Image.open(image_path).convert("L")  # grayscale
+
+def predict_segments(image_path, model, device, args):
+    """
+    Segmentacja na linie i następnie na litery w obrębie linii + rozpoznanie.
+    """
+    # Wczytanie obrazu i (opcjonalnie) odszumianie, konwersja do grayscale
+    image = load_and_optionally_denoise(image_path, args, mode="L")  # grayscale
     img_array = np.array(image)
-    
+
     # Binaryzacja
     binary = img_array < 128  # zakładamy, że ciemne litery <128
 
     # Projekcja horyzontalna do segmentacji linii
     horizontal_sum = np.sum(binary, axis=1)
-    # Projekcja pionowa do segmentacji liter
-    vertical_sum = np.sum(binary, axis=0)
 
-    #Segmantacja linii
+    # Segmantacja linii
     rows_bounds = []
     in_row = False
 
@@ -386,30 +470,6 @@ def predict_segments(image_path, model, device):
     if in_row:
         rows_bounds.append((start, len(horizontal_sum)))
 
-    all_letters = []
-    for (row_start, row_end) in rows_bounds:
-        line_img = binary[row_start:row_end, :]
-
-    
-    # Wykrycie granic liter
-    
-        letters_bounds = []
-        in_letter = False
-        for i, val in enumerate(vertical_sum):
-            if val > 0 and not in_letter:
-                start = i
-                in_letter = True
-            elif val == 0 and in_letter:
-                end = i
-                letters_bounds.append((start, end))
-                in_letter = False
-        # jeśli ostatnia litera sięga końca obrazu
-        if in_letter:
-            letters_bounds.append((start, len(vertical_sum)))
-        
-        all_letters.append(letters_bounds)
-    
-    word = ""
     text = ""
 
     model.eval()
@@ -417,7 +477,7 @@ def predict_segments(image_path, model, device):
 
         for (row_start, row_end) in rows_bounds:   # iteracja po liniach
             line_word = ""
-    
+
             line_img = img_array[row_start:row_end, :]
 
             # projekcja pionowa dla tej linii
@@ -449,9 +509,6 @@ def predict_segments(image_path, model, device):
                 top, bottom = rows[0], rows[-1]
                 letter_img = letter_img[top:bottom+1, :]
 
-                plt.imshow(letter_img, cmap="gray")
-                plt.show()
-
                 letter_pil = Image.fromarray(letter_img)
                 letter_pil = letter_pil.resize((48, 48))
                 letter_pil = letter_pil.convert("RGB")
@@ -461,7 +518,7 @@ def predict_segments(image_path, model, device):
 
                 outputs = model(tensor)
                 probs = torch.softmax(outputs, dim=1)
-                confidence, predicted = torch.max(probs, 1)
+                _, predicted = torch.max(probs, 1)
 
                 predicted_char = CHARS[predicted.item()]
                 line_word += predicted_char
@@ -470,12 +527,13 @@ def predict_segments(image_path, model, device):
 
     return text
 
+
 # ============================================================================
 # MAIN
 # ============================================================================
 
 def main():
-    parser = argparse.ArgumentParser(description="OCR - Rozpoznawanie znaków")
+    parser = argparse.ArgumentParser(description="OCR - Rozpoznawanie znaków (z opcjonalnym odszumianiem)")
     parser.add_argument("--image", "-i", type=str, help="Ścieżka do zdjęcia do rozpoznania")
     parser.add_argument("--word", "-w", type=str, help="Ścieżka do zdjęcia do rozpoznania wyrazów")
     parser.add_argument("--lines", "-l", type=str, help="Ścieżka do zdjęcia do rozpoznania zdań")
@@ -483,6 +541,16 @@ def main():
     parser.add_argument("--epochs", "-e", type=int, default=10, help="Liczba epok (domyślnie 10)")
     parser.add_argument("--prepare", "-p", action="store_true", help="Tylko pobierz i przygotuj dane")
     parser.add_argument("--multi", "-m", type=str, nargs="+", help="Ścieżka do zdjęcia do rozpoznania z wieloma argumentami")
+
+    # ==== ODSZUMIANIE: flagi CLI ====
+    parser.add_argument("--denoise", action="store_true", help="Włącz odszumianie wejścia")
+    parser.add_argument("--denoise-method", default="nlm-color",
+                        choices=["nlm-color", "median", "bilateral", "gaussian"],
+                        help="Metoda odszumiania (domyślnie: nlm-color)")
+    parser.add_argument("--h", type=int, default=10, help="Siła NLM (luminancja)")
+    parser.add_argument("--hColor", type=int, default=10, help="Siła NLM (kolor)")
+    parser.add_argument("--ksize", type=int, default=3, help="Rozmiar jądra (median/gaussian): 3,5,7...")
+
     args = parser.parse_args()
 
     # Sprawdź CUDA
@@ -513,7 +581,7 @@ def main():
         model = load_model(MODEL_PATH, device)
 
         # Predykcja
-        predicted_char, confidence, probs = predict_image(args.image, model, device)
+        predicted_char, confidence, probs = predict_image(args.image, model, device, args)
 
         print("\n" + "=" * 40)
         print(f"WYNIK: '{predicted_char}' (pewność: {confidence:.1f}%)")
@@ -527,8 +595,8 @@ def main():
             print(f"  {i+1}. '{char}' - {prob.item()*100:.1f}%")
 
         # Wizualizacja
-        visualize_prediction(args.image, predicted_char, confidence)
-        
+        visualize_prediction(args.image, predicted_char, confidence, args)
+
     elif args.word:
 
         # Rozpoznawanie zdjęcia (wyraz)
@@ -543,7 +611,7 @@ def main():
 
         # Wczytaj model
         model = load_model(MODEL_PATH, device)
-        word = predict_word(args.word, model, device)
+        word = predict_word(args.word, model, device, args)
 
         print(f"wyraz : '{word}'")
 
@@ -561,11 +629,10 @@ def main():
 
         # Wczytaj model
         model = load_model(MODEL_PATH, device)
-        text = predict_segments(args.lines, model, device)
+        text = predict_segments(args.lines, model, device, args)
 
         print(f"tekst:\n{text}")
-        
-        
+
     elif args.multi:
         # Rozpoznawanie wielu zdjęć
         model = load_model(MODEL_PATH, device)
@@ -581,7 +648,7 @@ def main():
             save_image_to_today_folder(img_path)
 
             # Predykcja
-            predicted_char, confidence, probs = predict_image(img_path, model, device)
+            predicted_char, confidence, probs = predict_image(img_path, model, device, args)
             print(f"WYNIK: '{predicted_char}' (pewność: {confidence:.1f}%)")
 
     else:
@@ -592,8 +659,8 @@ def main():
         print("=" * 60)
         print("1. Pobierz dane:        python run_local.py --prepare")
         print("2. Trenuj model:        python run_local.py --train --epochs 15")
-        print("3. Rozpoznaj zdjęcie:   python run_local.py --image moje_zdjecie.png")
-        print("4. Rozpoznaj wiele:     python run_local.py --multi *.png")
+        print("3. Rozpoznaj zdjęcie:   python run_local.py --image moje_zdjecie.png --denoise --denoise-method nlm-color --h 12 --hColor 12")
+        print("4. Rozpoznaj wiele:     python run_local.py --multi *.png --denoise --denoise-method median --ksize 5")
         print("=" * 60)
 
 

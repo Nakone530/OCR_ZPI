@@ -54,6 +54,51 @@ KROK 4: Rozpoznanie własnego zdjęcia
     python run_local.py --image ./test_images/znak.jpg
     python run_local.py -i moje_zdjecie.png
 
+================================================================================
+ODSZUMIANIE (opcjonalne)
+================================================================================
+
+Włączenie odszumiania:
+----------------------
+Dodaj flagę:
+    --denoise
+
+Wybór metody:
+-------------
+    --denoise-method {nlm-color, median, bilateral, gaussian}
+    (domyślnie: nlm-color)
+
+Dodatkowe parametry:
+--------------------
+    --h       (int, domyślnie 10)     siła NLM dla luminancji (nlm-color)
+    --hColor  (int, domyślnie 10)     siła NLM dla kolorów (nlm-color)
+    --ksize   (int, domyślnie 3)      rozmiar jądra dla median/gaussian (3,5,7,...)
+
+Przykłady użycia:
+-----------------
+1) NLM dla koloru (polecane jako start):
+    python run_local.py --image test_A.png --denoise --denoise-method nlm-color --h 12 --hColor 12
+
+2) Median (gdy masz szum „sól i pieprz”):
+    python run_local.py --image test_A.png --denoise --denoise-method median --ksize 5
+
+3) Bilateral (dobry kompromis: odszumia i zachowuje krawędzie):
+    python run_local.py --image test_A.png --denoise --denoise-method bilateral
+
+4) Gaussian (delikatne wygładzenie):
+    python run_local.py --image test_A.png --denoise --denoise-method gaussian --ksize 5
+
+Uwaga:
+------
+- Odszumianie działa także z trybami:
+    --word  (rozpoznanie wyrazu)
+    --lines (rozpoznanie linii/tekstu)
+  Wystarczy dodać flagi jak wyżej, np.:
+    python run_local.py --word napis.png --denoise --denoise-method nlm-color
+
+- Podgląd obrazu w wynikowym oknie (visualizacja) pokazuje obraz po odszumianiu,
+  jeśli --denoise było włączone.
+
 
 ================================================================================
 WSZYSTKIE OPCJE

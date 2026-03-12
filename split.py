@@ -7,7 +7,7 @@ INPUT_IMAGE = "alphabet.jpg"
 OUTPUT_DIR = "letters"
 #DARKNESS = 128
 # alfabet w kolejności na stronie
-alphabet = list("ABCDEFGHIJKLMNOPQRSTUWYZabcdefghijklmnopqrstuwyz")
+alphabet = list("ABCDEFGHIJKLMNOPRSTUWYZabcdefghijklmnoprstuwyz")
 
 # margines w pikselach (~1mm przy 300dpi ≈ 12px)
 MARGIN = 4
@@ -85,7 +85,7 @@ def segment_letters(image_path, darkness):
             letter_region = line_img[:, col_start:col_end]
 
             # projekcja pozioma wewnątrz litery
-            horizontal_sum_letter = np.sum(letter_region < 128, axis=1)
+            horizontal_sum_letter = np.sum(letter_region < darkness, axis=1)
 
             top = None
             bottom = None
@@ -124,11 +124,20 @@ def save_letters(letters):
 
         img = add_margin(letter_img, MARGIN)
 
-        filename = f"{letter}_{counters[letter]:03d}.jpg"
+        counter = counters[letter]
 
-        Image.fromarray(img).save(os.path.join(folder, filename))
+        while True:
+            filename = f"{letter}_{counter:03d}.jpg"
+            filepath = os.path.join(folder, filename)
 
-        counters[letter] += 1
+            if not os.path.exists(filepath):
+                break
+
+            counter += 1
+
+        Image.fromarray(img).save(filepath)
+
+        counters[letter] = counter + 1
 
 
 def main():

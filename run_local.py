@@ -14,6 +14,8 @@ import torch.nn as nn
 import shutil
 from datetime import date
 from torchvision import datasets, transforms
+from pdf2image import convert_from_path
+from pathlib import Path
 from PIL import Image
 import cv2
 
@@ -93,13 +95,14 @@ def get_today_folder() -> str:
 
 def save_image_to_today_folder(image_path: str) -> str:
     """
-    Zapisuje obraz do folderu z dzisiejszą datą jako kolejny plik PNG.
-    Nazwy plików: 1.png, 2.png, 3.png, ...
+    Zapisuje obraz (PNG/JPG/PDF itd.) do folderu z dzisiejszą datą
+    jako kolejny plik PNG: 1.png, 2.png, 3.png...
     Zwraca ścieżkę docelową.
     """
+
     folder = get_today_folder()
 
-    # Wyznacz kolejny wolny numer
+    # znajdź kolejny numer
     existing = [
         int(os.path.splitext(f)[0])
         for f in os.listdir(folder)
@@ -108,8 +111,15 @@ def save_image_to_today_folder(image_path: str) -> str:
     next_num = max(existing, default=0) + 1
     dest = os.path.join(folder, f"{next_num}.png")
 
-    # Zapisz jako PNG (konwersja na wypadek innego formatu wejściowego)
-    img = Image.open(image_path).convert("RGB")
+    suffix = Path(image_path).suffix.lower()
+
+    # wczytanie obrazu
+    if suffix == ".pdf":
+        img = convert_from_path(image_path, dpi=300)[0]
+    else:
+        img = Image.open(image_path)
+
+    img = img.convert("RGB")
     img.save(dest, format="PNG")
 
     print(f"Zapisano zdjęcie jako: {dest}")
@@ -201,20 +211,30 @@ def load_and_optionally_denoise(image_path: str, args, mode: str) -> Image.Image
     Ładuje obraz i (opcjonalnie) odszumia wg parametrów CLI.
     mode: 'RGB' (klasyfikacja) lub 'L' (segmentacja).
     """
-    img = Image.open(image_path).convert(mode)
-    if getattr(args, "denoise", False):
-        # Odszum w RGB, potem ewentualna konwersja do 'L'
-        img_rgb = Image.open(image_path).convert("RGB")
-        img_rgb = denoise_pil(
-            img_rgb,
-            method=args.denoise_method,
-            h=getattr(args, "h", 10),
-            hColor=getattr(args, "hColor", 10),
-            ksize=getattr(args, "ksize", 3),
-        )
-        img = img_rgb if mode == "RGB" else img_rgb.convert("L")
+
+    suffix = Path(image_path).suffix.lower()   # ← brakująca linia
+    
+    if suffix == ".pdf":
+        img = convert_from_path(image_path)[0]
+        img = img.convert(mode)
+    else:
+        img = Image.open(image_path).convert(mode)
+        if getattr(args, "denoise", False):
+            # Odszum w RGB, potem ewentualna konwersja do 'L'
+            img_rgb = Image.open(image_path).convert("RGB")
+            img_rgb = denoise_pil(
+                img_rgb,
+                method=args.denoise_method,
+                h=getattr(args, "h", 10),
+                hColor=getattr(args, "hColor", 10),
+                ksize=getattr(args, "ksize", 3),
+            )
+            img = img_rgb if mode == "RGB" else img_rgb.convert("L")
     return img
 
+def load_pdf_as_image(pdf_path: str) -> Image.Image:
+    pages = convert_from_path(pdf_path)
+    return pages[0]
 
 # ============================================================================
 # MODELE / ŁADOWANIE
@@ -606,6 +626,7 @@ def main():
 
         print(f"\nRozpoznawanie zdjęcia: {args.word}")
 
+        
         # Zapisz zdjęcie do folderu z dzisiejszą datą
         save_image_to_today_folder(args.word)
 
@@ -623,7 +644,7 @@ def main():
             sys.exit(1)
 
         print(f"\nRozpoznawanie zdjęcia: {args.lines}")
-
+        
         # Zapisz zdjęcie do folderu z dzisiejszą datą
         save_image_to_today_folder(args.lines)
 
@@ -643,7 +664,7 @@ def main():
                 continue
 
             print(f"\nRozpoznawanie zdjęcia: {img_path}")
-
+            
             # Zapisz do folderu z dzisiejszą datą
             save_image_to_today_folder(img_path)
 

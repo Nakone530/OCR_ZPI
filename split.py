@@ -7,7 +7,7 @@ INPUT_IMAGE = "alphabet.jpg"
 OUTPUT_DIR = "letters"
 #DARKNESS = 128
 # alfabet w kolejności na stronie
-alphabet = list("ABCDEFGHIJKLMNOPRSTUWYZabcdefghijklmnoprstuwyz")
+alphabet = list("ABCDEFGHIJKLMNOPQRSTUWXYZ")
 
 # margines w pikselach (~1mm przy 300dpi ≈ 12px)
 MARGIN = 4

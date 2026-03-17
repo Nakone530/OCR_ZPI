@@ -9,16 +9,20 @@ WYMAGANIA:
 - torchvision
 - matplotlib
 - Pillow
+- opencv-python   (odszumianie)
+- pdf2image       (obsługa plików PDF)
+- numpy
 
 INSTALACJA ZALEŻNOŚCI:
 ----------------------
 Otwórz terminal/cmd i wpisz:
 
-    pip install torch torchvision matplotlib pillow
+    pip install torch torchvision matplotlib pillow opencv-python pdf2image numpy
 
 Lub jeśli masz GPU NVIDIA (szybsze trenowanie):
 
     pip install torch torchvision --index-url https://download.pytorch.org/whl/cu118
+    pip install matplotlib pillow opencv-python pdf2image numpy
 
 
 ================================================================================
@@ -27,32 +31,33 @@ JAK URUCHOMIĆ
 
 KROK 1: Otwórz terminal w folderze projektu
 -------------------------------------------
-    cd C:\Users\User\Desktop\Czytanie
+    cd C:\Users\User\Desktop\OCR_ZPI
 
 
 KROK 2: Pobranie i przygotowanie danych
---------------------------------
-    python run_local.py --prepare
+----------------------------------------
+    python main.py --prepare
 
     To pobierze dataset Chars74K (~25 MB) i rozpakuje go.
 
 
-KROK 3: Wytrenowanie modelu 
--------------------------------------------------
-    python run_local.py --train --epochs 10
+KROK 3: Wytrenowanie modelu
+----------------------------
+    python main.py --train --epochs 10
 
     Trenowanie na CPU może potrwać. Na GPU będzie szybciej.
     Model zostanie zapisany do pliku: model_ocr.pth
 
 
 KROK 4: Rozpoznanie własnego zdjęcia
---------------------------------
-    python run_local.py --image sciezka/do/zdjecia.png
+--------------------------------------
+    python main.py --image sciezka/do/zdjecia.png
 
     Przykłady:
-    python run_local.py --image C:\Users\User\Desktop\litera_A.png
-    python run_local.py --image ./test_images/znak.jpg
-    python run_local.py -i moje_zdjecie.png
+    python main.py --image C:\Users\User\Desktop\litera_A.png
+    python main.py --image ./test_images/znak.jpg
+    python main.py -i moje_zdjecie.png
+
 
 ================================================================================
 ODSZUMIANIE (opcjonalne)
@@ -77,16 +82,16 @@ Dodatkowe parametry:
 Przykłady użycia:
 -----------------
 1) NLM dla koloru (polecane jako start):
-    python run_local.py --image test_A.png --denoise --denoise-method nlm-color --h 12 --hColor 12
+    python main.py --image test_A.png --denoise --denoise-method nlm-color --h 12 --hColor 12
 
-2) Median (gdy masz szum „sól i pieprz”):
-    python run_local.py --image test_A.png --denoise --denoise-method median --ksize 5
+2) Median (gdy masz szum „sól i pieprz"):
+    python main.py --image test_A.png --denoise --denoise-method median --ksize 5
 
 3) Bilateral (dobry kompromis: odszumia i zachowuje krawędzie):
-    python run_local.py --image test_A.png --denoise --denoise-method bilateral
+    python main.py --image test_A.png --denoise --denoise-method bilateral
 
 4) Gaussian (delikatne wygładzenie):
-    python run_local.py --image test_A.png --denoise --denoise-method gaussian --ksize 5
+    python main.py --image test_A.png --denoise --denoise-method gaussian --ksize 5
 
 Uwaga:
 ------
@@ -94,9 +99,9 @@ Uwaga:
     --word  (rozpoznanie wyrazu)
     --lines (rozpoznanie linii/tekstu)
   Wystarczy dodać flagi jak wyżej, np.:
-    python run_local.py --word napis.png --denoise --denoise-method nlm-color
+    python main.py --word napis.png --denoise --denoise-method nlm-color
 
-- Podgląd obrazu w wynikowym oknie (visualizacja) pokazuje obraz po odszumianiu,
+- Podgląd obrazu w wynikowym oknie (wizualizacja) pokazuje obraz po odszumianiu,
   jeśli --denoise było włączone.
 
 
@@ -104,12 +109,24 @@ Uwaga:
 WSZYSTKIE OPCJE
 ================================================================================
 
-    python run_local.py --help
+    python main.py --help
 
-    --prepare, -p     Tylko pobierz i przygotuj dane
-    --train, -t       Trenuj model
-    --epochs, -e      Liczba epok trenowania (domyślnie 10)
-    --image, -i       Ścieżka do zdjęcia do rozpoznania
+    --prepare, -p          Tylko pobierz i przygotuj dane
+    --train, -t            Trenuj model
+    --epochs, -e           Liczba epok trenowania (domyślnie 10)
+    --image, -i   PLIK     Rozpoznaj pojedynczą literę
+    --word, -w    PLIK     Rozpoznaj wyraz (jedna linia tekstu)
+    --lines, -l   PLIK     Rozpoznaj tekst wieloliniowy
+    --multi, -m   PLIK...  Rozpoznaj wiele zdjęć pojedynczych liter
+
+    --denoise              Włącz odszumianie wejścia
+    --denoise-method       Metoda: nlm-color | median | bilateral | gaussian
+    --h                    Siła NLM – luminancja
+    --hColor               Siła NLM – kolor
+    --ksize                Rozmiar jądra (median/gaussian): 3, 5, 7, ...
+
+Uwaga: opcje --prepare / --train / --image / --word / --lines / --multi
+       wykluczają się wzajemnie (tylko jedna na raz).
 
 
 ================================================================================
@@ -117,44 +134,54 @@ JAK DODAĆ WŁASNE ZDJĘCIE
 ================================================================================
 
 1. PRZYGOTOWANIE ZDJĘCIA:
-   - Zdjęcie powinno zawierać JEDEN znak (literę lub cyfrę)
+   - Zdjęcie powinno zawierać JEDEN znak (literę) dla trybu --image
    - Najlepiej na jasnym/białym tle
-   - Formaty: PNG, JPG, JPEG, BMP
+   - Formaty: PNG, JPG, JPEG, BMP, PDF
    - Dowolny rozmiar (zostanie przeskalowane do 48x48)
 
 2. PRZYKŁADOWE ZDJĘCIA TESTOWE:
    Możesz stworzyć własne zdjęcia w programie Paint:
    - Otwórz Paint
    - Ustaw rozmiar obrazu np. 100x100 pikseli
-   - Napisz jedną literę lub cyfrę
+   - Napisz jedną literę
    - Zapisz jako PNG
 
 3. URUCHOMIENIE:
-   python run_local.py --image nazwa_pliku.png
+   python main.py --image nazwa_pliku.png
 
 
 ================================================================================
 STRUKTURA PLIKÓW
 ================================================================================
 
-Czytanie/
-├── run_local.py              <- Główny skrypt (uruchamiasz ten plik)
-├── chars74k_ocr_preparation.py  <- Wersja jako moduł Python
-├── chars74k_ocr_colab.ipynb     <- Wersja dla Google Colab
-├── INSTRUKCJA.txt            <- Ta instrukcja
-├── model_ocr.pth             <- Wytrenowany model (po trenowaniu)
-├── prediction_result.png     <- Wynik rozpoznawania (po predykcji)
-└── data/                     <- Folder z danymi (tworzony automatycznie)
-    ├── EnglishFnt.tgz        <- Pobrany dataset
+OCR_ZPI/
+├── main.py                        <- Główny skrypt (uruchamiasz ten plik)
+├── ocr/
+│   ├── __init__.py
+│   ├── config.py                  <- Stałe konfiguracyjne (ścieżki, rozmiary, klasy)
+│   ├── model.py                   <- Architektura sieci CNN (SimpleCNN)
+│   ├── trainer.py                 <- Pobieranie danych i trenowanie modelu
+│   ├── inference.py               <- Rozpoznawanie liter / wyrazów / tekstu
+│   ├── display.py                 <- Wizualizacja i wyświetlanie wyników
+│   └── utils.py                   <- Narzędzia: transformacje, odszumianie, I/O
+├── chars74k_ocr_preparation.py    <- Przygotowanie danych (wersja Colab)
+├── split.py                       <- Segmentacja liter z obrazu alfabetu
+├── INSTRUKCJA.txt                 <- Ta instrukcja
+├── model_ocr.pth                  <- Wytrenowany model (po trenowaniu)
+├── prediction_result.png          <- Wynik wizualizacji (po predykcji)
+├── YYYY-MM-DD/                    <- Foldery z datą – historia rozpoznanych zdjęć
+└── data/                          <- Dane (tworzone automatycznie)
+    ├── EnglishFnt.tgz             <- Pobrany dataset
     └── English/
-        └── Fnt/              <- Rozpakowane obrazy znaków
+        └── Fnt/                   <- Rozpakowane obrazy znaków
 
 
 ================================================================================
 PRZYKŁAD SESJI
 ================================================================================
 
-C:\Users\User\Desktop\Czytanie> python run_local.py --prepare
+C:\Users\User\Desktop\OCR_ZPI> python main.py --prepare
+Używane urządzenie: cpu
 Pobieranie datasetu z http://www.ee.surrey.ac.uk/CVSSP/demos/chars74k/EnglishFnt.tgz...
 Postęp: 100.0%
 Pobrano!
@@ -162,22 +189,24 @@ Rozpakowywanie...
 Rozpakowano!
 Dane przygotowane!
 
-C:\Users\User\Desktop\Czytanie> python run_local.py --train --epochs 5
+C:\Users\User\Desktop\OCR_ZPI> python main.py --train --epochs 5
+Używane urządzenie: cpu
 ============================================================
 TRENOWANIE MODELU
 ============================================================
 Urządzenie: cpu
-Zbiór treningowy: 5765 obrazów
+Zbiór treningowy:  5765 obrazów
 Zbiór walidacyjny: 1442 obrazów
-Liczba klas: 62
-Epoch [1/5], Step [50/181], Loss: 2.3456
+Liczba klas:       62
+Epoch [1/5]  Step [50/181]  Loss: 2.3456
 ...
 Trenowanie zakończone! Najlepsza dokładność: 85.23%
 Model zapisany do: ./model_ocr.pth
 
-C:\Users\User\Desktop\Czytanie> python run_local.py --image test_A.png
+C:\Users\User\Desktop\OCR_ZPI> python main.py --image test_A.png
 Używane urządzenie: cpu
-Rozpoznawanie zdjęcia: test_A.png
+Rozpoznawanie: test_A.png
+Zapisano zdjęcie jako: ./2026-03-17/1.png
 Wczytywanie modelu z ./model_ocr.pth...
 Model wczytany!
 
@@ -186,11 +215,23 @@ WYNIK: 'A' (pewność: 94.5%)
 ========================================
 
 Top 5 predykcji:
-  1. 'A' - 94.5%
-  2. '4' - 2.1%
-  3. 'H' - 1.3%
-  4. 'a' - 0.8%
-  5. 'R' - 0.5%
+  1. 'A' – 94.5%
+  2. 'H' – 2.1%
+  3. 'a' – 1.3%
+  4. 'R' – 0.8%
+  5. '4' – 0.5%
+
+Zapisano wizualizację do: prediction_result.png
+
+C:\Users\User\Desktop\OCR_ZPI> python main.py --lines tekst.png
+Używane urządzenie: cpu
+Rozpoznawanie tekstu: tekst.png
+Wczytywanie modelu z ./model_ocr.pth...
+Model wczytany!
+
+Rozpoznany tekst:
+Hello World
+OCR dziala
 
 
 ================================================================================
@@ -200,17 +241,24 @@ ROZWIĄZYWANIE PROBLEMÓW
 PROBLEM: "ModuleNotFoundError: No module named 'torch'"
 ROZWIĄZANIE: pip install torch torchvision
 
+PROBLEM: "ModuleNotFoundError: No module named 'cv2'"
+ROZWIĄZANIE: pip install opencv-python
+
+PROBLEM: "ModuleNotFoundError: No module named 'pdf2image'"
+ROZWIĄZANIE: pip install pdf2image
+
 PROBLEM: "No such file or directory"
-ROZWIĄZANIE: Upewnij się, że jesteś w folderze Czytanie
-             cd C:\Users\User\Desktop\Czytanie
+ROZWIĄZANIE: Upewnij się, że jesteś w folderze OCR_ZPI
+             cd C:\Users\User\Desktop\OCR_ZPI
 
 PROBLEM: "UWAGA: Nie znaleziono modelu model_ocr.pth"
-ROZWIĄZANIE: Najpierw wytrenuj model: python run_local.py --train
+ROZWIĄZANIE: Najpierw wytrenuj model: python main.py --train
 
 PROBLEM: Rozpoznawanie słabe/niepoprawne
 ROZWIĄZANIE:
 - Upewnij się, że zdjęcie zawiera tylko jeden znak
 - Znak powinien być czytelny i na kontrastowym tle
-- Wytrenuj model dłużej: python run_local.py --train --epochs 20
+- Wytrenuj model dłużej: python main.py --train --epochs 20
+- Spróbuj odszumiania: python main.py --image plik.png --denoise
 
 ================================================================================

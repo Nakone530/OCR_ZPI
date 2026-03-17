@@ -1,0 +1,35 @@
+# Konfiguracja narzędzi deweloperskich
+.claude/
+.copilot/
+.cursor/
+
+# Model i wyniki
+model_ocr.pth
+prediction_result.png
+
+# Foldery z historią rozpoznań (YYYY-MM-DD)
+[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]/
+
+# Dane (pobierane automatycznie)
+data/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Środowiska wirtualne
+venv/
+.venv/
+env/
+
+# System
+.DS_Store
+Thumbs.db
+desktop.ini

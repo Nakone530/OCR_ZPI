@@ -1,9 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Bash(python -c \"\nfrom ocr.config import CHARS, MODEL_PATH, IMAGE_SIZE\nfrom ocr.model import SimpleCNN\nfrom ocr.utils import get_transform, get_train_transform\nfrom ocr.trainer import download_dataset\nfrom ocr.inference import load_model, predict_image, predict_word, predict_segments\nfrom ocr.display import visualize_prediction, print_single_result, print_top5\nprint\\('Wszystkie importy OK'\\)\nimport torch\nm = SimpleCNN\\(\\)\nprint\\(f'Model: {sum\\(p.numel\\(\\) for p in m.parameters\\(\\)\\):,} parametrów'\\)\nt = get_transform\\(\\)\nprint\\(f'Transform: {t}'\\)\n\")",
-      "Bash(python -c \"import sys; print\\(sys.executable\\)\" && pip install opencv-python --quiet 2>&1 | tail -3)",
-      "Bash(python -c \"\nfrom ocr.config import CHARS, MODEL_PATH, IMAGE_SIZE\nfrom ocr.model import SimpleCNN\nfrom ocr.utils import get_transform, get_train_transform\nfrom ocr.trainer import download_dataset\nfrom ocr.inference import load_model, predict_image, predict_word, predict_segments\nfrom ocr.display import visualize_prediction, print_single_result, print_top5\nprint\\('Wszystkie importy OK'\\)\nimport torch\nm = SimpleCNN\\(\\)\nprint\\(f'Model: {sum\\(p.numel\\(\\) for p in m.parameters\\(\\)\\):,} parametrów'\\)\n\")"
-    ]
-  }
-}

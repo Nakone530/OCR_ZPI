@@ -161,7 +161,7 @@ def get_transform():
     ])
 
 def preprocess_letter(img):
-    pad = 8
+    pad = 10
     img = np.pad(img, pad, mode='constant', constant_values=255)
 
     h, w = img.shape

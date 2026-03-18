@@ -29,12 +29,12 @@ ARCHIVE_PATH = os.path.join(DATA_DIR, "EnglishFnt.tgz")
 EXTRACTED_DIR = os.path.join(DATA_DIR, "English", "Fnt")
 MODEL_PATH = "./model_ocr.pth"
 
-IMAGE_SIZE = 48
+IMAGE_SIZE = 28
 MEAN = [0.485, 0.456, 0.406]
 STD = [0.229, 0.224, 0.225]
 
-# Mapowanie klas na znaki (52 klasy: A-Z, a-z)
-CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+# Mapowanie klas na znaki (46 klasy: A-Z)
+CHARS = "ABCDEFGHIJKLMNOPRSTUWYZabcdefghijklmnoprstuwyz"
 
 
 # ============================================================================
@@ -44,35 +44,44 @@ CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
 class SimpleCNN(nn.Module):
     """sieć CNN do rozpoznawania znaków."""
 
-    def __init__(self, num_classes=52):
+    def __init__(self, num_classes=46):
         super(SimpleCNN, self).__init__()
 
         self.features = nn.Sequential(
-            # Blok 1: 3x48x48 -> 32x24x24
-            nn.Conv2d(3, 32, kernel_size=3, padding=1),
+            # Blok 1: 1x28x28 -> 32x14x14 (grayscale)
+            nn.Conv2d(1, 32, kernel_size=3, padding=1),
             nn.BatchNorm2d(32),
             nn.ReLU(inplace=True),
             nn.MaxPool2d(2, 2),
 
-            # Blok 2: 32x24x24 -> 64x12x12
+            # Blok 2: 32x14x14 -> 64x7x7
             nn.Conv2d(32, 64, kernel_size=3, padding=1),
             nn.BatchNorm2d(64),
             nn.ReLU(inplace=True),
             nn.MaxPool2d(2, 2),
 
-            # Blok 3: 64x12x12 -> 128x6x6
+            # Blok 3: 64x7x7 -> 128x3x3
             nn.Conv2d(64, 128, kernel_size=3, padding=1),
             nn.BatchNorm2d(128),
             nn.ReLU(inplace=True),
+            
+            nn.Conv2d(128, 128, kernel_size=3, padding=1),
+            nn.BatchNorm2d(128),
+            nn.ReLU(inplace=True),
             nn.MaxPool2d(2, 2),
-        )
 
+            # Blok 4: 128x3x3 -> 256x3x3
+            nn.Conv2d(128, 256, kernel_size=3, padding=1),
+            nn.BatchNorm2d(256),
+            nn.ReLU(inplace=True),
+        )
+        
         self.classifier = nn.Sequential(
             nn.Flatten(),
-            nn.Linear(128 * 6 * 6, 256),
+            nn.Linear(256 * 3 * 3, 512),
             nn.ReLU(inplace=True),
             nn.Dropout(0.5),
-            nn.Linear(256, num_classes)
+            nn.Linear(512, num_classes)
         )
 
     def forward(self, x):
@@ -119,7 +128,7 @@ def save_image_to_today_folder(image_path: str) -> str:
     else:
         img = Image.open(image_path)
 
-    img = img.convert("RGB")
+    img = img.convert("L")
     img.save(dest, format="PNG")
 
     print(f"Zapisano zdjęcie jako: {dest}")
@@ -131,17 +140,9 @@ def save_image_to_today_folder(image_path: str) -> str:
 # ============================================================================
 
 def download_dataset():
-    """Pobiera i rozpakowuje dataset."""
+    """Sprawdza czy jest  dataset."""
     if not os.path.exists(ARCHIVE_PATH):
-        print(f"Pobieranie datasetu z {DATA_URL}...")
-        os.makedirs(DATA_DIR, exist_ok=True)
-
-        def progress(block_num, block_size, total_size):
-            percent = min(100, block_num * block_size * 100 / total_size)
-            print(f"\rPostęp: {percent:.1f}%", end="")
-
-        urllib.request.urlretrieve(DATA_URL, ARCHIVE_PATH, progress)
-        print("\nPobrano!")
+        print(f"Brak datasetu")
 
     if not os.path.exists(EXTRACTED_DIR):
         print("Rozpakowywanie...")
@@ -153,11 +154,28 @@ def download_dataset():
 def get_transform():
     """Zwraca transformację dla obrazów."""
     return transforms.Compose([
+        transforms.Grayscale(num_output_channels=1),
         transforms.Resize((IMAGE_SIZE, IMAGE_SIZE)),
         transforms.ToTensor(),
-        transforms.Normalize(mean=MEAN, std=STD)
+        transforms.Normalize((0.5,), (0.5,))
     ])
 
+def preprocess_letter(img):
+    pad = 8
+    img = np.pad(img, pad, mode='constant', constant_values=255)
+
+    h, w = img.shape
+    size = max(h, w)
+    
+    new_img = np.full((size, size), 255, dtype=img.dtype)
+    
+    y_offset = (size - h) // 2
+    x_offset = (size - w) // 2
+    
+    new_img[y_offset:y_offset+h, x_offset:x_offset+w] = img
+    
+    new_img = cv2.resize(new_img, (28, 28))
+    return new_img
 
 # ============================================================================
 # ODSZUMIANIE (OpenCV)
@@ -221,7 +239,7 @@ def load_and_optionally_denoise(image_path: str, args, mode: str) -> Image.Image
         img = Image.open(image_path).convert(mode)
         if getattr(args, "denoise", False):
             # Odszum w RGB, potem ewentualna konwersja do 'L'
-            img_rgb = Image.open(image_path).convert("RGB")
+            img_rgb = Image.open(image_path).convert("L")
             img_rgb = denoise_pil(
                 img_rgb,
                 method=args.denoise_method,
@@ -229,7 +247,7 @@ def load_and_optionally_denoise(image_path: str, args, mode: str) -> Image.Image
                 hColor=getattr(args, "hColor", 10),
                 ksize=getattr(args, "ksize", 3),
             )
-            img = img_rgb if mode == "RGB" else img_rgb.convert("L")
+            img = img_rgb.convert("L")
     return img
 
 def load_pdf_as_image(pdf_path: str) -> Image.Image:
@@ -242,7 +260,7 @@ def load_pdf_as_image(pdf_path: str) -> Image.Image:
 
 def load_model(model_path: str, device: torch.device) -> nn.Module:
     """Wczytuje wytrenowany model."""
-    model = SimpleCNN(num_classes=52)
+    model = SimpleCNN(num_classes=46)
 
     if os.path.exists(model_path):
         print(f"Wczytywanie modelu z {model_path}...")
@@ -270,7 +288,7 @@ def predict_image(image_path: str, model: nn.Module, device: torch.device, args)
         (predicted_char, confidence, all_probs_tensor)
     """
     # Wczytaj obraz (z ewentualnym odszumianiem)
-    image = load_and_optionally_denoise(image_path, args, mode='RGB')
+    image = load_and_optionally_denoise(image_path, args, mode='L')
 
     # Przetwórz
     transform = get_transform()
@@ -290,7 +308,7 @@ def predict_image(image_path: str, model: nn.Module, device: torch.device, args)
 
 def visualize_prediction(image_path: str, predicted_char: str, confidence: float, args):
     """Wizualizuje predykcję."""
-    image = load_and_optionally_denoise(image_path, args, mode='RGB')
+    image = load_and_optionally_denoise(image_path, args, mode='L')
 
     plt.figure(figsize=(8, 6))
     plt.imshow(image)
@@ -321,11 +339,11 @@ def train_model(epochs: int = 10, batch_size: int = 32):
 
     # Transformacje
     train_transform = transforms.Compose([
+        transforms.Grayscale(num_output_channels=1),
         transforms.Resize((IMAGE_SIZE, IMAGE_SIZE)),
-        transforms.RandomHorizontalFlip(p=0.5),
         transforms.RandomRotation(10),
         transforms.ToTensor(),
-        transforms.Normalize(mean=MEAN, std=STD)
+        transforms.Normalize((0.5,), (0.5,))
     ])
 
     # Dataset
@@ -439,10 +457,11 @@ def predict_word(image_path, model, device, args):
                 continue
             top, bottom = rows[0], rows[-1]
 
+            letter_img = preprocess_letter(letter_img)
             # konwersja do PIL
             letter_pil = Image.fromarray(letter_img)
-            letter_pil = letter_pil.resize((48, 48))
-            letter_pil = letter_pil.convert("RGB")
+            
+            letter_pil = letter_pil.convert("L")
 
             # transformacja
             transform = get_transform()
@@ -468,7 +487,7 @@ def predict_segments(image_path, model, device, args):
     img_array = np.array(image)
 
     # Binaryzacja
-    binary = img_array < 128  # zakładamy, że ciemne litery <128
+    binary = img_array < 128
 
     # Projekcja horyzontalna do segmentacji linii
     horizontal_sum = np.sum(binary, axis=1)
@@ -518,11 +537,8 @@ def predict_segments(image_path, model, device, args):
                 letters_bounds.append((start, len(vertical_sum)))
 
             # --- rozpoznanie liter w tej linii ---
-            # Obliczamy średnią szerokość litery, aby heurystycznie wykrywać przerwy między wyrazami.
             letter_widths = [end - start for (start, end) in letters_bounds] if letters_bounds else []
             avg_letter_width = float(np.mean(letter_widths)) if letter_widths else 0.0
-            # Próg: jeśli przerwa między kolejnymi literami jest większa niż 1.5 szerokości litery,
-            # traktujemy ją jako spację między wyrazami.
             gap_factor = 1.5
 
             for idx, (start, end) in enumerate(letters_bounds):
@@ -534,11 +550,16 @@ def predict_segments(image_path, model, device, args):
 
                 top, bottom = rows[0], rows[-1]
                 letter_img = letter_img[top:bottom+1, :]
-
+                letter_img = preprocess_letter(letter_img)
+                
                 letter_pil = Image.fromarray(letter_img)
-                letter_pil = letter_pil.resize((48, 48))
-                letter_pil = letter_pil.convert("RGB")
+                letter_pil = letter_pil.convert("L")
 
+                #debug
+                plt.imshow(letter_pil, cmap='gray')
+                plt.axis('off')  # ukrywa osie
+                plt.show()
+                #/debug
                 transform = get_transform()
                 tensor = transform(letter_pil).unsqueeze(0).to(device)
 

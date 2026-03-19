@@ -556,9 +556,9 @@ def predict_segments(image_path, model, device, args):
                 letter_pil = letter_pil.convert("L")
 
                 #debug
-                plt.imshow(letter_pil, cmap='gray')
-                plt.axis('off')  # ukrywa osie
-                plt.show()
+                #plt.imshow(letter_pil, cmap='gray')
+                #plt.axis('off')  # ukrywa osie
+                #plt.show()
                 #/debug
                 transform = get_transform()
                 tensor = transform(letter_pil).unsqueeze(0).to(device)

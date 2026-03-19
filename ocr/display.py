@@ -27,7 +27,7 @@ def visualize_prediction(
     save_path: str = RESULT_IMAGE_PATH,
 ) -> None:
     """Wyświetla obraz z tytułem zawierającym wynik i zapisuje go do pliku PNG."""
-    image = load_and_optionally_denoise(image_path, args, mode="RGB")
+    image = load_and_optionally_denoise(image_path, args, mode="L")
 
     plt.figure(figsize=(8, 6))
     plt.imshow(image)

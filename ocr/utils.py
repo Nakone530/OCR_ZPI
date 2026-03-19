@@ -10,10 +10,20 @@ import os
 from datetime import date
 from pathlib import Path
 
-import cv2
+try:
+    import cv2  # type: ignore
+except ModuleNotFoundError:  # pragma: no cover
+    cv2 = None
 import numpy as np
 from PIL import Image
-from pdf2image import convert_from_path
+try:
+    from pdf2image import convert_from_path  # type: ignore
+except ModuleNotFoundError:  # pragma: no cover
+    convert_from_path = None
+try:
+    import fitz  # type: ignore  # PyMuPDF
+except ModuleNotFoundError:  # pragma: no cover
+    fitz = None
 from torchvision import transforms
 
 from .config import IMAGE_SIZE, MEAN, STD
@@ -44,29 +54,59 @@ def get_train_transform() -> transforms.Compose:
 # ── Konwersje PIL ↔ OpenCV ─────────────────────────────────────────────────────
 
 def _pil_to_bgr(img_pil: Image.Image) -> np.ndarray:
+    if cv2 is None:
+        raise ModuleNotFoundError(
+            "Brak modułu 'cv2'. Zainstaluj: pip install opencv-python "
+            "(wymagane tylko dla opcji --denoise)."
+        )
     rgb = img_pil.convert("RGB")
     return cv2.cvtColor(np.array(rgb), cv2.COLOR_RGB2BGR)
 
 
 def _bgr_to_pil(img_bgr: np.ndarray) -> Image.Image:
+    if cv2 is None:
+        raise ModuleNotFoundError(
+            "Brak modułu 'cv2'. Zainstaluj: pip install opencv-python "
+            "(wymagane tylko dla opcji --denoise)."
+        )
     return Image.fromarray(cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB))
 
 
 # ── Metody odszumiania ─────────────────────────────────────────────────────────
 
 def _denoise_nlm_color(bgr: np.ndarray, h: int, hColor: int) -> np.ndarray:
+    if cv2 is None:
+        raise ModuleNotFoundError(
+            "Brak modułu 'cv2'. Zainstaluj: pip install opencv-python "
+            "(wymagane tylko dla opcji --denoise)."
+        )
     return cv2.fastNlMeansDenoisingColored(bgr, None, h, hColor, 7, 21)
 
 
 def _denoise_median(bgr: np.ndarray, ksize: int) -> np.ndarray:
+    if cv2 is None:
+        raise ModuleNotFoundError(
+            "Brak modułu 'cv2'. Zainstaluj: pip install opencv-python "
+            "(wymagane tylko dla opcji --denoise)."
+        )
     return cv2.medianBlur(bgr, ksize)
 
 
 def _denoise_bilateral(bgr: np.ndarray) -> np.ndarray:
+    if cv2 is None:
+        raise ModuleNotFoundError(
+            "Brak modułu 'cv2'. Zainstaluj: pip install opencv-python "
+            "(wymagane tylko dla opcji --denoise)."
+        )
     return cv2.bilateralFilter(bgr, 9, 75, 75)
 
 
 def _denoise_gaussian(bgr: np.ndarray, ksize: int) -> np.ndarray:
+    if cv2 is None:
+        raise ModuleNotFoundError(
+            "Brak modułu 'cv2'. Zainstaluj: pip install opencv-python "
+            "(wymagane tylko dla opcji --denoise)."
+        )
     return cv2.GaussianBlur(bgr, (ksize, ksize), 0)
 
 
@@ -103,7 +143,35 @@ def load_image(image_path: str, mode: str = "RGB") -> Image.Image:
     """Ładuje obraz (PNG/JPG/PDF) i konwertuje do podanego trybu."""
     suffix = Path(image_path).suffix.lower()
     if suffix == ".pdf":
-        img = convert_from_path(image_path, dpi=300)[0]
+        # Prefer pdf2image when available (higher DPI control),
+        # but on Windows it requires Poppler binaries in PATH.
+        if convert_from_path is not None:
+            try:
+                img = convert_from_path(image_path, dpi=300)[0]
+                return img.convert(mode)
+            except Exception:
+                # fall back to PyMuPDF if Poppler is missing or pdf2image fails
+                pass
+
+        if fitz is None:
+            raise ModuleNotFoundError(
+                "Obsługa PDF wymaga dodatkowych zależności.\n"
+                "- Opcja A (najprostsza): zainstaluj PyMuPDF: pip install pymupdf\n"
+                "- Opcja B: użyj pdf2image + zainstaluj Poppler i dodaj do PATH.\n"
+                "Błąd wygląda na brak Popplera (pdfinfo/pdftoppm) w systemie."
+            )
+
+        # PyMuPDF fallback: render first page to a bitmap
+        doc = fitz.open(image_path)
+        try:
+            page = doc.load_page(0)
+            # ~300 DPI equivalent: scale 300/72
+            zoom = 300.0 / 72.0
+            mat = fitz.Matrix(zoom, zoom)
+            pix = page.get_pixmap(matrix=mat, alpha=False)
+            img = Image.frombytes("RGB", (pix.width, pix.height), pix.samples)
+        finally:
+            doc.close()
     else:
         img = Image.open(image_path)
     return img.convert(mode)

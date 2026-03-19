@@ -25,6 +25,14 @@ import sys
 
 import torch
 
+from ocr.json_output import (
+    build_image_result_json,
+    build_lines_result_json,
+    build_multi_result_json,
+    build_word_result_json,
+    dump_json,
+    write_json,
+)
 from ocr.config import MODEL_PATH
 from ocr.display import (
     print_multi_result,
@@ -78,6 +86,25 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--ksize", type=int, default=3,
                         help="Rozmiar jądra dla median/gaussian (3, 5, 7…)")
 
+    # Wyjście
+    parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Wypisz wynik jako JSON (zamiast formatu tekstowego)",
+    )
+    parser.add_argument(
+        "--json-pretty",
+        action="store_true",
+        help="Sformatuj JSON (wcięcia, czytelniej dla człowieka)",
+    )
+    parser.add_argument(
+        "--json-path",
+        type=str,
+        default=None,
+        metavar="PLIK",
+        help="Zapisz wynik JSON do pliku (domyślnie: obok skopiowanego obrazu w folderze z datą)",
+    )
+
     return parser
 
 
@@ -111,46 +138,109 @@ def main() -> None:
     elif args.image:
         _require_file(args.image)
         print(f"\nRozpoznawanie: {args.image}")
-        save_image_to_today_folder(args.image)
+        saved_copy_path = save_image_to_today_folder(args.image)
 
         model = load_model(MODEL_PATH, device)
         predicted_char, confidence, probs = predict_image(args.image, model, device, args)
 
-        print_single_result(predicted_char, confidence)
-        print_top5(probs)
-        visualize_prediction(args.image, predicted_char, confidence, args)
+        if args.json:
+            payload = build_image_result_json(
+                image_path=args.image,
+                saved_copy_path=saved_copy_path,
+                predicted_char=predicted_char,
+                confidence=confidence,
+                probs=probs,
+                device=str(device),
+            )
+            print(dump_json(payload, pretty=args.json_pretty))
+            out_path = args.json_path
+            if out_path is None:
+                out_path = os.path.splitext(saved_copy_path)[0] + ".json"
+            write_json(out_path, payload, pretty=args.json_pretty)
+        else:
+            print_single_result(predicted_char, confidence)
+            print_top5(probs)
+            visualize_prediction(args.image, predicted_char, confidence, args)
 
     # ── Wyraz ──
     elif args.word:
         _require_file(args.word)
         print(f"\nRozpoznawanie wyrazu: {args.word}")
-        save_image_to_today_folder(args.word)
+        saved_copy_path = save_image_to_today_folder(args.word)
 
         model = load_model(MODEL_PATH, device)
         word = predict_word(args.word, model, device, args)
-        print_word_result(word)
+        if args.json:
+            payload = build_word_result_json(
+                image_path=args.word,
+                saved_copy_path=saved_copy_path,
+                word=word,
+                device=str(device),
+            )
+            print(dump_json(payload, pretty=args.json_pretty))
+            out_path = args.json_path
+            if out_path is None:
+                out_path = os.path.splitext(saved_copy_path)[0] + ".json"
+            write_json(out_path, payload, pretty=args.json_pretty)
+        else:
+            print_word_result(word)
 
     # ── Tekst wieloliniowy ──
     elif args.lines:
         _require_file(args.lines)
         print(f"\nRozpoznawanie tekstu: {args.lines}")
-        save_image_to_today_folder(args.lines)
+        saved_copy_path = save_image_to_today_folder(args.lines)
 
         model = load_model(MODEL_PATH, device)
         text = predict_segments(args.lines, model, device, args)
-        print_text_result(text)
+        if args.json:
+            payload = build_lines_result_json(
+                image_path=args.lines,
+                saved_copy_path=saved_copy_path,
+                text=text,
+                device=str(device),
+            )
+            print(dump_json(payload, pretty=args.json_pretty))
+            out_path = args.json_path
+            if out_path is None:
+                out_path = os.path.splitext(saved_copy_path)[0] + ".json"
+            write_json(out_path, payload, pretty=args.json_pretty)
+        else:
+            print_text_result(text)
 
     # ── Wiele zdjęć ──
     elif args.multi:
         model = load_model(MODEL_PATH, device)
         print(f"\nRozpoznawanie {len(args.multi)} pliku(-ów):")
+        results = []
         for img_path in args.multi:
             if not os.path.exists(img_path):
                 print(f"  Pominięto (nie znaleziono): {img_path}")
                 continue
-            save_image_to_today_folder(img_path)
+            saved_copy_path = save_image_to_today_folder(img_path)
             predicted_char, confidence, _ = predict_image(img_path, model, device, args)
-            print_multi_result(img_path, predicted_char, confidence)
+            results.append(
+                {
+                    "image_path": img_path,
+                    "saved_copy_path": saved_copy_path,
+                    "predicted_char": predicted_char,
+                    "confidence_percent": round(float(confidence), 4),
+                }
+            )
+            if not args.json:
+                print_multi_result(img_path, predicted_char, confidence)
+
+        if args.json:
+            payload = build_multi_result_json(
+                results=results,
+                device=str(device),
+            )
+            print(dump_json(payload, pretty=args.json_pretty))
+            out_path = args.json_path
+            if out_path is None:
+                # multi: zapisz w bieżącym katalogu jako wynik.json
+                out_path = "results.json"
+            write_json(out_path, payload, pretty=args.json_pretty)
 
     # ── Brak argumentów → pomoc ──
     else:

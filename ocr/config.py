@@ -19,6 +19,6 @@ IMAGE_SIZE = 48
 MEAN = [0.485, 0.456, 0.406]   # ImageNet mean
 STD  = [0.229, 0.224, 0.225]   # ImageNet std
 
-# ── Klasy (52: A-Z, a-z) ─────────────────────────────────────────────────────
-CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+# ── Klasy (26: A-Z) ──────────────────────────────────────────────────────────
+CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 NUM_CLASSES = len(CHARS)

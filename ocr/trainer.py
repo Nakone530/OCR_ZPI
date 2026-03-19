@@ -117,7 +117,7 @@ def train_model(epochs: int = 10, batch_size: int = 32) -> None:
         if val_acc > best_acc:
             best_acc = val_acc
             torch.save(model.state_dict(), MODEL_PATH)
-            print(f"  → Zapisano najlepszy model (acc: {best_acc:.2f}%)")
+            print(f"  -> Zapisano najlepszy model (acc: {best_acc:.2f}%)")
 
     print(f"\nTrenowanie zakończone! Najlepsza dokładność: {best_acc:.2f}%")
     print(f"Model zapisany do: {MODEL_PATH}")

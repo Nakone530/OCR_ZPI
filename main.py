@@ -9,14 +9,6 @@ Punkt wejścia programu OCR.
   ocr.display   – wyświetlanie i wizualizacja wyników
   ocr.utils     – narzędzia pomocnicze
 
-Przykłady użycia:
-  python main.py --prepare
-  python main.py --train --epochs 15
-  python main.py --image litera.png
-  python main.py --image litera.png --denoise --denoise-method nlm-color
-  python main.py --word wyraz.png
-  python main.py --lines tekst.png
-  python main.py --multi a.png b.png c.png
 """
 
 import argparse

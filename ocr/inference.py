@@ -17,7 +17,7 @@ from PIL import Image
 
 from .config import CHARS, MODEL_PATH
 from .model import SimpleCNN
-from .utils import get_transform, load_and_optionally_denoise
+from .utils import get_transform, load_and_optionally_denoise, preprocess_letter
 
 
 # ── Ładowanie modelu ───────────────────────────────────────────────────────────
@@ -30,7 +30,7 @@ def load_model(model_path: str = MODEL_PATH, device: torch.device = None) -> nn.
     if device is None:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    model = SimpleCNN()
+    model = SimpleCNN(num_classes=46)
 
     if os.path.exists(model_path):
         print(f"Wczytywanie modelu z {model_path}...")
@@ -38,8 +38,8 @@ def load_model(model_path: str = MODEL_PATH, device: torch.device = None) -> nn.
         print("Model wczytany!")
     else:
         print(f"UWAGA: Nie znaleziono modelu {model_path}")
-        print("Model nie jest wytrenowany – wyniki będą losowe!")
-        print("Najpierw uruchom: python main.py --train")
+        print("Model nie jest wytrenowany - wyniki będą losowe!")
+        print("Najpierw uruchom: python run_local.py --train")
 
     model.to(device)
     model.eval()
@@ -61,7 +61,9 @@ def predict_image(
         (predicted_char, confidence_percent, all_probs_tensor)
     """
     image = load_and_optionally_denoise(image_path, args, mode="RGB")
-    tensor = get_transform()(image).unsqueeze(0).to(device)
+
+    transform = get_transform()
+    tensor = transform(image).unsqueeze(0).to(device)
 
     with torch.no_grad():
         probs = torch.softmax(model(tensor), dim=1)
@@ -90,7 +92,8 @@ def _find_bounds(projection: np.ndarray) -> list[tuple[int, int]]:
 
 def _classify_letter(letter_gray: np.ndarray, model: nn.Module, device: torch.device) -> str:
     """Klasyfikuje wycięty fragment (tablica grayscale) jako znak."""
-    pil = Image.fromarray(letter_gray).resize((48, 48)).convert("RGB")
+    letter_img = preprocess_letter(letter_gray)
+    pil = Image.fromarray(letter_gray).resize((28, 28)).convert("L")
     tensor = get_transform()(pil).unsqueeze(0).to(device)
     probs = torch.softmax(model(tensor), dim=1)
     _, predicted = torch.max(probs, 1)

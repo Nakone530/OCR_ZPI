@@ -7,38 +7,48 @@ import torch.nn as nn
 from .config import NUM_CLASSES
 
 
-class SimpleCNN(nn.Module):
-    """Sieć CNN do rozpoznawania znaków (domyślnie 52 klasy: A-Z, a-z)."""
 
-    def __init__(self, num_classes: int = NUM_CLASSES):
-        super().__init__()
+class SimpleCNN(nn.Module):
+    """sieć CNN do rozpoznawania znaków."""
+
+    def __init__(self, num_classes=46):
+        super(SimpleCNN, self).__init__()
 
         self.features = nn.Sequential(
-            # Blok 1: 3×48×48 → 32×24×24
-            nn.Conv2d(3, 32, kernel_size=3, padding=1),
+            # Blok 1: 1x28x28 -> 32x14x14 (grayscale)
+            nn.Conv2d(1, 32, kernel_size=3, padding=1),
             nn.BatchNorm2d(32),
             nn.ReLU(inplace=True),
             nn.MaxPool2d(2, 2),
 
-            # Blok 2: 32×24×24 → 64×12×12
+            # Blok 2: 32x14x14 -> 64x7x7
             nn.Conv2d(32, 64, kernel_size=3, padding=1),
             nn.BatchNorm2d(64),
             nn.ReLU(inplace=True),
             nn.MaxPool2d(2, 2),
 
-            # Blok 3: 64×12×12 → 128×6×6
+            # Blok 3: 64x7x7 -> 128x3x3
             nn.Conv2d(64, 128, kernel_size=3, padding=1),
             nn.BatchNorm2d(128),
             nn.ReLU(inplace=True),
+            
+            nn.Conv2d(128, 128, kernel_size=3, padding=1),
+            nn.BatchNorm2d(128),
+            nn.ReLU(inplace=True),
             nn.MaxPool2d(2, 2),
-        )
 
+            # Blok 4: 128x3x3 -> 256x3x3
+            nn.Conv2d(128, 256, kernel_size=3, padding=1),
+            nn.BatchNorm2d(256),
+            nn.ReLU(inplace=True),
+        )
+        
         self.classifier = nn.Sequential(
             nn.Flatten(),
-            nn.Linear(128 * 6 * 6, 256),
+            nn.Linear(256 * 3 * 3, 512),
             nn.ReLU(inplace=True),
             nn.Dropout(0.5),
-            nn.Linear(256, num_classes),
+            nn.Linear(512, num_classes)
         )
 
     def forward(self, x):

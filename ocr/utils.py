@@ -41,10 +41,27 @@ def get_train_transform() -> transforms.Compose:
     ])
 
 
+def preprocess_letter(img):
+    pad = 10
+    img = np.pad(img, pad, mode='constant', constant_values=255)
+
+    h, w = img.shape
+    size = max(h, w)
+    
+    new_img = np.full((size, size), 255, dtype=img.dtype)
+    
+    y_offset = (size - h) // 2
+    x_offset = (size - w) // 2
+    
+    new_img[y_offset:y_offset+h, x_offset:x_offset+w] = img
+    
+    new_img = cv2.resize(new_img, (28, 28))
+    return new_img
+
 # ── Konwersje PIL ↔ OpenCV ─────────────────────────────────────────────────────
 
 def _pil_to_bgr(img_pil: Image.Image) -> np.ndarray:
-    rgb = img_pil.convert("RGB")
+    rgb = img_pil.convert("L")
     return cv2.cvtColor(np.array(rgb), cv2.COLOR_RGB2BGR)
 
 

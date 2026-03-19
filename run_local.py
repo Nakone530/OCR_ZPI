@@ -820,12 +820,10 @@ def main():
         save_image_to_today_folder(args.lines)
         saved_copy_path = save_image_to_today_folder(args.lines)
         if args.json:
-            payload = build_image_result_json(
+            payload = build_lines_result_json(
                 image_path=args.image,
                 saved_copy_path=saved_copy_path,
-                predicted_char=predicted_char,
-                confidence=confidence,
-                probs=probs,
+                text=text,
                 device=str(device),
             )
             print(dump_json(payload, pretty=args.json_pretty))

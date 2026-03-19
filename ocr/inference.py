@@ -60,7 +60,7 @@ def predict_image(
     Returns:
         (predicted_char, confidence_percent, all_probs_tensor)
     """
-    image = load_and_optionally_denoise(image_path, args, mode="RGB")
+    image = load_and_optionally_denoise(image_path, args, mode="L")
 
     transform = get_transform()
     tensor = transform(image).unsqueeze(0).to(device)

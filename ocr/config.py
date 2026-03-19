@@ -16,9 +16,9 @@ MODEL_PATH = "./model_ocr.pth"
 
 # ── Obraz ─────────────────────────────────────────────────────────────────────
 IMAGE_SIZE = 28
-MEAN = [0.485, 0.456, 0.406]   # ImageNet mean
-STD  = [0.229, 0.224, 0.225]   # ImageNet std
+MEAN = [0.5, 0.5, 0.5]   # ImageNet mean
+STD  = [0.5, 0.5, 0.5]   # ImageNet std
 
-# ── Klasy (26: A-Z) ──────────────────────────────────────────────────────────
-CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+# ── Klasy (46: A-Z) ──────────────────────────────────────────────────────────
+CHARS = "ABCDEFGHIJKLMNOPRSTUWYZabcdefghijklmnoprstuwyz"
 NUM_CLASSES = len(CHARS)

@@ -26,7 +26,7 @@ def get_transform() -> transforms.Compose:
     return transforms.Compose([
         transforms.Resize((IMAGE_SIZE, IMAGE_SIZE)),
         transforms.ToTensor(),
-        transforms.Normalize(mean=MEAN, std=STD),
+        transforms.Normalize((0.5,), (0.5,)),
     ])
 
 
@@ -37,7 +37,7 @@ def get_train_transform() -> transforms.Compose:
         transforms.RandomHorizontalFlip(p=0.5),
         transforms.RandomRotation(10),
         transforms.ToTensor(),
-        transforms.Normalize(mean=MEAN, std=STD),
+        transforms.Normalize((0.5,), (0.5,)),
     ])
 
 
@@ -126,7 +126,7 @@ def load_image(image_path: str, mode: str = "RGB") -> Image.Image:
     return img.convert(mode)
 
 
-def load_and_optionally_denoise(image_path: str, args, mode: str = "RGB") -> Image.Image:
+def load_and_optionally_denoise(image_path: str, args, mode: str = "L") -> Image.Image:
     """
     Ładuje obraz i opcjonalnie odszumia go wg parametrów z args.
     mode: 'RGB' (klasyfikacja) lub 'L' (segmentacja).
@@ -139,7 +139,7 @@ def load_and_optionally_denoise(image_path: str, args, mode: str = "RGB") -> Ima
     img = Image.open(image_path)
 
     if getattr(args, "denoise", False):
-        img_rgb = img.convert("RGB")
+        img_rgb = img.convert("L")
         img_rgb = denoise_pil(
             img_rgb,
             method=args.denoise_method,
@@ -147,7 +147,7 @@ def load_and_optionally_denoise(image_path: str, args, mode: str = "RGB") -> Ima
             hColor=getattr(args, "hColor", 10),
             ksize=getattr(args, "ksize", 3),
         )
-        return img_rgb if mode == "RGB" else img_rgb.convert("L")
+        return img_rgb.convert("L")
 
     return img.convert(mode)
 
@@ -173,6 +173,6 @@ def save_image_to_today_folder(image_path: str) -> str:
         if f.endswith(".png") and os.path.splitext(f)[0].isdigit()
     ]
     dest = os.path.join(folder, f"{max(existing, default=0) + 1}.png")
-    load_image(image_path, mode="RGB").save(dest, format="PNG")
+    load_image(image_path, mode="L").save(dest, format="PNG")
     print(f"Zapisano zdjęcie jako: {dest}")
     return dest

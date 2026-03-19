@@ -2,6 +2,7 @@
 Skrypt do uruchamiania lokalnie - przygotowanie danych + rozpoznawanie zdjęć
 z opcjonalnym odszumianiem obrazu (OpenCV).
 """
+from __future__ import annotations
 import numpy as np
 import os
 import sys
@@ -12,11 +13,15 @@ import matplotlib.pyplot as plt
 import torch
 import torch.nn as nn
 import shutil
+import json
+from datetime import datetime
+from typing import Any
 from datetime import date
 from torchvision import datasets, transforms
 from pdf2image import convert_from_path
 from pathlib import Path
 from PIL import Image
+
 import cv2
 
 # ============================================================================
@@ -30,8 +35,8 @@ EXTRACTED_DIR = os.path.join(DATA_DIR, "English", "Fnt")
 MODEL_PATH = "./model_ocr.pth"
 
 IMAGE_SIZE = 28
-MEAN = [0.485, 0.456, 0.406]
-STD = [0.229, 0.224, 0.225]
+MEAN = [0.5, 0.5, 0.5]
+STD = [0.5, 0.5, 0.5]
 
 # Mapowanie klas na znaki (46 klasy: A-Z)
 CHARS = "ABCDEFGHIJKLMNOPRSTUWYZabcdefghijklmnoprstuwyz"
@@ -583,6 +588,110 @@ def predict_segments(image_path, model, device, args):
 
 
 # ============================================================================
+# JSON
+# ============================================================================
+
+def _topk_from_probs(probs: torch.Tensor, k: int = 5) -> list[dict[str, Any]]:
+    topk_probs, topk_indices = torch.topk(probs, k)
+    out: list[dict[str, Any]] = []
+    for rank, (prob, idx) in enumerate(zip(topk_probs, topk_indices), start=1):
+        out.append(
+            {
+                "rank": rank,
+                "char": CHARS[int(idx.item())],
+                "probability_percent": round(float(prob.item()) * 100.0, 4),
+            }
+        )
+    return out
+
+
+def build_image_result_json(
+    *,
+    image_path: str,
+    saved_copy_path: str | None,
+    predicted_char: str,
+    confidence: float,
+    probs: torch.Tensor,
+    device: str,
+) -> dict[str, Any]:
+    return {
+        "type": "image",
+        "timestamp": datetime.now().isoformat(timespec="seconds"),
+        "device": device,
+        "input": {"image_path": image_path, "saved_copy_path": saved_copy_path},
+        "result": {
+            "predicted_char": predicted_char,
+            "confidence_percent": round(float(confidence), 4),
+            "top5": _topk_from_probs(probs, k=5),
+        },
+    }
+
+
+def build_word_result_json(
+    *,
+    image_path: str,
+    saved_copy_path: str | None,
+    word: str,
+    device: str,
+) -> dict[str, Any]:
+    return {
+        "type": "word",
+        "timestamp": datetime.now().isoformat(timespec="seconds"),
+        "device": device,
+        "input": {"image_path": image_path, "saved_copy_path": saved_copy_path},
+        "result": {"word": word},
+    }
+
+
+def build_lines_result_json(
+    *,
+    image_path: str,
+    saved_copy_path: str | None,
+    text: str,
+    device: str,
+) -> dict[str, Any]:
+    lines = [
+        {"line": i + 1, "text": line}
+        for i, line in enumerate(text.splitlines())
+        if line != ""
+    ]
+    return {
+        "type": "lines",
+        "timestamp": datetime.now().isoformat(timespec="seconds"),
+        "device": device,
+        "input": {"image_path": image_path, "saved_copy_path": saved_copy_path},
+        "result": {
+            "lines": lines,
+        },
+    }
+
+
+def build_multi_result_json(
+    *,
+    results: list[dict[str, Any]],
+    device: str,
+) -> dict[str, Any]:
+    return {
+        "type": "multi",
+        "timestamp": datetime.now().isoformat(timespec="seconds"),
+        "device": device,
+        "results": results,
+    }
+
+
+def dump_json(payload: dict[str, Any], *, pretty: bool) -> str:
+    if pretty:
+        return json.dumps(payload, ensure_ascii=False, indent=2)
+    return json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+
+
+def write_json(path: str, payload: dict[str, Any], *, pretty: bool) -> None:
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(dump_json(payload, pretty=pretty))
+        f.write("\n")
+
+
+# ============================================================================
 # MAIN
 # ============================================================================
 
@@ -604,6 +713,26 @@ def main():
     parser.add_argument("--h", type=int, default=10, help="Siła NLM (luminancja)")
     parser.add_argument("--hColor", type=int, default=10, help="Siła NLM (kolor)")
     parser.add_argument("--ksize", type=int, default=3, help="Rozmiar jądra (median/gaussian): 3,5,7...")
+
+    # ==== JSON ====
+    parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Wypisz wynik jako JSON (zamiast formatu tekstowego)",
+    )
+    parser.add_argument(
+        "--json-pretty",
+        action="store_true",
+        help="Sformatuj JSON (wcięcia, czytelniej dla człowieka)",
+    )
+    parser.add_argument(
+        "--json-path",
+        type=str,
+        default=None,
+        metavar="PLIK",
+        help="Zapisz wynik JSON do pliku (domyślnie: obok skopiowanego obrazu w folderze z datą)",
+    )
+
 
     args = parser.parse_args()
 
@@ -688,6 +817,23 @@ def main():
 
         print(f"tekst:\n{text}")
 
+        save_image_to_today_folder(args.lines)
+        saved_copy_path = save_image_to_today_folder(args.lines)
+        if args.json:
+            payload = build_image_result_json(
+                image_path=args.image,
+                saved_copy_path=saved_copy_path,
+                predicted_char=predicted_char,
+                confidence=confidence,
+                probs=probs,
+                device=str(device),
+            )
+            print(dump_json(payload, pretty=args.json_pretty))
+            out_path = args.json_path
+            if out_path is None:
+                out_path = os.path.splitext(saved_copy_path)[0] + ".json"
+            write_json(out_path, payload, pretty=args.json_pretty)
+
     elif args.multi:
         # Rozpoznawanie wielu zdjęć
         model = load_model(MODEL_PATH, device)
@@ -705,6 +851,25 @@ def main():
             # Predykcja
             predicted_char, confidence, probs = predict_image(img_path, model, device, args)
             print(f"WYNIK: '{predicted_char}' (pewność: {confidence:.1f}%)")
+
+        if args.json:
+            payload = build_image_result_json(
+                image_path=args.image,
+                saved_copy_path=saved_copy_path,
+                predicted_char=predicted_char,
+                confidence=confidence,
+                probs=probs,
+                device=str(device),
+            )
+            print(dump_json(payload, pretty=args.json_pretty))
+            out_path = args.json_path
+            if out_path is None:
+                out_path = os.path.splitext(saved_copy_path)[0] + ".json"
+            write_json(out_path, payload, pretty=args.json_pretty)
+        else:
+            print_single_result(predicted_char, confidence)
+            print_top5(probs)
+            visualize_prediction(args.image, predicted_char, confidence, args)
 
     else:
         # Domyślnie: pokaż pomoc

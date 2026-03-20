@@ -20,7 +20,7 @@ import matplotlib.pyplot as plt
 from PIL import Image
 from .config import CHARS, MODEL_PATH
 from .model import SimpleCNN
-from .utils import get_transform, load_and_optionally_denoise, preprocess_letter
+from .utils import get_transform, load_and_optionally_denoise, preprocess_letter, save_image_to_temp_folder
 
 # ── Ładowanie modelu ───────────────────────────────────────────────────────────
 
@@ -183,12 +183,15 @@ def predict_segments(
                     continue
                 letter_img = letter_img[rows[0]:rows[-1] + 1, :]
 
-                preprocess_letter(letter_img)
+                #save_image_to_temp_folder(letter_img, "pre")
+                letter_img = preprocess_letter(letter_img)
 
-                plt.imshow(letter_img, cmap='gray')
-                plt.axis('off')
-                plt.show()
 
+                #plt.imshow(letter_img, cmap='gray')
+                #plt.axis('off')
+                #plt.show()
+
+                #save_image_to_temp_folder(letter_img, "post")
                 line_text += _classify_letter(letter_img, model, device)
 
                 if idx < len(letters_bounds) - 1 and avg_width > 0:

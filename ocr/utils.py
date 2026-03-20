@@ -16,6 +16,12 @@ from PIL import Image
 from pdf2image import convert_from_path
 from torchvision import transforms
 
+from datetime import datetime
+from typing import Any
+from datetime import date
+
+from pathlib import Path
+
 from .config import IMAGE_SIZE, MEAN, STD
 
 
@@ -160,7 +166,6 @@ def get_today_folder() -> str:
     os.makedirs(folder, exist_ok=True)
     return folder
 
-
 def save_image_to_today_folder(image_path: str) -> str:
     """
     Kopiuje obraz do folderu z dzisiejszą datą jako kolejny plik PNG
@@ -176,3 +181,18 @@ def save_image_to_today_folder(image_path: str) -> str:
     load_image(image_path, mode="L").save(dest, format="PNG")
     print(f"Zapisano zdjęcie jako: {dest}")
     return dest
+
+
+def save_image_to_temp_folder(image, order):
+    os.makedirs("./temp", exist_ok=True)
+    filename = datetime.now().strftime("%Y%m%d_%H%M%S") + order + ".png"
+    filepath = os.path.join("./temp", filename)
+
+    if isinstance(image, Image.Image):
+        image.save(filepath)
+    else:
+        # assume numpy array
+        img = Image.fromarray(image)
+        img.save(filepath)
+
+    return filepath

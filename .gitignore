@@ -3,15 +3,18 @@
 .copilot/
 .cursor/
 
-# Model i wyniki
-model_ocr.pth
+# wyniki
 prediction_result.png
+output.png
 
 # Foldery z historią rozpoznań (YYYY-MM-DD)
 [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]/
 
 # Dane (pobierane automatycznie)
 data/
+
+# tymczasowe dane
+temp/*
 
 # Python
 __pycache__/

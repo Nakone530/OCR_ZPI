@@ -8,8 +8,10 @@ Odpowiedzialności:
 """
 
 import os
+import sys
 import tarfile
 import urllib.request
+import signal
 
 import torch
 import torch.nn as nn
@@ -40,6 +42,18 @@ def download_dataset() -> None:
 
 # ── Trening ────────────────────────────────────────────────────────────────────
 
+def handler(signum, frame):
+    print(f"Odebrano sygnał: {signum}")
+    print("Program działa.")
+
+    sys.exit(0)
+
+# Rejestracja obsługi sygnału SIGINT (Ctrl+C)
+signal.signal(signal.SIGINT, handler)
+
+
+
+
 def train_model(epochs: int = 10, batch_size: int = 32):
     """Trenuje model na datasecie Chars74K."""
     print("\n" + "=" * 60)
@@ -53,13 +67,7 @@ def train_model(epochs: int = 10, batch_size: int = 32):
     print(f"Urządzenie: {device}")
 
     # Transformacje
-    train_transform = transforms.Compose([
-        transforms.Grayscale(num_output_channels=1),
-        transforms.Resize((IMAGE_SIZE, IMAGE_SIZE)),
-        transforms.RandomRotation(10),
-        transforms.ToTensor(),
-        transforms.Normalize((0.5,), (0.5,))
-    ])
+    train_transform = get_train_transform()
 
     # Dataset
     dataset = datasets.ImageFolder(root=EXTRACTED_DIR, transform=train_transform)

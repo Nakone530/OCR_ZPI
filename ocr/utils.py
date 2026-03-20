@@ -39,11 +39,11 @@ def get_transform() -> transforms.Compose:
 def get_train_transform() -> transforms.Compose:
     """Transformacja do trenowania (z augmentacją)."""
     return transforms.Compose([
+        transforms.Grayscale(num_output_channels=1),
         transforms.Resize((IMAGE_SIZE, IMAGE_SIZE)),
-        transforms.RandomHorizontalFlip(p=0.5),
         transforms.RandomRotation(10),
         transforms.ToTensor(),
-        transforms.Normalize((0.5,), (0.5,)),
+        transforms.Normalize((0.5,), (0.5,))
     ])
 
 

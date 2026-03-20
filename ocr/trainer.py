@@ -42,10 +42,34 @@ def download_dataset() -> None:
 
 # ── Trening ────────────────────────────────────────────────────────────────────
 
+checkpoint_path = "checkpoint.pth"
+current_state = {}
+
 def handler(signum, frame):
     print(f"Odebrano sygnał: {signum}")
+    torch.save(current_state, checkpoint_path)
     print("Program działa.")
+    paused = True
+    while paused:
+        print("\n--- MENU ---")
+        print("1. Wznów")
+        print("2. Zapisz najlepszy")
+        print("3. Wyjście bez zapisu")
 
+        choice = input("Wybierz opcję: ")
+
+        if choice == "1":
+            print("Wznawianie (obecnie nie działa)")
+
+        elif choice == "2":
+            print("Zapisywanie najlepszego (obecnie nie do końca działa)")
+
+        elif choice == "3":
+            print("Zamykanie programu...")
+            paused = False
+
+        else:
+            print("Nieprawidłowy wybór!")
     sys.exit(0)
 
 # Rejestracja obsługi sygnału SIGINT (Ctrl+C)

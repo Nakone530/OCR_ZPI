@@ -13,6 +13,7 @@ EXTRACTED_DIR = os.path.join(DATA_DIR, "English", "Fnt")
 
 # ── Model ─────────────────────────────────────────────────────────────────────
 MODEL_PATH = "./model_ocr.pth"
+CHECKPOINT_PATH = "./checkpoint.pth"
 
 # ── Obraz ─────────────────────────────────────────────────────────────────────
 IMAGE_SIZE = 28

@@ -9,18 +9,22 @@ Odpowiedzialności:
 """
 
 import os
-
 import numpy as np
 import torch
 import torch.nn as nn
-from PIL import Image
+import matplotlib
+matplotlib.use('TkAgg')
+import matplotlib.pyplot as plt
 
+
+from PIL import Image
 from .config import CHARS, MODEL_PATH
 from .model import SimpleCNN
 from .utils import get_transform, load_and_optionally_denoise, preprocess_letter
 
-
 # ── Ładowanie modelu ───────────────────────────────────────────────────────────
+
+print(matplotlib.get_backend())
 
 def load_model(model_path: str = MODEL_PATH, device: torch.device = None) -> nn.Module:
     """
@@ -61,6 +65,8 @@ def predict_image(
         (predicted_char, confidence_percent, all_probs_tensor)
     """
     image = load_and_optionally_denoise(image_path, args, mode="L")
+
+    preprocess_letter(image)
 
     transform = get_transform()
     tensor = transform(image).unsqueeze(0).to(device)
@@ -129,6 +135,9 @@ def predict_word(
             if len(rows) == 0:
                 continue
 
+
+            preprocess_letter(letter_img)
+
             word += _classify_letter(letter_img, model, device)
 
     return word
@@ -147,6 +156,7 @@ def predict_segments(
     (projekcja pionowa). Wykrywa spacje między wyrazami na podstawie przerw.
     """
     image = load_and_optionally_denoise(image_path, args, mode="L")
+
     img_array = np.array(image)
     binary = img_array < 128
 
@@ -172,6 +182,12 @@ def predict_segments(
                 if len(rows) == 0:
                     continue
                 letter_img = letter_img[rows[0]:rows[-1] + 1, :]
+
+                preprocess_letter(letter_img)
+
+                plt.imshow(letter_img, cmap='gray')
+                plt.axis('off')
+                plt.show()
 
                 line_text += _classify_letter(letter_img, model, device)
 

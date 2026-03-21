@@ -18,13 +18,22 @@ import torch.nn as nn
 from torchvision import datasets
 
 from .config import (
-    DATA_URL, DATA_DIR, ARCHIVE_PATH, EXTRACTED_DIR, MODEL_PATH
+    DATA_URL, DATA_DIR, ARCHIVE_PATH, EXTRACTED_DIR, MODEL_PATH, CHECKPOINT_PATH
 )
 from .model import SimpleCNN
 from .utils import get_train_transform
 
 
-# ── Dataset ────────────────────────────────────────────────────────────────────
+# -- globalne
+GLOBAL_MODEL = None
+GLOBAL_OPTIMIZER = None
+GLOBAL_CRITERION = None
+GLOBAL_DEVICE = None
+
+GLOBAL_EPOCH = 0
+GLOBAL_BEST_ACC = 0.0
+
+# -- Dataset
 
 def download_dataset() -> None:
     """Pobiera archiwum datasetu, jeśli jeszcze go nie ma."""
@@ -40,39 +49,91 @@ def download_dataset() -> None:
         print("Rozpakowano!")
 
 
-# ── Trening ────────────────────────────────────────────────────────────────────
+# -- Trening
+
+checkpoint_path = "checkpoint.pth"
+current_state = {}
 
 def handler(signum, frame):
     print(f"Odebrano sygnał: {signum}")
+    checkpoint_path = save_model(CHECKPOINT_PATH)
     print("Program działa.")
+    paused = True
+    while paused:
+        print("\n--- MENU ---")
+        print("1. Wznów")
+        print("2. Zapisz najlepszy")
+        print("3. Wyjście bez zapisu")
 
+        choice = input("Wybierz opcję: ")
+
+        if choice == "1":
+            print("Wznawianie")
+            train_model(10, 32, CHECKPOINT_PATH)
+        elif choice == "2":
+            print("Zapisywanie najlepszego (obecnie nie do końca działa, zapisuje ostatni stan)")
+            save_model(MODEL_PATH)
+        elif choice == "3":
+            print("Zamykanie programu...")
+            paused = False
+
+        else:
+            print("Nieprawidłowy wybór!")
     sys.exit(0)
 
 # Rejestracja obsługi sygnału SIGINT (Ctrl+C)
 signal.signal(signal.SIGINT, handler)
 
+def save_model(path):
+    global GLOBAL_MODEL, GLOBAL_OPTIMIZER, GLOBAL_EPOCH, GLOBAL_BEST_ACC
+
+    if GLOBAL_MODEL is None:
+        raise RuntimeError("Model nie jest zainicjalizowany")
+
+    torch.save({
+        "epoch": GLOBAL_EPOCH,
+        "model_state_dict": GLOBAL_MODEL.state_dict(),
+        "optimizer_state_dict": GLOBAL_OPTIMIZER.state_dict(),
+        "best_acc": GLOBAL_BEST_ACC
+    }, path)
+
+    print(f"Model zapisany do: {path}")
+
+    return path
 
 
+def init_or_load_model(num_classes, model_path=None):
+    global GLOBAL_MODEL, GLOBAL_OPTIMIZER, GLOBAL_CRITERION
+    global GLOBAL_DEVICE, GLOBAL_EPOCH, GLOBAL_BEST_ACC
 
-def train_model(epochs: int = 10, batch_size: int = 32):
-    """Trenuje model na datasecie Chars74K."""
-    print("\n" + "=" * 60)
-    print("TRENOWANIE MODELU")
-    print("=" * 60)
+    GLOBAL_DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    # Pobierz dataset jeśli brak
+    GLOBAL_MODEL = SimpleCNN(num_classes=num_classes).to(GLOBAL_DEVICE)
+    GLOBAL_CRITERION = nn.CrossEntropyLoss()
+    GLOBAL_OPTIMIZER = torch.optim.Adam(GLOBAL_MODEL.parameters(), lr=0.001)
+
+    if model_path and os.path.exists(model_path):
+        print(f"Wczytywanie modelu z: {model_path}")
+        checkpoint = torch.load(model_path, map_location=GLOBAL_DEVICE)
+
+        if "model_state_dict" in checkpoint:
+            GLOBAL_MODEL.load_state_dict(checkpoint["model_state_dict"])
+            GLOBAL_OPTIMIZER.load_state_dict(checkpoint["optimizer_state_dict"])
+            GLOBAL_EPOCH = checkpoint.get("epoch", 0)
+            GLOBAL_BEST_ACC = checkpoint.get("best_acc", 0.0)
+        else:
+            GLOBAL_MODEL.load_state_dict(checkpoint)
+
+
+def train_model(epochs=10, batch_size=32, model_path=None):
+    global GLOBAL_MODEL, GLOBAL_OPTIMIZER, GLOBAL_CRITERION
+    global GLOBAL_DEVICE, GLOBAL_EPOCH, GLOBAL_BEST_ACC
+
     download_dataset()
 
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f"Urządzenie: {device}")
-
-    # Transformacje
     train_transform = get_train_transform()
-
-    # Dataset
     dataset = datasets.ImageFolder(root=EXTRACTED_DIR, transform=train_transform)
 
-    # Podział na train/val (80/20)
     train_size = int(0.8 * len(dataset))
     val_size = len(dataset) - train_size
     train_dataset, val_dataset = torch.utils.data.random_split(dataset, [train_size, val_size])
@@ -80,55 +141,44 @@ def train_model(epochs: int = 10, batch_size: int = 32):
     train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
     val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
 
-    print(f"Zbiór treningowy: {len(train_dataset)} obrazów")
-    print(f"Zbiór walidacyjny: {len(val_dataset)} obrazów")
-    print(f"Liczba klas: {len(dataset.classes)}")
+    # init albo load
+    if GLOBAL_MODEL is None:
+        init_or_load_model(len(dataset.classes), model_path)
 
-    # Model
-    model = SimpleCNN(num_classes=len(dataset.classes)).to(device)
-    criterion = nn.CrossEntropyLoss()
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
-
-    # Trenowanie
-    best_acc = 0.0
-    for epoch in range(epochs):
-        model.train()
+    for epoch in range(GLOBAL_EPOCH, GLOBAL_EPOCH + epochs):
+        GLOBAL_MODEL.train()
         running_loss = 0.0
 
-        for i, (images, labels) in enumerate(train_loader):
-            images, labels = images.to(device), labels.to(device)
+        for images, labels in train_loader:
+            images, labels = images.to(GLOBAL_DEVICE), labels.to(GLOBAL_DEVICE)
 
-            optimizer.zero_grad()
-            outputs = model(images)
-            loss = criterion(outputs, labels)
+            GLOBAL_OPTIMIZER.zero_grad()
+            outputs = GLOBAL_MODEL(images)
+            loss = GLOBAL_CRITERION(outputs, labels)
             loss.backward()
-            optimizer.step()
+            GLOBAL_OPTIMIZER.step()
 
             running_loss += loss.item()
 
-            if (i + 1) % 50 == 0:
-                print(f"Epoch [{epoch+1}/{epochs}], Step [{i+1}/{len(train_loader)}], Loss: {loss.item():.4f}")
+        # walidacja
+        GLOBAL_MODEL.eval()
+        correct, total = 0, 0
 
-        # Walidacja
-        model.eval()
-        correct = 0
-        total = 0
         with torch.no_grad():
             for images, labels in val_loader:
-                images, labels = images.to(device), labels.to(device)
-                outputs = model(images)
+                images, labels = images.to(GLOBAL_DEVICE), labels.to(GLOBAL_DEVICE)
+                outputs = GLOBAL_MODEL(images)
                 _, predicted = torch.max(outputs, 1)
+
                 total += labels.size(0)
                 correct += (predicted == labels).sum().item()
 
         val_acc = 100 * correct / total
-        print(f"Epoch [{epoch+1}/{epochs}] - Loss: {running_loss/len(train_loader):.4f}, Val Acc: {val_acc:.2f}%")
+        print(f"Epoch [{epoch+1}] - Val Acc: {val_acc:.2f}%")
 
-        if val_acc > best_acc:
-            best_acc = val_acc
-            torch.save(model.state_dict(), MODEL_PATH)
-            print(f"Zapisano najlepszy model (acc: {best_acc:.2f}%)")
+        GLOBAL_EPOCH = epoch + 1
 
-    print(f"\nTrenowanie zakończone! Najlepsza dokładność: {best_acc:.2f}%")
-    print(f"Model zapisany do: {MODEL_PATH}")
+        if val_acc > GLOBAL_BEST_ACC:
+            GLOBAL_BEST_ACC = val_acc
+            save_model(MODEL_PATH)
 

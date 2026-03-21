@@ -68,7 +68,7 @@ def handler(signum, frame):
         choice = input("Wybierz opcję: ")
 
         if choice == "1":
-            print("Wznawianie (obecnie nie działa)")
+            print("Wznawianie")
             train_model(10, 32, CHECKPOINT_PATH)
         elif choice == "2":
             print("Zapisywanie najlepszego (obecnie nie do końca działa, zapisuje ostatni stan)")

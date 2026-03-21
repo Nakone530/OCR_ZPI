@@ -144,12 +144,13 @@ def train_model(epochs=10, batch_size=32, model_path=None):
     # init albo load
     if GLOBAL_MODEL is None:
         init_or_load_model(len(dataset.classes), model_path)
-
+        
+    total_steps = len(train_loader)
     for epoch in range(GLOBAL_EPOCH, GLOBAL_EPOCH + epochs):
         GLOBAL_MODEL.train()
         running_loss = 0.0
 
-        for images, labels in train_loader:
+        for step, (images, labels) in enumerate(train_loader, start=1):
             images, labels = images.to(GLOBAL_DEVICE), labels.to(GLOBAL_DEVICE)
 
             GLOBAL_OPTIMIZER.zero_grad()
@@ -160,6 +161,10 @@ def train_model(epochs=10, batch_size=32, model_path=None):
 
             running_loss += loss.item()
 
+            # 🔹 log co 50 kroków
+            if step % 50 == 0 or step == total_steps:
+                print(f"Epoch [{epoch+1}] Step [{step}/{total_steps}] Loss: {loss.item():.4f}")
+            
         # walidacja
         GLOBAL_MODEL.eval()
         correct, total = 0, 0

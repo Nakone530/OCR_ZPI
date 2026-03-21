@@ -21,6 +21,7 @@ from PIL import Image
 from .config import CHARS, MODEL_PATH
 from .model import SimpleCNN
 from .utils import get_transform, load_and_optionally_denoise, preprocess_letter, save_image_to_temp_folder
+from .display import visualize_prediction
 
 # ── Ładowanie modelu ───────────────────────────────────────────────────────────
 
@@ -50,34 +51,6 @@ def load_model(model_path: str = MODEL_PATH, device: torch.device = None) -> nn.
     return model
 
 
-# ── Predykcja pojedynczej litery ───────────────────────────────────────────────
-
-def predict_image(
-    image_path: str,
-    model: nn.Module,
-    device: torch.device,
-    args,
-) -> tuple[str, float, torch.Tensor]:
-    """
-    Rozpoznaje znak na zdjęciu.
-
-    Returns:
-        (predicted_char, confidence_percent, all_probs_tensor)
-    """
-    image = load_and_optionally_denoise(image_path, args, mode="L")
-
-    preprocess_letter(image)
-
-    transform = get_transform()
-    tensor = transform(image).unsqueeze(0).to(device)
-
-    with torch.no_grad():
-        probs = torch.softmax(model(tensor), dim=1)
-        confidence, predicted = torch.max(probs, 1)
-
-    return CHARS[predicted.item()], confidence.item() * 100, probs[0]
-
-
 # ── Segmentacja pomocnicza ─────────────────────────────────────────────────────
 
 def _find_bounds(projection: np.ndarray) -> list[tuple[int, int]]:
@@ -96,14 +69,51 @@ def _find_bounds(projection: np.ndarray) -> list[tuple[int, int]]:
     return bounds
 
 
-def _classify_letter(letter_gray: np.ndarray, model: nn.Module, device: torch.device) -> str:
+def _classify_letter(letter_gray: np.ndarray, model: nn.Module, device: torch.device, more) -> str:
     """Klasyfikuje wycięty fragment (tablica grayscale) jako znak."""
-    letter_img = preprocess_letter(letter_gray)
+##    letter_img = preprocess_letter(letter_gray)
     pil = Image.fromarray(letter_gray).resize((28, 28)).convert("L")
     tensor = get_transform()(pil).unsqueeze(0).to(device)
     probs = torch.softmax(model(tensor), dim=1)
-    _, predicted = torch.max(probs, 1)
-    return CHARS[predicted.item()]
+    confidence, predicted = torch.max(probs, 1)
+    if(more):
+        return CHARS[predicted.item()], confidence.item() * 100, probs[0]
+    else:
+        return CHARS[predicted.item()]
+
+
+# ── Predykcja pojedynczej litery ───────────────────────────────────────────────
+
+def predict_image(
+    image_path: str,
+    model: nn.Module,
+    device: torch.device,
+    args,
+) -> tuple[str, float, torch.Tensor]:
+    """
+    Rozpoznaje znak na zdjęciu.
+
+    Returns:
+        (predicted_char, confidence_percent, all_probs_tensor)
+    """
+    image = load_and_optionally_denoise(image_path, args, mode="L")
+    img_array = np.array(image)
+    
+    model.eval()
+    with torch.no_grad():
+
+        rows = np.where(np.sum(img_array < 128, axis=1) > 0)[0]
+        img_array = img_array[rows[0]:rows[-1] + 1, :]
+
+        collums = np.where(np.sum(img_array < 128, axis=1) > 0)[0]
+        img_array = img_array[collums[0]:collums[-1] + 1, :]
+        
+        img_array = preprocess_letter(img_array)
+
+        letter = _classify_letter(img_array, model, device, 1)
+
+    return letter
+
 
 
 # ── Predykcja wyrazu (jedna linia) ────────────────────────────────────────────
@@ -134,11 +144,12 @@ def predict_word(
             rows = np.where(np.sum(letter_img < 128, axis=1) > 0)[0]
             if len(rows) == 0:
                 continue
+            
+            letter_img = letter_img[rows[0]:rows[-1] + 1, :]
 
+            letter_img = preprocess_letter(letter_img)
 
-            preprocess_letter(letter_img)
-
-            word += _classify_letter(letter_img, model, device)
+            word += _classify_letter(letter_img, model, device, 0)
 
     return word
 
@@ -181,18 +192,13 @@ def predict_segments(
                 rows = np.where(np.sum(letter_img < 128, axis=1) > 0)[0]
                 if len(rows) == 0:
                     continue
+
+
                 letter_img = letter_img[rows[0]:rows[-1] + 1, :]
 
-                #save_image_to_temp_folder(letter_img, "pre")
                 letter_img = preprocess_letter(letter_img)
 
-
-                #plt.imshow(letter_img, cmap='gray')
-                #plt.axis('off')
-                #plt.show()
-
-                #save_image_to_temp_folder(letter_img, "post")
-                line_text += _classify_letter(letter_img, model, device)
+                line_text += _classify_letter(letter_img, model, device, 0)
 
                 if idx < len(letters_bounds) - 1 and avg_width > 0:
                     gap = letters_bounds[idx + 1][0] - end

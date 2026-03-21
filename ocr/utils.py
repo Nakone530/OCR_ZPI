@@ -21,7 +21,7 @@ from typing import Any
 from datetime import date
 
 from pathlib import Path
-
+import matplotlib.pyplot as plt
 from .config import IMAGE_SIZE, MEAN, STD
 
 
@@ -30,6 +30,7 @@ from .config import IMAGE_SIZE, MEAN, STD
 def get_transform() -> transforms.Compose:
     """Transformacja do inference (bez augmentacji)."""
     return transforms.Compose([
+        transforms.Grayscale(num_output_channels=1),
         transforms.Resize((IMAGE_SIZE, IMAGE_SIZE)),
         transforms.ToTensor(),
         transforms.Normalize((0.5,), (0.5,)),
@@ -122,13 +123,14 @@ def denoise_pil(
 
 # ── Ładowanie obrazu ───────────────────────────────────────────────────────────
 
-def load_image(image_path: str, mode: str = "RGB") -> Image.Image:
+def load_image(image_path: str, mode: str = "L") -> Image.Image:
     """Ładuje obraz (PNG/JPG/PDF) i konwertuje do podanego trybu."""
     suffix = Path(image_path).suffix.lower()
     if suffix == ".pdf":
         img = convert_from_path(image_path, dpi=300)[0]
     else:
         img = Image.open(image_path)
+
     return img.convert(mode)
 
 
@@ -138,11 +140,10 @@ def load_and_optionally_denoise(image_path: str, args, mode: str = "L") -> Image
     mode: 'RGB' (klasyfikacja) lub 'L' (segmentacja).
     """
     suffix = Path(image_path).suffix.lower()
-
     if suffix == ".pdf":
-        return load_image(image_path, mode)
-
-    img = Image.open(image_path)
+        img = convert_from_path(image_path, dpi=300)[0]
+    else:
+        img = Image.open(image_path)
 
     if getattr(args, "denoise", False):
         img_rgb = img.convert("L")

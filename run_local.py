@@ -5,7 +5,7 @@ Logika została przeniesiona do modułów w folderze ocr/ i punktu wejścia main
 
 """
 
-from main import main
+from ocr.main import main
 
 if __name__ == "__main__":
     main()

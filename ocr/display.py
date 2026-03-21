@@ -30,7 +30,7 @@ def visualize_prediction(
     image = load_and_optionally_denoise(image_path, args, mode="L")
 
     plt.figure(figsize=(8, 6))
-    plt.imshow(image)
+    plt.imshow(image, cmap='gray')
     plt.title(
         f"Rozpoznany znak: '{predicted_char}'\nPewność: {confidence:.1f}%",
         fontsize=16,

@@ -161,7 +161,7 @@ def train_model(epochs=10, batch_size=32, model_path=None):
 
             running_loss += loss.item()
 
-            # 🔹 log co 50 kroków
+            # log co 50 kroków
             if step % 50 == 0 or step == total_steps:
                 print(f"Epoch [{epoch+1}/{epochs}] Step [{step}/{total_steps}] Loss: {loss.item():.4f}")
             

@@ -163,7 +163,7 @@ def train_model(epochs=10, batch_size=32, model_path=None):
 
             # 🔹 log co 50 kroków
             if step % 50 == 0 or step == total_steps:
-                print(f"Epoch [{epoch+1}] Step [{step}/{total_steps}] Loss: {loss.item():.4f}")
+                print(f"Epoch [{epoch+1}/{epochs}] Step [{step}/{total_steps}] Loss: {loss.item():.4f}")
             
         # walidacja
         GLOBAL_MODEL.eval()
@@ -179,7 +179,7 @@ def train_model(epochs=10, batch_size=32, model_path=None):
                 correct += (predicted == labels).sum().item()
 
         val_acc = 100 * correct / total
-        print(f"Epoch [{epoch+1}] - Val Acc: {val_acc:.2f}%")
+        print(f"Epoch [{epoch+1}/{epochs}] - Val Acc: {val_acc:.2f}%")
 
         GLOBAL_EPOCH = epoch + 1
 

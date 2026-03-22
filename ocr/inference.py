@@ -30,7 +30,9 @@ print(matplotlib.get_backend())
 def load_model(model_path: str = MODEL_PATH, device: torch.device = None) -> nn.Module:
     """
     Wczytuje wytrenowany model SimpleCNN.
-    Jeśli plik nie istnieje, model działa na losowych wagach.
+    Obsługuje:
+    - czysty state_dict (stary format)
+    - checkpoint (nowy format)
     """
     if device is None:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -39,7 +41,17 @@ def load_model(model_path: str = MODEL_PATH, device: torch.device = None) -> nn.
 
     if os.path.exists(model_path):
         print(f"Wczytywanie modelu z {model_path}...")
-        model.load_state_dict(torch.load(model_path, map_location=device))
+
+        checkpoint = torch.load(model_path, map_location=device)
+
+        #obsługa nowego i starego formatu modelu
+        if isinstance(checkpoint, dict) and "model_state_dict" in checkpoint:
+            model.load_state_dict(checkpoint["model_state_dict"])
+            print("Wczytano checkpoint (nowy format)")
+        else:
+            model.load_state_dict(checkpoint)
+            print("Wczytano state_dict (stary format)")
+
         print("Model wczytany!")
     else:
         print(f"UWAGA: Nie znaleziono modelu {model_path}")

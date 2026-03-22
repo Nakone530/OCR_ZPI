@@ -18,7 +18,7 @@ import matplotlib.pyplot as plt
 
 
 from PIL import Image
-from .config import CHARS, MODEL_PATH
+from .config import CHARS, MODEL_PATH, NUM_CLASSES
 from .model import SimpleCNN
 from .utils import get_transform, load_and_optionally_denoise, preprocess_letter, save_image_to_temp_folder
 from .display import visualize_prediction
@@ -33,30 +33,37 @@ def load_model(model_path: str = MODEL_PATH, device: torch.device = None) -> nn.
     Obsługuje:
     - czysty state_dict (stary format)
     - checkpoint (nowy format)
+    Automatycznie wykrywa liczbę klas z checkpointa.
     """
     if device is None:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-    model = SimpleCNN(num_classes=46)
 
     if os.path.exists(model_path):
         print(f"Wczytywanie modelu z {model_path}...")
 
         checkpoint = torch.load(model_path, map_location=device)
 
-        #obsługa nowego i starego formatu modelu
+        # Pobierz state_dict
         if isinstance(checkpoint, dict) and "model_state_dict" in checkpoint:
-            model.load_state_dict(checkpoint["model_state_dict"])
-            print("Wczytano checkpoint (nowy format)")
+            state_dict = checkpoint["model_state_dict"]
+            format_info = "checkpoint (nowy format)"
         else:
-            model.load_state_dict(checkpoint)
-            print("Wczytano state_dict (stary format)")
+            state_dict = checkpoint
+            format_info = "state_dict (stary format)"
 
+        # Automatycznie wykryj liczbę klas z zapisanego modelu
+        num_classes_from_model = state_dict["classifier.4.weight"].shape[0]
+        print(f"Wykryto {num_classes_from_model} klas w zapisanym modelu")
+
+        model = SimpleCNN(num_classes=num_classes_from_model)
+        model.load_state_dict(state_dict)
+        print(f"Wczytano {format_info}")
         print("Model wczytany!")
     else:
         print(f"UWAGA: Nie znaleziono modelu {model_path}")
         print("Model nie jest wytrenowany - wyniki będą losowe!")
         print("Najpierw uruchom: python run_local.py --train")
+        model = SimpleCNN(num_classes=NUM_CLASSES)
 
     model.to(device)
     model.eval()

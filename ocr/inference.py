@@ -94,6 +94,15 @@ def _classify_letter(letter_gray: np.ndarray, model: nn.Module, device: torch.de
         return CHARS[predicted.item()]
 
 
+def _mean_per_class(class_conf_samples: dict[str, list[float]]) -> dict[str, float]:
+    """Liczy średni poziom pewności dla każdej klasy (litery)."""
+    class_avg: dict[str, float] = {}
+    for cls, samples in class_conf_samples.items():
+        if samples:
+            class_avg[cls] = float(np.mean(samples))
+    return class_avg
+
+
 # ── Predykcja pojedynczej litery ───────────────────────────────────────────────
 
 def predict_image(
@@ -135,7 +144,7 @@ def predict_word(
     model: nn.Module,
     device: torch.device,
     args,
-) -> str:
+) -> tuple[str, float, dict[str, float]]:
     """
     Segmentuje litery w jednej linii metodą projekcji pionowej
     i rozpoznaje każdą z nich.
@@ -148,6 +157,8 @@ def predict_word(
     letters_bounds = _find_bounds(vertical_sum)
 
     word = ""
+    letter_confidences: list[float] = []
+    class_conf_samples: dict[str, list[float]] = {}
     model.eval()
     with torch.no_grad():
         for start, end in letters_bounds:
@@ -161,9 +172,14 @@ def predict_word(
 
             letter_img = preprocess_letter(letter_img)
 
-            word += _classify_letter(letter_img, model, device, 0)
+            predicted_char, confidence, _ = _classify_letter(letter_img, model, device, 1)
+            word += predicted_char
+            letter_confidences.append(confidence)
+            class_conf_samples.setdefault(predicted_char, []).append(confidence)
 
-    return word
+    avg_word_confidence = float(np.mean(letter_confidences)) if letter_confidences else 0.0
+    class_confidence = _mean_per_class(class_conf_samples)
+    return word, avg_word_confidence, class_confidence
 
 
 # ── Predykcja wielu linii tekstu ───────────────────────────────────────────────
@@ -173,19 +189,26 @@ def predict_segments(
     model: nn.Module,
     device: torch.device,
     args,
-) -> str:
+) -> tuple[str, list[tuple[str, float]], dict[str, float]]:
     """
     Segmentuje linie (projekcja pozioma), a wewnątrz każdej linii litery
     (projekcja pionowa). Wykrywa spacje między wyrazami na podstawie przerw.
     """
     image = load_and_optionally_denoise(image_path, args, mode="L")
-
     img_array = np.array(image)
     binary = img_array < 128
 
     rows_bounds = _find_bounds(np.sum(binary, axis=1))
 
     text = ""
+    words_with_confidence: list[tuple[str, float]] = []
+    class_conf_samples: dict[str, list[float]] = {}
+
+    def _flush_word(word_chars: list[str], word_confs: list[float]) -> None:
+        if not word_chars or not word_confs:
+            return
+        words_with_confidence.append(("".join(word_chars), float(np.mean(word_confs))))
+
     model.eval()
     with torch.no_grad():
         for row_start, row_end in rows_bounds:
@@ -198,6 +221,8 @@ def predict_segments(
             avg_width = float(np.mean(widths)) if widths else 0.0
 
             line_text = ""
+            current_word_chars: list[str] = []
+            current_word_confs: list[float] = []
             for idx, (start, end) in enumerate(letters_bounds):
                 letter_img = line_img[:, start:end]
 
@@ -205,18 +230,25 @@ def predict_segments(
                 if len(rows) == 0:
                     continue
 
-
                 letter_img = letter_img[rows[0]:rows[-1] + 1, :]
-
                 letter_img = preprocess_letter(letter_img)
 
-                line_text += _classify_letter(letter_img, model, device, 0)
+                predicted_char, confidence, _ = _classify_letter(letter_img, model, device, 1)
+                line_text += predicted_char
+                current_word_chars.append(predicted_char)
+                current_word_confs.append(confidence)
+                class_conf_samples.setdefault(predicted_char, []).append(confidence)
 
                 if idx < len(letters_bounds) - 1 and avg_width > 0:
                     gap = letters_bounds[idx + 1][0] - end
                     if gap > 1.5 * avg_width:
+                        _flush_word(current_word_chars, current_word_confs)
+                        current_word_chars = []
+                        current_word_confs = []
                         line_text += " "
 
+            _flush_word(current_word_chars, current_word_confs)
             text += line_text + "\n"
 
-    return text
+    class_confidence = _mean_per_class(class_conf_samples)
+    return text, words_with_confidence, class_confidence

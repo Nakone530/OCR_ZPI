@@ -119,8 +119,8 @@ def main() -> None:
         save_image_to_today_folder(args.word)
 
         model = load_model(MODEL_PATH, device)
-        word = predict_word(args.word, model, device, args)
-        print_word_result(word)
+        word, avg_word_confidence, class_confidence = predict_word(args.word, model, device, args)
+        print_word_result(word, avg_word_confidence, class_confidence)
 
     # -- Tekst wieloliniowy --
     elif args.lines:
@@ -129,8 +129,8 @@ def main() -> None:
         save_image_to_today_folder(args.lines)
 
         model = load_model(MODEL_PATH, device)
-        text = predict_segments(args.lines, model, device, args)
-        print_text_result(text)
+        text, words_with_confidence, class_confidence = predict_segments(args.lines, model, device, args)
+        print_text_result(text, words_with_confidence, class_confidence)
 
     # -- Wiele zdjęć --
     elif args.multi:

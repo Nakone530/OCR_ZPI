@@ -60,14 +60,38 @@ def print_top5(probs: torch.Tensor) -> None:
         print(f"  {rank}. '{char}' – {prob.item() * 100:.1f}%")
 
 
-def print_word_result(word: str) -> None:
-    """Drukuje rozpoznany wyraz."""
+def print_word_result(
+    word: str,
+    avg_word_confidence: float,
+    class_confidence: dict[str, float],
+) -> None:
+    """Drukuje rozpoznany wyraz i statystyki pewności."""
     print(f"\nRozpoznany wyraz: '{word}'")
+    print(f"Średnia pewność liter (słowo): {avg_word_confidence:.1f}%")
+
+    if class_confidence:
+        print("Średni poziom pewności na klasę:")
+        for cls in sorted(class_confidence):
+            print(f"  '{cls}': {class_confidence[cls]:.1f}%")
 
 
-def print_text_result(text: str) -> None:
-    """Drukuje rozpoznany tekst wieloliniowy."""
+def print_text_result(
+    text: str,
+    words_with_confidence: list[tuple[str, float]],
+    class_confidence: dict[str, float],
+) -> None:
+    """Drukuje rozpoznany tekst oraz metryki pewności dla słów i klas."""
     print(f"\nRozpoznany tekst:\n{text}")
+
+    if words_with_confidence:
+        print("Średnia pewność liter na słowo:")
+        for idx, (word, confidence) in enumerate(words_with_confidence, start=1):
+            print(f"  {idx}. '{word}': {confidence:.1f}%")
+
+    if class_confidence:
+        print("Średni poziom pewności na klasę:")
+        for cls in sorted(class_confidence):
+            print(f"  '{cls}': {class_confidence[cls]:.1f}%")
 
 
 def print_multi_result(image_path: str, predicted_char: str, confidence: float) -> None:

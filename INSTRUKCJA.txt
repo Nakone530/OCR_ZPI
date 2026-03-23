@@ -118,6 +118,10 @@ WSZYSTKIE OPCJE
     --word, -w    PLIK     Rozpoznaj wyraz (jedna linia tekstu)
     --lines, -l   PLIK     Rozpoznaj tekst wieloliniowy
     --multi, -m   PLIK...  Rozpoznaj wiele zdjęć pojedynczych liter
+    --image litera.png -f json Zapis do folderu wynik/ jako JSON
+    --word wyraz.png -f txt Zapis do folderu wynik/ jako TXT
+    --image litera.png -o moj_wynik.json Własna ścieżka pliku
+    --word wyraz.png -f json -q Cichy tryb (tylko wynik, bez komunikatów)
 
     --denoise              Włącz odszumianie wejścia
     --denoise-method       Metoda: nlm-color | median | bilateral | gaussian

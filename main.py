@@ -21,7 +21,7 @@ from ocr.config import MODEL_PATH
 from ocr.display import visualize_prediction
 from ocr.inference import load_model, predict_image, predict_segments, predict_word
 from ocr.output import OCRResult, create_output_handler
-from ocr.trainer import download_dataset, train_model
+from ocr.trainer import download_dataset, train_model, infinite_train
 from ocr.utils import save_image_to_today_folder
 
 
@@ -37,7 +37,9 @@ def build_parser() -> argparse.ArgumentParser:
     mode.add_argument("--prepare", "-p", action="store_true",
                       help="Pobierz i przygotuj dane")
     mode.add_argument("--train", "-t", action="store_true",
-                      help="Trenuj model")
+                      help="Trenuj model (określona liczba epok)")
+    mode.add_argument("--infinite", action="store_true",
+                      help="Nieskończony trening do przerwania (Ctrl+C)")
     mode.add_argument("--image", "-i", type=str, metavar="PLIK",
                       help="Rozpoznaj pojedynczą literę")
     mode.add_argument("--word", "-w", type=str, metavar="PLIK",
@@ -50,6 +52,12 @@ def build_parser() -> argparse.ArgumentParser:
     # Parametry trenowania
     parser.add_argument("--epochs", "-e", type=int, default=10,
                         help="Liczba epok (domyślnie: 10)")
+    parser.add_argument("--batch-size", "-b", type=int, default=32,
+                        help="Rozmiar batcha (domyślnie: 32)")
+    parser.add_argument("--checkpoint-interval", type=int, default=5,
+                        help="Co ile epok zapisywać checkpoint w trybie infinite (domyślnie: 5)")
+    parser.add_argument("--resume", "-r", type=str, metavar="PLIK",
+                        help="Wznów trening z checkpointu")
 
     # Parametry odszumiania
     parser.add_argument("--denoise", action="store_true",
@@ -108,7 +116,17 @@ def main() -> None:
 
     # ── Trening ──
     elif args.train:
-        train_model(epochs=args.epochs)
+        train_model(epochs=args.epochs, batch_size=args.batch_size, model_path=args.resume)
+
+    # ── Nieskończony trening ──
+    elif args.infinite:
+        info("\nUruchamianie nieskończonego treningu...")
+        info("Naciśnij Ctrl+C aby wstrzymać i wyświetlić menu opcji.\n")
+        infinite_train(
+            batch_size=args.batch_size,
+            model_path=args.resume,
+            checkpoint_interval=args.checkpoint_interval
+        )
 
     # ── Pojedyncza litera ──
     elif args.image:
@@ -209,6 +227,16 @@ def main() -> None:
         print("=" * 60)
         print("  python main.py --prepare")
         print("  python main.py --train --epochs 15")
+        print("  python main.py --train --epochs 20 --batch-size 64")
+        print("  python main.py --train --resume checkpoint.pth")
+        print("")
+        print("NIESKOŃCZONY TRENING:")
+        print("  python main.py --infinite")
+        print("  python main.py --infinite --batch-size 64")
+        print("  python main.py --infinite --checkpoint-interval 10")
+        print("  python main.py --infinite --resume checkpoint.pth")
+        print("")
+        print("ROZPOZNAWANIE:")
         print("  python main.py --image litera.png")
         print("  python main.py --image litera.png --denoise --denoise-method nlm-color")
         print("  python main.py --word wyraz.png")

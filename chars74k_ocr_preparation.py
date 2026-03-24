@@ -31,7 +31,30 @@ STD = [0.229, 0.224, 0.225]   # ImageNet std
 # ============================================================================
 
 def download_dataset(url: str, save_path: str) -> None:
-    """Pobiera dataset z podanego URL, jeśli nie istnieje lokalnie."""
+    """
+    Pobiera dataset z podanego URL z paskiem postępu.
+    
+    Funkcja sprawdza czy plik już istnieje i pomija pobieranie
+    jeśli dataset został wcześniej pobrany.
+    
+    Argumenty:
+        url (str): URL do pliku datasetu do pobrania.
+        save_path (str): Lokalna ścieżka gdzie zapisać pobrany plik.
+    
+    Zwraca:
+        None
+    
+    Efekty uboczne:
+        - Tworzy katalogi nadrzędne jeśli nie istnieją
+        - Pobiera plik z internetu
+        - Wyświetla pasek postępu podczas pobierania
+    
+    Przykład:
+        >>> download_dataset("http://example.com/data.tgz", "./data/data.tgz")
+        Pobieranie datasetu z http://example.com/data.tgz...
+        Postęp: 100.0%
+        Pobieranie zakończone!
+    """
     if os.path.exists(save_path):
         print(f"Plik {save_path} już istnieje. Pomijam pobieranie.")
         return
@@ -50,7 +73,28 @@ def download_dataset(url: str, save_path: str) -> None:
 
 
 def extract_archive(archive_path: str, extract_to: str) -> None:
-    """Rozpakowuje archiwum .tgz do wskazanego katalogu."""
+    """
+    Rozpakowuje archiwum .tgz do wskazanego katalogu.
+    
+    Funkcja sprawdza czy archiwum zostało już rozpakowane
+    i pomija ekstrakcję jeśli dane istnieją.
+    
+    Argumenty:
+        archive_path (str): Ścieżka do archiwum .tgz do rozpakowania.
+        extract_to (str): Katalog docelowy dla rozpakowanych plików.
+    
+    Zwraca:
+        None
+    
+    Efekty uboczne:
+        - Rozpakowuje archiwum tar.gz
+        - Wyświetla komunikaty o postępie
+    
+    Przykład:
+        >>> extract_archive("./data/EnglishFnt.tgz", "./data")
+        Rozpakowywanie ./data/EnglishFnt.tgz...
+        Rozpakowywanie zakończone!
+    """
     # Sprawdź czy już rozpakowano
     if os.path.exists(os.path.join(extract_to, "English", "Fnt")):
         print("Archiwum już rozpakowane. Pomijam ekstrakcję.")
@@ -63,7 +107,31 @@ def extract_archive(archive_path: str, extract_to: str) -> None:
 
 
 def get_transforms() -> dict:
-    """Zwraca transformacje dla zbiorów treningowego i walidacyjnego."""
+    """
+    Zwraca słownik transformacji dla zbiorów treningowego i walidacyjnego.
+    
+    Transformacje treningowe zawierają augmentację danych (random flip),
+    podczas gdy transformacje walidacyjne są minimalne.
+    
+    Argumenty:
+        Brak argumentów.
+    
+    Zwraca:
+        dict: Słownik z kluczami:
+            - 'train': transforms.Compose z augmentacją
+            - 'val': transforms.Compose bez augmentacji
+    
+    Uwaga:
+        Obie transformacje zawierają:
+        - Resize do IMAGE_SIZE x IMAGE_SIZE
+        - Konwersję do tensora
+        - Normalizację ImageNet (MEAN, STD)
+    
+    Przykład:
+        >>> transforms_dict = get_transforms()
+        >>> train_tensor = transforms_dict['train'](pil_image)
+        >>> val_tensor = transforms_dict['val'](pil_image)
+    """
 
     # Transformacje dla zbioru treningowego (z data augmentation)
     train_transform = transforms.Compose([
@@ -87,7 +155,29 @@ def get_transforms() -> dict:
 
 
 def show_sample_image(dataset_path: str) -> Image.Image:
-    """Wyświetla przykładowy obraz przed przetwarzaniem."""
+    """
+    Wyświetla przykładowy obraz z datasetu przed przetwarzaniem.
+    
+    Funkcja przeszukuje rekurencyjnie katalog datasetu, znajduje
+    pierwszy obraz i wyświetla go z informacjami o rozmiarze.
+    
+    Argumenty:
+        dataset_path (str): Ścieżka do katalogu z rozpakowanym datasetem.
+    
+    Zwraca:
+        Image.Image: Załadowany obraz PIL w trybie RGB.
+    
+    Wyjątki:
+        FileNotFoundError: Gdy nie znaleziono żadnych obrazów.
+    
+    Efekty uboczne:
+        Wyświetla okno matplotlib z podglądem obrazu.
+    
+    Przykład:
+        >>> img = show_sample_image("./data/English/Fnt")
+        >>> print(img.size)
+        (128, 128)
+    """
     # Znajdź pierwszy dostępny obraz
     for root, dirs, files in os.walk(dataset_path):
         for file in files:
@@ -110,18 +200,75 @@ def show_sample_image(dataset_path: str) -> Image.Image:
 
 
 def process_image_to_tensor(image: Image.Image, transform: transforms.Compose) -> torch.Tensor:
-    """Przetwarza obraz PIL do tensora przy użyciu podanych transformacji."""
+    """
+    Przetwarza obraz PIL do tensora PyTorch przy użyciu transformacji.
+    
+    Argumenty:
+        image (Image.Image): Obraz wejściowy w formacie PIL.
+        transform (transforms.Compose): Pipeline transformacji do zastosowania.
+    
+    Zwraca:
+        torch.Tensor: Przetworzony obraz jako tensor PyTorch.
+                      Kształt: (kanały, wysokość, szerokość).
+    
+    Przykład:
+        >>> tensor = process_image_to_tensor(pil_img, get_transforms()['train'])
+        >>> tensor.shape
+        torch.Size([3, 48, 48])
+    """
     tensor = transform(image)
     return tensor
 
 
 def add_batch_dimension(tensor: torch.Tensor) -> torch.Tensor:
-    """Dodaje wymiar batcha do tensora (unsqueeze na pozycji 0)."""
+    """
+    Dodaje wymiar batcha do tensora (unsqueeze na pozycji 0).
+    
+    Przekształca tensor z kształtu (C, H, W) do (1, C, H, W),
+    co jest wymagane przez modele PyTorch podczas inferencji.
+    
+    Argumenty:
+        tensor (torch.Tensor): Tensor obrazu o kształcie (kanały, wysokość, szerokość).
+    
+    Zwraca:
+        torch.Tensor: Tensor z dodanym wymiarem batcha.
+                      Kształt: (1, kanały, wysokość, szerokość).
+    
+    Przykład:
+        >>> tensor = torch.randn(3, 48, 48)
+        >>> batch_tensor = add_batch_dimension(tensor)
+        >>> batch_tensor.shape
+        torch.Size([1, 3, 48, 48])
+    """
     return tensor.unsqueeze(0)
 
 
 def visualize_tensor(tensor: torch.Tensor, title: str = "Przetworzony obraz") -> None:
-    """Wizualizuje tensor jako obraz (po denormalizacji)."""
+    """
+    Wizualizuje tensor jako obraz po denormalizacji.
+    
+    Funkcja odwraca normalizację ImageNet i wyświetla tensor
+    jako obraz RGB w oknie matplotlib.
+    
+    Argumenty:
+        tensor (torch.Tensor): Tensor obrazu do wizualizacji.
+                               Może mieć kształt (C, H, W) lub (1, C, H, W).
+        title (str, opcjonalnie): Tytuł wyświetlanego wykresu. 
+                               Domyślnie "Przetworzony obraz".
+    
+    Zwraca:
+        None
+    
+    Efekty uboczne:
+        Wyświetla okno matplotlib z obrazem.
+    
+    Uwaga:
+        Denormalizacja używa wartości MEAN i STD zdefiniowanych
+        w konfiguracji (ImageNet defaults).
+    
+    Przykład:
+        >>> visualize_tensor(batch_tensor, "Obraz po augmentacji")
+    """
     # Usuń wymiar batcha jeśli istnieje
     if tensor.dim() == 4:
         tensor = tensor.squeeze(0)

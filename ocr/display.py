@@ -26,7 +26,32 @@ def visualize_prediction(
     args,
     save_path: str = RESULT_IMAGE_PATH,
 ) -> None:
-    """Wyświetla obraz z tytułem zawierającym wynik i zapisuje go do pliku PNG."""
+    """
+    Wizualizuje wynik predykcji - wyświetla obraz z tytułem i zapisuje do pliku.
+    
+    Funkcja tworzy wykres matplotlib z obrazem wejściowym i tytułem
+    zawierającym rozpoznany znak oraz poziom pewności predykcji.
+    
+    Argumenty:
+        image_path (str): Ścieżka do obrazu źródłowego do wyświetlenia.
+        predicted_char (str): Rozpoznany znak (np. "A").
+        confidence (float): Pewność predykcji w procentach (0-100).
+        args: Obiekt argparse.Namespace z parametrami odszumiania.
+        save_path (str, opcjonalnie): Ścieżka do zapisania wizualizacji.
+                                   Domyślnie "prediction_result.png".
+    
+    Zwraca:
+        None
+    
+    Efekty uboczne:
+        - Wyświetla okno matplotlib z obrazem
+        - Zapisuje wizualizację do pliku PNG
+        - Wypisuje komunikat o zapisie na konsolę
+    
+    Przykład:
+        >>> visualize_prediction("letter.png", "B", 95.5, args)
+        Zapisano wizualizację do: prediction_result.png
+    """
     image = load_and_optionally_denoise(image_path, args, mode="L")
 
     plt.figure(figsize=(8, 6))
@@ -45,14 +70,54 @@ def visualize_prediction(
 # ── Wyniki w konsoli ───────────────────────────────────────────────────────────
 
 def print_single_result(predicted_char: str, confidence: float) -> None:
-    """Drukuje wynik predykcji pojedynczej litery."""
+    """
+    Drukuje sformatowany wynik predykcji pojedynczej litery w konsoli.
+    
+    Wyświetla rozpoznany znak i poziom pewności w ramce wizualnej.
+    
+    Argumenty:
+        predicted_char (str): Rozpoznany znak (np. "A").
+        confidence (float): Pewność predykcji w procentach (0-100).
+    
+    Zwraca:
+        None
+    
+    Przykład:
+        >>> print_single_result("B", 95.5)
+        
+        ========================================
+        WYNIK: 'B' (pewność: 95.5%)
+        ========================================
+    """
     print("\n" + "=" * 40)
     print(f"WYNIK: '{predicted_char}' (pewność: {confidence:.1f}%)")
     print("=" * 40)
 
 
 def print_top5(probs: torch.Tensor) -> None:
-    """Drukuje Top-5 predykcji z prawdopodobieństwami."""
+    """
+    Drukuje 5 najbardziej prawdopodobnych predykcji z prawdopodobieństwami.
+    
+    Funkcja sortuje prawdopodobieństwa i wyświetla 5 najwyższych
+    wraz z odpowiadającymi im znakami.
+    
+    Argumenty:
+        probs (torch.Tensor): Tensor prawdopodobieństw dla każdej klasy.
+                              Oczekiwany kształt: (NUM_CLASSES,) lub (1, NUM_CLASSES).
+    
+    Zwraca:
+        None
+    
+    Przykład:
+        >>> print_top5(probs_tensor)
+        
+        Top 5 predykcji:
+          1. 'A' – 85.3%
+          2. 'H' – 8.2%
+          3. 'R' – 3.1%
+          4. 'N' – 2.0%
+          5. 'M' – 1.4%
+    """
     top5_probs, top5_indices = torch.topk(probs, 5)
     print("\nTop 5 predykcji:")
     for rank, (prob, idx) in enumerate(zip(top5_probs, top5_indices), start=1):
@@ -66,6 +131,22 @@ def print_word_result(
     class_confidence: dict[str, float],
 ) -> None:
     """Drukuje rozpoznany wyraz i statystyki pewności."""
+
+def print_word_result(word: str) -> None:
+    """
+    Drukuje rozpoznany wyraz w konsoli.
+    
+    Argumenty:
+        word (str): Rozpoznany wyraz (ciąg znaków).
+    
+    Zwraca:
+        None
+    
+    Przykład:
+        >>> print_word_result("HELLO")
+        
+        Rozpoznany wyraz: 'HELLO'
+    """
     print(f"\nRozpoznany wyraz: '{word}'")
     print(f"Średnia pewność liter (słowo): {avg_word_confidence:.1f}%")
 
@@ -81,6 +162,25 @@ def print_text_result(
     class_confidence: dict[str, float],
 ) -> None:
     """Drukuje rozpoznany tekst oraz metryki pewności dla słów i klas."""
+
+def print_text_result(text: str) -> None:
+    """
+    Drukuje rozpoznany tekst wieloliniowy w konsoli.
+    
+    Argumenty:
+        text (str): Rozpoznany tekst (może zawierać wiele linii).
+    
+    Zwraca:
+        None
+    
+    Przykład:
+        >>> print_text_result("HELLO\\nWORLD")
+        
+        Rozpoznany tekst:
+        HELLO
+        WORLD
+    """
+
     print(f"\nRozpoznany tekst:\n{text}")
 
     if words_with_confidence:
@@ -95,5 +195,21 @@ def print_text_result(
 
 
 def print_multi_result(image_path: str, predicted_char: str, confidence: float) -> None:
-    """Drukuje wynik dla jednego obrazu w trybie wielu plików."""
+    """
+    Drukuje wynik dla jednego obrazu w trybie przetwarzania wielu plików.
+    
+    Format wyjścia jest kompaktowy - jedna linia na obraz.
+    
+    Argumenty:
+        image_path (str): Ścieżka do przetworzonego obrazu.
+        predicted_char (str): Rozpoznany znak.
+        confidence (float): Pewność predykcji w procentach (0-100).
+    
+    Zwraca:
+        None
+    
+    Przykład:
+        >>> print_multi_result("letter1.png", "A", 98.2)
+          letter1.png  →  'A' (98.2%)
+    """
     print(f"  {image_path}  →  '{predicted_char}' ({confidence:.1f}%)")

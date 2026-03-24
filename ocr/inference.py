@@ -29,11 +29,36 @@ print(matplotlib.get_backend())
 
 def load_model(model_path: str = MODEL_PATH, device: torch.device = None) -> nn.Module:
     """
-    Wczytuje wytrenowany model SimpleCNN.
-    Obsługuje:
-    - czysty state_dict (stary format)
-    - checkpoint (nowy format)
-    Automatycznie wykrywa liczbę klas z checkpointa.
+    Wczytuje wytrenowany model SimpleCNN z pliku.
+    
+    Funkcja obsługuje dwa formaty zapisu:
+      - Czysty state_dict (stary format)
+      - Checkpoint z metadanymi (nowy format)
+    
+    Automatycznie wykrywa liczbę klas z zapisanego modelu.
+    
+    Argumenty:
+        model_path (str, opcjonalnie): Ścieżka do pliku modelu (.pth).
+                                    Domyślnie MODEL_PATH z config.
+        device (torch.device, opcjonalnie): Urządzenie do załadowania modelu.
+                                         Domyślnie auto-wykrywane (CUDA/CPU).
+    
+    Zwraca:
+        nn.Module: Załadowany model SimpleCNN w trybie ewaluacji (eval mode).
+    
+    Efekty uboczne:
+        - Wyświetla komunikaty o ładowaniu na konsolę
+        - Ostrzeżenie jeśli model nie istnieje
+    
+    Przykład:
+        >>> model = load_model("./model_ocr.pth")
+        Wczytywanie modelu z ./model_ocr.pth...
+        Wykryto 26 klas w zapisanym modelu
+        Model wczytany!
+    
+    Uwaga:
+        Jeśli plik modelu nie istnieje, zwraca niezainicjowany model
+        z losowymi wagami (wyniki będą losowe).
     """
     if device is None:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -73,7 +98,26 @@ def load_model(model_path: str = MODEL_PATH, device: torch.device = None) -> nn.
 # ── Segmentacja pomocnicza ─────────────────────────────────────────────────────
 
 def _find_bounds(projection: np.ndarray) -> list[tuple[int, int]]:
-    """Wykrywa granice (start, end) niepustych segmentów w projekcji 1-D."""
+    """
+    Wykrywa granice niepustych segmentów w projekcji 1-D.
+    
+    Funkcja analizuje tablicę projekcji (suma pikseli wzdłuż osi)
+    i znajduje zakresy gdzie wartości są niezerowe.
+    
+    Argumenty:
+        projection (np.ndarray): Jednowymiarowa tablica z wartościami projekcji.
+                                 Typowo suma pikseli w wierszach lub kolumnach.
+    
+    Zwraca:
+        list[tuple[int, int]]: Lista krotek (start, end) określających
+                               granice segmentów. Indeksy są inkluzywne dla start
+                               i ekskluzywne dla end.
+    
+    Przykład:
+        >>> proj = np.array([0, 0, 5, 8, 6, 0, 0, 3, 4, 0])
+        >>> _find_bounds(proj)
+        [(2, 5), (7, 9)]
+    """
     bounds = []
     in_seg = False
     for i, val in enumerate(projection):
@@ -89,8 +133,28 @@ def _find_bounds(projection: np.ndarray) -> list[tuple[int, int]]:
 
 
 def _classify_letter(letter_gray: np.ndarray, model: nn.Module, device: torch.device, more) -> str:
-    """Klasyfikuje wycięty fragment (tablica grayscale) jako znak."""
-##    letter_img = preprocess_letter(letter_gray)
+    """
+    Klasyfikuje pojedynczy wycięty fragment obrazu jako znak.
+    
+    Funkcja przetwarza obraz litery, przepuszcza przez model CNN
+    i zwraca rozpoznany znak.
+    
+    Argumenty:
+        letter_gray (np.ndarray): Obraz litery w skali szarości.
+        model (nn.Module): Wytrenowany model CNN.
+        device (torch.device): Urządzenie (CPU/CUDA) do obliczeń.
+        more: Flaga określająca format zwracanych danych:
+              - Jeśli True (lub 1): zwraca (znak, pewność%, tensor prawdopodobieństw)
+              - Jeśli False (lub 0): zwraca tylko znak
+    
+    Zwraca:
+        str | tuple: Rozpoznany znak lub krotka (znak, pewność, probs) 
+                     w zależności od parametru 'more'.
+    
+    Przykład:
+        >>> char = _classify_letter(letter_img, model, device, False)
+        >>> char, conf, probs = _classify_letter(letter_img, model, device, True)
+    """
     pil = Image.fromarray(letter_gray).resize((28, 28)).convert("L")
     tensor = get_transform()(pil).unsqueeze(0).to(device)
     probs = torch.softmax(model(tensor), dim=1)
@@ -119,10 +183,26 @@ def predict_image(
     args,
 ) -> tuple[str, float, torch.Tensor]:
     """
-    Rozpoznaje znak na zdjęciu.
-
-    Returns:
-        (predicted_char, confidence_percent, all_probs_tensor)
+    Rozpoznaje pojedynczy znak na zdjęciu.
+    
+    Funkcja ładuje obraz, przycina do bounding boxa znaku,
+    przetwarza i klasyfikuje przy użyciu modelu CNN.
+    
+    Argumenty:
+        image_path (str): Ścieżka do obrazu ze znakiem.
+        model (nn.Module): Wytrenowany model CNN.
+        device (torch.device): Urządzenie (CPU/CUDA) do obliczeń.
+        args: Obiekt argparse.Namespace z parametrami odszumiania.
+    
+    Zwraca:
+        tuple[str, float, torch.Tensor]: Krotka zawierająca:
+            - predicted_char (str): Rozpoznany znak (np. "A")
+            - confidence (float): Pewność predykcji w procentach (0-100)
+            - probs (torch.Tensor): Tensor prawdopodobieństw dla wszystkich klas
+    
+    Przykład:
+        >>> char, conf, probs = predict_image("letter.png", model, device, args)
+        >>> print(f"Rozpoznano: {char} z pewnością {conf:.1f}%")
     """
     image = load_and_optionally_denoise(image_path, args, mode="L")
     img_array = np.array(image)
@@ -153,8 +233,28 @@ def predict_word(
     args,
 ) -> tuple[str, float, dict[str, float]]:
     """
-    Segmentuje litery w jednej linii metodą projekcji pionowej
-    i rozpoznaje każdą z nich.
+    Segmentuje i rozpoznaje litery w jednej linii tekstu.
+    
+    Funkcja używa projekcji pionowej do wykrycia granic liter,
+    następnie klasyfikuje każdą literę osobno i łączy wyniki w wyraz.
+    
+    Argumenty:
+        image_path (str): Ścieżka do obrazu z wyrazem (jedna linia).
+        model (nn.Module): Wytrenowany model CNN.
+        device (torch.device): Urządzenie (CPU/CUDA) do obliczeń.
+        args: Obiekt argparse.Namespace z parametrami odszumiania.
+    
+    Zwraca:
+        str: Rozpoznany wyraz (ciąg znaków bez spacji).
+    
+    Przykład:
+        >>> word = predict_word("hello.png", model, device, args)
+        >>> print(word)
+        'HELLO'
+    
+    Uwaga:
+        Funkcja oczekuje obrazu z pojedynczą linią tekstu.
+        Dla obrazów wieloliniowych użyj predict_segments().
     """
     image = load_and_optionally_denoise(image_path, args, mode="L")
     img_array = np.array(image)
@@ -198,8 +298,32 @@ def predict_segments(
     args,
 ) -> tuple[str, list[tuple[str, float]], dict[str, float]]:
     """
-    Segmentuje linie (projekcja pozioma), a wewnątrz każdej linii litery
-    (projekcja pionowa). Wykrywa spacje między wyrazami na podstawie przerw.
+    Segmentuje i rozpoznaje tekst wieloliniowy.
+    
+    Algorytm:
+      1. Projekcja pozioma wykrywa linie tekstu
+      2. Dla każdej linii projekcja pionowa wykrywa litery
+      3. Heurystyka spacji: przerwa > 1.5× średniej szerokości litery
+      4. Każda litera jest klasyfikowana przez model CNN
+    
+    Argumenty:
+        image_path (str): Ścieżka do obrazu z tekstem wieloliniowym.
+        model (nn.Module): Wytrenowany model CNN.
+        device (torch.device): Urządzenie (CPU/CUDA) do obliczeń.
+        args: Obiekt argparse.Namespace z parametrami odszumiania.
+    
+    Zwraca:
+        str: Rozpoznany tekst wieloliniowy (linie oddzielone '\\n').
+    
+    Przykład:
+        >>> text = predict_segments("document.png", model, device, args)
+        >>> print(text)
+        'HELLO WORLD
+         THIS IS TEXT'
+    
+    Uwaga:
+        Funkcja automatycznie wykrywa spacje między wyrazami
+        na podstawie odległości między literami.
     """
     image = load_and_optionally_denoise(image_path, args, mode="L")
     img_array = np.array(image)

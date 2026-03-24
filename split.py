@@ -3,24 +3,62 @@ import numpy as np
 from PIL import Image
 import argparse
 
+# ── Konfiguracja ───────────────────────────────────────────────────────────────
+# Domyślna ścieżka obrazu wejściowego
 INPUT_IMAGE = "alphabet.jpg"
+
+# Folder wyjściowy dla wyciętych liter
 OUTPUT_DIR = "letters"
-#DARKNESS = 128
-# alfabet w kolejności na stronie
+
+# Alfabet w kolejności na stronie (do nazewnictwa plików)
 alphabet = list("ABCDEFGHIJKLMNOPQRSTUWXYZ")
 
-# margines w pikselach (~1mm przy 300dpi ≈ 12px)
+# Margines w pikselach (~1mm przy 300dpi ≈ 12px)
 MARGIN = 4
 
 
-def add_margin(img, margin):
+def add_margin(img: np.ndarray, margin: int) -> np.ndarray:
+    """
+    Dodaje biały margines wokół obrazu.
+    
+    Tworzy nowy canvas o większych wymiarach i umieszcza
+    oryginalny obraz w jego centrum z białym obramowaniem.
+    
+    Argumenty:
+        img (np.ndarray): Obraz wejściowy w skali szarości.
+                          Oczekiwany kształt: (wysokość, szerokość).
+        margin (int): Szerokość marginesu w pikselach (dodawana z każdej strony).
+    
+    Zwraca:
+        np.ndarray: Obraz z dodanym białym marginesem.
+                    Kształt: (wysokość + 2*margin, szerokość + 2*margin).
+    
+    Przykład:
+        >>> img_with_margin = add_margin(letter_img, 4)
+    """
     h, w = img.shape
     canvas = np.full((h + 2*margin, w + 2*margin), 255, dtype=np.uint8)
     canvas[margin:margin+h, margin:margin+w] = img
     return canvas
 
-def trim_binary(binary_img):
 
+def trim_binary(binary_img: np.ndarray) -> np.ndarray:
+    """
+    Przycina obraz binarny usuwając puste wiersze i kolumny.
+    
+    Znajduje najmniejszy prostokąt zawierający wszystkie
+    niezerowe piksele i zwraca ten region.
+    
+    Argumenty:
+        binary_img (np.ndarray): Obraz binarny (0/1 lub 0/255).
+    
+    Zwraca:
+        np.ndarray: Przycięty obraz bez pustych marginesów.
+                    Zwraca oryginalny obraz jeśli jest pusty.
+    
+    Przykład:
+        >>> trimmed = trim_binary(binary_letter)
+    """
     rows = np.where(binary_img.sum(axis=1) > 0)[0]
     cols = np.where(binary_img.sum(axis=0) > 0)[0]
 
@@ -29,8 +67,35 @@ def trim_binary(binary_img):
 
     return binary_img[rows[0]:rows[-1]+1, cols[0]:cols[-1]+1]
 
-def segment_letters(image_path, darkness):
 
+def segment_letters(image_path: str, darkness: int) -> list[np.ndarray]:
+    """
+    Segmentuje obraz na pojedyncze litery metodą projekcji.
+    
+    Algorytm:
+      1. Konwertuje obraz do skali szarości i binaryzuje (próg: darkness)
+      2. Używa projekcji poziomej do wykrycia wierszy tekstu
+      3. Dla każdego wiersza używa projekcji pionowej do wykrycia liter
+      4. Przycina każdą literę do jej bounding boxa
+    
+    Argumenty:
+        image_path (str): Ścieżka do obrazu wejściowego.
+        darkness (int): Próg binaryzacji (0-255). Piksele ciemniejsze
+                        od tej wartości są traktowane jako tekst.
+    
+    Zwraca:
+        list[np.ndarray]: Lista obrazów pojedynczych liter (tablice numpy
+                          w skali szarości).
+    
+    Przykład:
+        >>> letters = segment_letters("alphabet.png", darkness=128)
+        >>> len(letters)
+        26
+    
+    Uwaga:
+        Funkcja oczekuje obrazu z literami ułożonymi w liniach.
+        Najlepiej działa na skanach z równomiernym oświetleniem.
+    """
     img = Image.open(image_path).convert("L")
     img_array = np.array(img)
 
@@ -60,9 +125,6 @@ def segment_letters(image_path, darkness):
 
         line_img = img_array[row_start:row_end, :]
         binary_line = binary[row_start:row_end, :]
-
-#        binary_line = trim_binary(binary_line)
-#        line_img = trim_binary(line_img)
         
         vertical_sum = np.sum(binary_line, axis=0)
 
@@ -103,8 +165,33 @@ def segment_letters(image_path, darkness):
     return letters
 
 
-def save_letters(letters):
-
+def save_letters(letters: list[np.ndarray]) -> None:
+    """
+    Zapisuje listę obrazów liter do uporządkowanej struktury folderów.
+    
+    Tworzy folder dla każdej litery (A, B, C, ...) i zapisuje obrazy
+    z automatyczną numeracją (A_001.jpg, A_002.jpg, ...).
+    
+    Argumenty:
+        letters (list[np.ndarray]): Lista obrazów liter do zapisania.
+    
+    Zwraca:
+        None
+    
+    Efekty uboczne:
+        - Tworzy folder OUTPUT_DIR jeśli nie istnieje
+        - Tworzy podfoldery dla każdej litery
+        - Zapisuje pliki JPG z marginesem i numeracją
+    
+    Przykład:
+        >>> letters = segment_letters("alphabet.png", 128)
+        >>> save_letters(letters)
+        # Tworzy: letters/A/A_001.jpg, letters/B/B_001.jpg, ...
+    
+    Uwaga:
+        Liczba liter jest ograniczona do długości zmiennej 'alphabet'.
+        Pliki są numerowane, aby uniknąć nadpisywania istniejących.
+    """
     os.makedirs(OUTPUT_DIR, exist_ok=True)
 
     counters = {}

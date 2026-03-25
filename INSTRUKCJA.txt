@@ -36,27 +36,43 @@ KROK 1: Otwórz terminal w folderze projektu
 
 KROK 2: Pobranie i przygotowanie danych
 ----------------------------------------
-    python main.py --prepare
+    python run_local.py --prepare
 
     To pobierze dataset Chars74K (~25 MB) i rozpakuje go.
 
 
 KROK 3: Wytrenowanie modelu
 ----------------------------
-    python main.py --train --epochs 10
+    python run_local.py --train --epochs 10
 
     Trenowanie na CPU może potrwać. Na GPU będzie szybciej.
     Model zostanie zapisany do pliku: model_ocr.pth
 
+    Dodatkowe opcje trenowania:
+    python run_local.py --train --epochs 20 --batch-size 64
+    python run_local.py --train --resume checkpoint.pth      (wznowienie treningu)
+
+
+KROK 3b: Nieskończony trening (opcjonalnie)
+--------------------------------------------
+    python run_local.py --infinite
+
+    Trening będzie kontynuowany do momentu przerwania (Ctrl+C).
+    Checkpointy zapisywane są automatycznie co 5 epok (domyślnie).
+
+    Przykłady:
+    python run_local.py --infinite --checkpoint-interval 10
+    python run_local.py --infinite --batch-size 64 --resume checkpoint.pth
+
 
 KROK 4: Rozpoznanie własnego zdjęcia
 --------------------------------------
-    python main.py --image sciezka/do/zdjecia.png
+    python run_local.py --image sciezka/do/zdjecia.png
 
     Przykłady:
-    python main.py --image C:\Users\User\Desktop\litera_A.png
-    python main.py --image ./test_images/znak.jpg
-    python main.py -i moje_zdjecie.png
+    python run_local.py --image C:\Users\User\Desktop\litera_A.png
+    python run_local.py --image ./test_images/znak.jpg
+    python run_local.py -i moje_zdjecie.png
 
 
 ================================================================================
@@ -75,23 +91,23 @@ Wybór metody:
 
 Dodatkowe parametry:
 --------------------
-    --h       (int, domyślnie 10)     siła NLM dla luminancji (nlm-color)
-    --hColor  (int, domyślnie 10)     siła NLM dla kolorów (nlm-color)
-    --ksize   (int, domyślnie 3)      rozmiar jądra dla median/gaussian (3,5,7,...)
+    --nlm-h       (int, domyślnie 10)     siła NLM dla luminancji (nlm-color)
+    --nlm-h-color (int, domyślnie 10)     siła NLM dla kolorów (nlm-color)
+    --ksize       (int, domyślnie 3)      rozmiar jądra dla median/gaussian (3,5,7,...)
 
 Przykłady użycia:
 -----------------
 1) NLM dla koloru (polecane jako start):
-    python main.py --image test_A.png --denoise --denoise-method nlm-color --h 12 --hColor 12
+    python run_local.py --image test_A.png --denoise --denoise-method nlm-color --nlm-h 12 --nlm-h-color 12
 
 2) Median (gdy masz szum „sól i pieprz"):
-    python main.py --image test_A.png --denoise --denoise-method median --ksize 5
+    python run_local.py --image test_A.png --denoise --denoise-method median --ksize 5
 
 3) Bilateral (dobry kompromis: odszumia i zachowuje krawędzie):
-    python main.py --image test_A.png --denoise --denoise-method bilateral
+    python run_local.py --image test_A.png --denoise --denoise-method bilateral
 
 4) Gaussian (delikatne wygładzenie):
-    python main.py --image test_A.png --denoise --denoise-method gaussian --ksize 5
+    python run_local.py --image test_A.png --denoise --denoise-method gaussian --ksize 5
 
 Uwaga:
 ------
@@ -99,7 +115,7 @@ Uwaga:
     --word  (rozpoznanie wyrazu)
     --lines (rozpoznanie linii/tekstu)
   Wystarczy dodać flagi jak wyżej, np.:
-    python main.py --word napis.png --denoise --denoise-method nlm-color
+    python run_local.py --word napis.png --denoise --denoise-method nlm-color
 
 - Podgląd obrazu w wynikowym oknie (wizualizacja) pokazuje obraz po odszumianiu,
   jeśli --denoise było włączone.
@@ -109,27 +125,42 @@ Uwaga:
 WSZYSTKIE OPCJE
 ================================================================================
 
-    python main.py --help
+    python run_local.py --help
 
+  TRYBY DZIAŁANIA (wybierz jeden):
     --prepare, -p          Tylko pobierz i przygotuj dane
-    --train, -t            Trenuj model
-    --epochs, -e           Liczba epok trenowania (domyślnie 10)
+    --train, -t            Trenuj model przez określoną liczbę epok
+    --infinite             Nieskończony trening (zatrzymaj przez Ctrl+C)
     --image, -i   PLIK     Rozpoznaj pojedynczą literę
     --word, -w    PLIK     Rozpoznaj wyraz (jedna linia tekstu)
     --lines, -l   PLIK     Rozpoznaj tekst wieloliniowy
     --multi, -m   PLIK...  Rozpoznaj wiele zdjęć pojedynczych liter
-    --image litera.png -f json Zapis do folderu wynik/ jako JSON
-    --word wyraz.png -f txt Zapis do folderu wynik/ jako TXT
-    --image litera.png -o moj_wynik.json Własna ścieżka pliku
-    --word wyraz.png -f json -q Cichy tryb (tylko wynik, bez komunikatów)
 
+  PARAMETRY TRENOWANIA:
+    --epochs, -e           Liczba epok trenowania (domyślnie 10)
+    --batch-size, -b       Rozmiar batcha (domyślnie 32)
+    --checkpoint-interval  Interwał zapisu checkpointów w trybie infinite (domyślnie 5)
+    --resume, -r  PLIK     Wznów trening z pliku checkpointu (.pth)
+
+  ODSZUMIANIE OBRAZU:
     --denoise              Włącz odszumianie wejścia
     --denoise-method       Metoda: nlm-color | median | bilateral | gaussian
-    --h                    Siła NLM – luminancja
-    --hColor               Siła NLM – kolor
+    --nlm-h                Siła NLM – luminancja (domyślnie 10)
+    --nlm-h-color          Siła NLM – kolor (domyślnie 10)
     --ksize                Rozmiar jądra (median/gaussian): 3, 5, 7, ...
 
-Uwaga: opcje --prepare / --train / --image / --word / --lines / --multi
+  FORMAT WYJŚCIA:
+    --output, -o  PLIK     Ścieżka do pliku wyjściowego (txt/json)
+    --output-format, -f    Format: console (domyślnie) | txt | json
+    --quiet, -q            Cichy tryb – wyłącz wyświetlanie na konsoli
+
+  PRZYKŁADY UŻYCIA:
+    python run_local.py --image litera.png -f json      Zapis do folderu wynik/ jako JSON
+    python run_local.py --word wyraz.png -f txt         Zapis do folderu wynik/ jako TXT
+    python run_local.py --image litera.png -o moj_wynik.json   Własna ścieżka pliku
+    python run_local.py --word wyraz.png -f json -q     Cichy tryb (tylko wynik)
+
+Uwaga: opcje --prepare / --train / --infinite / --image / --word / --lines / --multi
        wykluczają się wzajemnie (tylko jedna na raz).
 
 
@@ -151,7 +182,7 @@ JAK DODAĆ WŁASNE ZDJĘCIE
    - Zapisz jako PNG
 
 3. URUCHOMIENIE:
-   python main.py --image nazwa_pliku.png
+   python run_local.py --image nazwa_pliku.png
 
 
 ================================================================================
@@ -159,18 +190,20 @@ STRUKTURA PLIKÓW
 ================================================================================
 
 OCR_ZPI/
-├── main.py                        <- Główny skrypt (uruchamiasz ten plik)
+├── run_local.py                   <- Główny skrypt uruchomieniowy
 ├── ocr/
 │   ├── __init__.py
+│   ├── main.py                    <- Punkt wejścia (logika CLI)
 │   ├── config.py                  <- Stałe konfiguracyjne (ścieżki, rozmiary, klasy)
 │   ├── model.py                   <- Architektura sieci CNN (SimpleCNN)
 │   ├── trainer.py                 <- Pobieranie danych i trenowanie modelu
 │   ├── inference.py               <- Rozpoznawanie liter / wyrazów / tekstu
 │   ├── display.py                 <- Wizualizacja i wyświetlanie wyników
+│   ├── output.py                  <- Obsługa formatu wyjścia (console/txt/json)
 │   └── utils.py                   <- Narzędzia: transformacje, odszumianie, I/O
 ├── chars74k_ocr_preparation.py    <- Przygotowanie danych (wersja Colab)
 ├── split.py                       <- Segmentacja liter z obrazu alfabetu
-├── INSTRUKCJA.txt                 <- Ta instrukcja
+├── instrukcja.txt                 <- Ta instrukcja
 ├── model_ocr.pth                  <- Wytrenowany model (po trenowaniu)
 ├── prediction_result.png          <- Wynik wizualizacji (po predykcji)
 ├── YYYY-MM-DD/                    <- Foldery z datą – historia rozpoznanych zdjęć
@@ -184,7 +217,7 @@ OCR_ZPI/
 PRZYKŁAD SESJI
 ================================================================================
 
-C:\Users\User\Desktop\OCR_ZPI> python main.py --prepare
+C:\Users\User\Desktop\OCR_ZPI> python run_local.py --prepare
 Używane urządzenie: cpu
 Pobieranie datasetu z http://www.ee.surrey.ac.uk/CVSSP/demos/chars74k/EnglishFnt.tgz...
 Postęp: 100.0%
@@ -193,7 +226,7 @@ Rozpakowywanie...
 Rozpakowano!
 Dane przygotowane!
 
-C:\Users\User\Desktop\OCR_ZPI> python main.py --train --epochs 5
+C:\Users\User\Desktop\OCR_ZPI> python run_local.py --train --epochs 5
 Używane urządzenie: cpu
 ============================================================
 TRENOWANIE MODELU
@@ -207,7 +240,15 @@ Epoch [1/5]  Step [50/181]  Loss: 2.3456
 Trenowanie zakończone! Najlepsza dokładność: 85.23%
 Model zapisany do: ./model_ocr.pth
 
-C:\Users\User\Desktop\OCR_ZPI> python main.py --image test_A.png
+C:\Users\User\Desktop\OCR_ZPI> python run_local.py --infinite
+Używane urządzenie: cpu
+Uruchamianie nieskończonego treningu...
+Naciśnij Ctrl+C aby wstrzymać i wyświetlić menu opcji.
+Epoch [1/∞]  Step [50/181]  Loss: 2.1234
+...
+(Ctrl+C aby przerwać)
+
+C:\Users\User\Desktop\OCR_ZPI> python run_local.py --image test_A.png
 Używane urządzenie: cpu
 Rozpoznawanie: test_A.png
 Zapisano zdjęcie jako: ./2026-03-17/1.png
@@ -227,7 +268,7 @@ Top 5 predykcji:
 
 Zapisano wizualizację do: prediction_result.png
 
-C:\Users\User\Desktop\OCR_ZPI> python main.py --lines tekst.png
+C:\Users\User\Desktop\OCR_ZPI> python run_local.py --lines tekst.png
 Używane urządzenie: cpu
 Rozpoznawanie tekstu: tekst.png
 Wczytywanie modelu z ./model_ocr.pth...
@@ -262,7 +303,8 @@ PROBLEM: Rozpoznawanie słabe/niepoprawne
 ROZWIĄZANIE:
 - Upewnij się, że zdjęcie zawiera tylko jeden znak
 - Znak powinien być czytelny i na kontrastowym tle
-- Wytrenuj model dłużej: python main.py --train --epochs 20
-- Spróbuj odszumiania: python main.py --image plik.png --denoise
+- Wytrenuj model dłużej: python run_local.py --train --epochs 20
+- Użyj nieskończonego treningu: python run_local.py --infinite
+- Spróbuj odszumiania: python run_local.py --image plik.png --denoise
 
 ================================================================================

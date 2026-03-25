@@ -161,9 +161,6 @@ def print_text_result(
     words_with_confidence: list[tuple[str, float]],
     class_confidence: dict[str, float],
 ) -> None:
-    """Drukuje rozpoznany tekst oraz metryki pewności dla słów i klas."""
-
-def print_text_result(text: str) -> None:
     """
     Drukuje rozpoznany tekst wieloliniowy w konsoli.
     

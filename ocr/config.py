@@ -54,9 +54,9 @@ MEAN = [0.5, 0.5, 0.5]
 # Odchylenia standardowe do normalizacji obrazu (format ImageNet)
 STD  = [0.5, 0.5, 0.5]
 
-# ── Klasy (26: A-Z - alfabet angielski) ──────────────────────────────────────
-# Zestaw znaków obsługiwanych przez model OCR (wielkie litery A-Z)
-CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+# ── Klasy (46: A-z - alfabet bez znaków polskich) ──────────────────────────────────────
+# Zestaw znaków obsługiwanych przez model OCR (wielkie litery A-z)
+CHARS = "ABCDEFGHIJKLMNOPRSTUWYZabcderghijklmnoprstuwyz"
 
 # Liczba klas wyjściowych modelu (26 liter)
 NUM_CLASSES = len(CHARS)

@@ -26,7 +26,7 @@ from ocr.display import (
     print_word_result,
     visualize_prediction,
 )
-from ocr.inference import load_model, predict_image, predict_segments, predict_word
+from ocr.inference import get_active_chars, load_model, predict_image, predict_segments, predict_word
 from ocr.trainer import download_dataset, train_model
 from ocr.utils import save_image_to_today_folder
 
@@ -107,9 +107,10 @@ def main() -> None:
 
         model = load_model(MODEL_PATH, device)
         predicted_char, confidence, probs = predict_image(args.image, model, device, args)
+        active_labels = get_active_chars()
 
         print_single_result(predicted_char, confidence)
-        print_top5(probs)
+        print_top5(probs, active_labels)
         visualize_prediction(args.image, predicted_char, confidence, args)
 
     # -- Wyraz --

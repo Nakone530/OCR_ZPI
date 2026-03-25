@@ -51,12 +51,13 @@ def print_single_result(predicted_char: str, confidence: float) -> None:
     print("=" * 40)
 
 
-def print_top5(probs: torch.Tensor) -> None:
+def print_top5(probs: torch.Tensor, class_labels: list[str] | None = None) -> None:
     """Drukuje Top-5 predykcji z prawdopodobieństwami."""
-    top5_probs, top5_indices = torch.topk(probs, 5)
+    labels = class_labels if class_labels else list(CHARS)
+    top5_probs, top5_indices = torch.topk(probs, min(5, len(probs)))
     print("\nTop 5 predykcji:")
     for rank, (prob, idx) in enumerate(zip(top5_probs, top5_indices), start=1):
-        char = CHARS[idx.item()]
+        char = labels[idx.item()] if idx.item() < len(labels) else f"<UNK:{idx.item()}>"
         print(f"  {rank}. '{char}' – {prob.item() * 100:.1f}%")
 
 

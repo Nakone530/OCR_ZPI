@@ -12,6 +12,7 @@ import os
 import sys
 import tarfile
 import urllib.request
+import re
 import signal
 import threading
 import time
@@ -33,6 +34,7 @@ GLOBAL_MODEL = None
 GLOBAL_OPTIMIZER = None
 GLOBAL_CRITERION = None
 GLOBAL_DEVICE = None
+GLOBAL_CLASS_NAMES = None
 
 GLOBAL_EPOCH = 0
 GLOBAL_BEST_ACC = 0.0
@@ -47,8 +49,17 @@ BEST_MODEL_STATE = None  # przechowuje stan najlepszego modelu
 def download_dataset() -> None:
     """Pobiera archiwum datasetu, jeśli jeszcze go nie ma."""
     if not os.path.exists(ARCHIVE_PATH):
-        print(f"brak datasetu")
+        print(f"Brak archiwum datasetu: {ARCHIVE_PATH}")
+        os.makedirs(os.path.dirname(ARCHIVE_PATH), exist_ok=True)
 
+        def _show_progress(block_num, block_size, total_size):
+            downloaded = block_num * block_size
+            if total_size > 0:
+                percent = min(100, downloaded * 100 / total_size)
+                print(f"\rPobieranie: {percent:5.1f}%", end="")
+
+        print(f"Pobieranie datasetu z: {DATA_URL}")
+        urllib.request.urlretrieve(DATA_URL, ARCHIVE_PATH, _show_progress)
         print("\nPobrano!")
 
     if not os.path.exists(EXTRACTED_DIR):
@@ -58,10 +69,56 @@ def download_dataset() -> None:
         print("Rozpakowano!")
 
 
+def _dataset_has_lowercase_classes(class_names: list[str]) -> bool:
+    return any(len(name) == 1 and name.islower() for name in class_names)
+
+
+def _dataset_looks_like_chars74k(class_names: list[str]) -> bool:
+    return bool(class_names) and all(re.fullmatch(r"Sample\d+", str(name)) for name in class_names)
+
+
+def _print_dataset_class_diagnostics(class_names: list[str]) -> None:
+    print(f"Wykryto {len(class_names)} klas w datasecie.")
+
+    if _dataset_has_lowercase_classes(class_names):
+        print("Dataset zawiera małe litery.")
+        return
+
+    if _dataset_looks_like_chars74k(class_names):
+        print("[UWAGA] Wykryto klasy w formacie Chars74K (SampleXXX).")
+        print("        Upewnij się, że używasz pełnego zestawu liter (A-Z + a-z).")
+        return
+
+    print("[UWAGA] Dataset nie zawiera małych liter jako osobnych klas.")
+    print("        W tym stanie model nie nauczy się rozpoznawać a-z.")
+    print("        Sprawdź katalog treningowy:")
+    print(f"        {EXTRACTED_DIR}")
+
+
 # -- Trening
 
 checkpoint_path = "checkpoint.pth"
 current_state = {}
+
+
+def _robust_torch_save(payload: dict, path: str, retries: int = 3, delay_s: float = 0.4) -> str:
+    """Próbuje zapisać plik kilka razy; przy blokadzie używa pliku awaryjnego."""
+    last_exc: Exception | None = None
+    for attempt in range(1, retries + 1):
+        try:
+            torch.save(payload, path)
+            return path
+        except Exception as exc:
+            last_exc = exc
+            print(f"[WARN] Nie udało się zapisać '{path}' (próba {attempt}/{retries}): {exc}")
+            if attempt < retries:
+                time.sleep(delay_s)
+
+    base, ext = os.path.splitext(path)
+    fallback = f"{base}_{datetime.now().strftime('%Y%m%d_%H%M%S')}{ext}"
+    print(f"[WARN] Zapis awaryjny do: {fallback}")
+    torch.save(payload, fallback)
+    return fallback
 
 def handler(signum, frame):
     """Handler dla zwykłego treningu (nie-nieskończonego)."""
@@ -107,21 +164,22 @@ signal.signal(signal.SIGINT, handler)
 
 def save_model(path):
     """Zapisuje aktualny stan modelu do pliku."""
-    global GLOBAL_MODEL, GLOBAL_OPTIMIZER, GLOBAL_EPOCH, GLOBAL_BEST_ACC
+    global GLOBAL_MODEL, GLOBAL_OPTIMIZER, GLOBAL_EPOCH, GLOBAL_BEST_ACC, GLOBAL_CLASS_NAMES
 
     if GLOBAL_MODEL is None:
         raise RuntimeError("Model nie jest zainicjalizowany")
 
-    torch.save({
+    saved_path = _robust_torch_save({
         "epoch": GLOBAL_EPOCH,
         "model_state_dict": GLOBAL_MODEL.state_dict(),
         "optimizer_state_dict": GLOBAL_OPTIMIZER.state_dict(),
-        "best_acc": GLOBAL_BEST_ACC
+        "best_acc": GLOBAL_BEST_ACC,
+        "class_names": GLOBAL_CLASS_NAMES,
     }, path)
 
-    print(f"Model zapisany do: {path}")
+    print(f"Model zapisany do: {saved_path}")
 
-    return path
+    return saved_path
 
 
 def save_best_model(path):
@@ -132,14 +190,14 @@ def save_best_model(path):
         print("Brak zapisanego najlepszego modelu - zapisuję aktualny stan.")
         return save_model(path)
     
-    torch.save(BEST_MODEL_STATE, path)
-    print(f"Najlepszy model (acc: {BEST_MODEL_STATE.get('best_acc', 0):.2f}%) zapisany do: {path}")
-    return path
+    saved_path = _robust_torch_save(BEST_MODEL_STATE, path)
+    print(f"Najlepszy model (acc: {BEST_MODEL_STATE.get('best_acc', 0):.2f}%) zapisany do: {saved_path}")
+    return saved_path
 
 
 def capture_best_model():
     """Przechwytuje aktualny stan modelu jako najlepszy."""
-    global BEST_MODEL_STATE, GLOBAL_MODEL, GLOBAL_OPTIMIZER, GLOBAL_EPOCH, GLOBAL_BEST_ACC
+    global BEST_MODEL_STATE, GLOBAL_MODEL, GLOBAL_OPTIMIZER, GLOBAL_EPOCH, GLOBAL_BEST_ACC, GLOBAL_CLASS_NAMES
     
     if GLOBAL_MODEL is None:
         return
@@ -148,7 +206,8 @@ def capture_best_model():
         "epoch": GLOBAL_EPOCH,
         "model_state_dict": GLOBAL_MODEL.state_dict().copy(),
         "optimizer_state_dict": GLOBAL_OPTIMIZER.state_dict().copy(),
-        "best_acc": GLOBAL_BEST_ACC
+        "best_acc": GLOBAL_BEST_ACC,
+        "class_names": GLOBAL_CLASS_NAMES,
     }
     # Zapisz też automatycznie do pliku
     save_best_model(MODEL_PATH)
@@ -156,7 +215,7 @@ def capture_best_model():
 
 def init_or_load_model(num_classes, model_path=None):
     global GLOBAL_MODEL, GLOBAL_OPTIMIZER, GLOBAL_CRITERION
-    global GLOBAL_DEVICE, GLOBAL_EPOCH, GLOBAL_BEST_ACC
+    global GLOBAL_DEVICE, GLOBAL_EPOCH, GLOBAL_BEST_ACC, GLOBAL_CLASS_NAMES
 
     GLOBAL_DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -173,18 +232,21 @@ def init_or_load_model(num_classes, model_path=None):
             GLOBAL_OPTIMIZER.load_state_dict(checkpoint["optimizer_state_dict"])
             GLOBAL_EPOCH = checkpoint.get("epoch", 0)
             GLOBAL_BEST_ACC = checkpoint.get("best_acc", 0.0)
+            GLOBAL_CLASS_NAMES = checkpoint.get("class_names", GLOBAL_CLASS_NAMES)
         else:
             GLOBAL_MODEL.load_state_dict(checkpoint)
 
 
 def train_model(epochs=10, batch_size=32, model_path=None):
     global GLOBAL_MODEL, GLOBAL_OPTIMIZER, GLOBAL_CRITERION
-    global GLOBAL_DEVICE, GLOBAL_EPOCH, GLOBAL_BEST_ACC
+    global GLOBAL_DEVICE, GLOBAL_EPOCH, GLOBAL_BEST_ACC, GLOBAL_CLASS_NAMES
 
     download_dataset()
 
     train_transform = get_train_transform()
     dataset = datasets.ImageFolder(root=EXTRACTED_DIR, transform=train_transform)
+    GLOBAL_CLASS_NAMES = list(dataset.classes)
+    _print_dataset_class_diagnostics(GLOBAL_CLASS_NAMES)
 
     train_size = int(0.8 * len(dataset))
     val_size = len(dataset) - train_size
@@ -198,7 +260,20 @@ def train_model(epochs=10, batch_size=32, model_path=None):
         init_or_load_model(len(dataset.classes), model_path)
         
     total_steps = len(train_loader)
-    for epoch in range(GLOBAL_EPOCH, GLOBAL_EPOCH + epochs):
+    training_start = time.time()
+    target_epoch = GLOBAL_EPOCH + epochs
+
+    print("\n" + "=" * 60)
+    print("  TRENING OCR")
+    print("=" * 60)
+    print(f"  Urządzenie: {GLOBAL_DEVICE}")
+    print(f"  Batch size: {batch_size}")
+    print(f"  Epoki do wykonania: {epochs}")
+    print(f"  Zakres epok: {GLOBAL_EPOCH + 1} -> {target_epoch}")
+    print("=" * 60 + "\n")
+
+    for epoch in range(GLOBAL_EPOCH, target_epoch):
+        epoch_start = time.time()
         GLOBAL_MODEL.train()
         running_loss = 0.0
 
@@ -215,7 +290,7 @@ def train_model(epochs=10, batch_size=32, model_path=None):
 
             # log co 50 kroków
             if step % 50 == 0 or step == total_steps:
-                print(f"Epoch [{epoch+1}/{epochs}] Step [{step}/{total_steps}] Loss: {loss.item():.4f}")
+                print(f"Epoch [{epoch+1}/{target_epoch}] Step [{step}/{total_steps}] Loss: {loss.item():.4f}")
             
         # walidacja
         GLOBAL_MODEL.eval()
@@ -231,13 +306,27 @@ def train_model(epochs=10, batch_size=32, model_path=None):
                 correct += (predicted == labels).sum().item()
 
         val_acc = 100 * correct / total
-        print(f"Epoch [{epoch+1}/{epochs}] - Val Acc: {val_acc:.2f}%")
+        epoch_time = time.time() - epoch_start
+        avg_loss = running_loss / total_steps
+        print(
+            f"Epoch [{epoch+1}/{target_epoch}] - Val Acc: {val_acc:.2f}% "
+            f"| Avg Loss: {avg_loss:.4f} | Czas epoki: {epoch_time:.1f}s"
+        )
 
         GLOBAL_EPOCH = epoch + 1
 
         if val_acc > GLOBAL_BEST_ACC:
             GLOBAL_BEST_ACC = val_acc
             save_model(MODEL_PATH)
+
+    total_training_time = time.time() - training_start
+    print("\n" + "=" * 60)
+    print("  PODSUMOWANIE TRENINGU")
+    print("=" * 60)
+    print(f"  Zakończona epoka: {GLOBAL_EPOCH}")
+    print(f"  Najlepsza dokładność: {GLOBAL_BEST_ACC:.2f}%")
+    print(f"  Całkowity czas treningu: {total_training_time:.1f}s")
+    print("=" * 60)
 
 
 def show_infinite_menu():
@@ -320,7 +409,7 @@ def infinite_train(batch_size=32, model_path=None, checkpoint_interval=5):
         checkpoint_interval: Co ile epok zapisywać checkpoint (domyślnie 5)
     """
     global GLOBAL_MODEL, GLOBAL_OPTIMIZER, GLOBAL_CRITERION
-    global GLOBAL_DEVICE, GLOBAL_EPOCH, GLOBAL_BEST_ACC
+    global GLOBAL_DEVICE, GLOBAL_EPOCH, GLOBAL_BEST_ACC, GLOBAL_CLASS_NAMES
     global TRAINING_PAUSED, TRAINING_STOP
     
     # Reset flag
@@ -335,6 +424,8 @@ def infinite_train(batch_size=32, model_path=None, checkpoint_interval=5):
         
         train_transform = get_train_transform()
         dataset = datasets.ImageFolder(root=EXTRACTED_DIR, transform=train_transform)
+        GLOBAL_CLASS_NAMES = list(dataset.classes)
+        _print_dataset_class_diagnostics(GLOBAL_CLASS_NAMES)
         
         train_size = int(0.8 * len(dataset))
         val_size = len(dataset) - train_size

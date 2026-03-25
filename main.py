@@ -18,8 +18,8 @@ import sys
 import torch
 
 from ocr.config import MODEL_PATH
-from ocr.display import visualize_prediction
-from ocr.inference import load_model, predict_image, predict_segments, predict_word
+from ocr.display import print_text_result, print_word_result, visualize_prediction
+from ocr.inference import get_active_chars, load_model, predict_image, predict_segments, predict_word
 from ocr.output import OCRResult, create_output_handler
 from ocr.trainer import download_dataset, train_model, infinite_train
 from ocr.utils import save_image_to_today_folder
@@ -71,6 +71,22 @@ def build_parser() -> argparse.ArgumentParser:
                         help="Siła NLM – kolor")
     parser.add_argument("--ksize", type=int, default=3,
                         help="Rozmiar jądra dla median/gaussian (3, 5, 7…)")
+
+    # Parametry segmentacji watershed
+    parser.add_argument("--ws-fg-ratio", type=float, default=0.45,
+                        help="Próg foreground dla watershed (ułamek max distance, domyślnie: 0.45)")
+    parser.add_argument("--ws-split-aspect", type=float, default=1.15,
+                        help="Kiedy komponent uznać za sklejony: warunek szerokość > ratio * wysokość (domyślnie: 1.15)")
+    parser.add_argument("--ws-min-comp-area", type=int, default=30,
+                        help="Minimalne pole komponentu, aby był kandydatem na literę (domyślnie: 30)")
+    parser.add_argument("--ws-split-min-area", type=int, default=250,
+                        help="Minimalne pole komponentu, od którego próbujemy podział watershed (domyślnie: 250)")
+    parser.add_argument("--ws-min-box-w", type=int, default=3,
+                        help="Minimalna szerokość boxa litery po segmentacji (domyślnie: 3)")
+    parser.add_argument("--ws-min-box-h", type=int, default=5,
+                        help="Minimalna wysokość boxa litery po segmentacji (domyślnie: 5)")
+    parser.add_argument("--ws-min-box-area", type=int, default=20,
+                        help="Minimalne pole boxa litery po segmentacji (domyślnie: 20)")
 
     # Parametry wyjścia
     parser.add_argument("--output", "-o", type=str, metavar="PLIK",
@@ -136,9 +152,10 @@ def main() -> None:
 
         model = load_model(MODEL_PATH, device)
         predicted_char, confidence, probs = predict_image(args.image, model, device, args)
+        active_labels = get_active_chars()
 
         output_handler = create_output_handler(args, source_image=args.image)
-        result = OCRResult(predicted_char, confidence, probs, mode="single")
+        result = OCRResult(predicted_char, confidence, probs, mode="single", class_labels=active_labels)
         output_handler.output(result)
         
         if not args.quiet:
@@ -236,6 +253,11 @@ def main() -> None:
         print("  python main.py --word wyraz.png")
         print("  python main.py --lines tekst.png")
         print("  python main.py --multi a.png b.png c.png")
+        print("")
+        print("STROJENIE SEGMENTACJI WATERSHED:")
+        print("  python main.py --word wyraz.png --ws-fg-ratio 0.40 --ws-split-aspect 1.05")
+        print("  python main.py --lines tekst.png --ws-min-comp-area 20 --ws-split-min-area 180")
+        print("  python main.py --word wyraz.png --ws-min-box-w 2 --ws-min-box-h 4 --ws-min-box-area 12")
         print("")
         print("OPCJE WYJŚCIA (wyniki zapisywane w folderze 'wynik/'):")
         print("  python main.py --image litera.png -f txt        # wynik/ + input.png + wynik.txt")

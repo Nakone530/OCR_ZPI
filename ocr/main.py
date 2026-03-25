@@ -9,6 +9,14 @@ Punkt wejścia programu OCR.
   ocr.display   – wyświetlanie i wizualizacja wyników
   ocr.utils     – narzędzia pomocnicze
 
+Przykłady użycia:
+  python main.py --prepare
+  python main.py --train --epochs 15
+  python main.py --image litera.png
+  python main.py --image litera.png --denoise --denoise-method nlm-color
+  python main.py --word wyraz.png
+  python main.py --lines tekst.png
+  python main.py --multi a.png b.png c.png
 """
 
 import argparse
@@ -18,11 +26,26 @@ import sys
 import torch
 
 from ocr.config import MODEL_PATH
-from ocr.display import visualize_prediction, print_single_result,print_text_result, print_multi_result
 from ocr.inference import load_model, predict_image, predict_segments, predict_word
 from ocr.output import OCRResult, create_output_handler
 from ocr.trainer import download_dataset, train_model, infinite_train
 from ocr.utils import save_image_to_today_folder
+from ocr.json_output import (
+    build_image_result_json,
+    build_lines_result_json,
+    build_multi_result_json,
+    build_word_result_json,
+    dump_json,
+    write_json,
+)
+from ocr.display import (
+    print_multi_result,
+    print_single_result,
+    print_text_result,
+    print_top5,
+    print_word_result,
+    visualize_prediction,
+)
 
 
 # ── Parsowanie argumentów ──────────────────────────────────────────────────────
@@ -34,12 +57,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     # Tryby działania
     mode = parser.add_mutually_exclusive_group()
-    mode.add_argument("--prepare", "-p", action="store_true",
-                      help="Pobierz i przygotuj dane")
     mode.add_argument("--train", "-t", action="store_true",
                       help="Trenuj model (określona liczba epok)")
     mode.add_argument("--infinite", action="store_true",
                       help="Nieskończony trening do przerwania (Ctrl+C)")
+
     mode.add_argument("--image", "-i", type=str, metavar="PLIK",
                       help="Rozpoznaj pojedynczą literę")
     mode.add_argument("--word", "-w", type=str, metavar="PLIK",
@@ -80,6 +102,23 @@ def build_parser() -> argparse.ArgumentParser:
                         help="Format wyjścia (domyślnie: console)")
     parser.add_argument("--quiet", "-q", action="store_true",
                         help="Cichy tryb - tylko zapis do pliku, bez wypisywania")
+    parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Wypisz wynik jako JSON (zamiast formatu tekstowego)",
+    )
+    parser.add_argument(
+        "--json-pretty",
+        action="store_true",
+        help="Sformatuj JSON (wcięcia, czytelniej dla człowieka)",
+    )
+    parser.add_argument(
+        "--json-path",
+        type=str,
+        default=None,
+        metavar="PLIK",
+        help="Zapisz wynik JSON do pliku (domyślnie: obok skopiowanego obrazu w folderze z datą)",
+    )
 
     return parser
 
@@ -109,13 +148,8 @@ def main() -> None:
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     info(f"Używane urządzenie: {device}")
 
-    # ── Przygotowanie danych ──
-    if args.prepare:
-        download_dataset()
-        print("\nDane przygotowane!")
-
     # ── Trening ──
-    elif args.train:
+    if args.train:
         train_model(epochs=args.epochs, batch_size=args.batch_size, model_path=args.resume)
 
     # ── Nieskończony trening ──
@@ -132,7 +166,7 @@ def main() -> None:
     elif args.image:
         _require_file(args.image)
         info(f"\nRozpoznawanie: {args.image}")
-        save_image_to_today_folder(args.image)
+        saved_copy_path = save_image_to_today_folder(args.image)
 
         model = load_model(MODEL_PATH, device)
         predicted_char, confidence, probs = predict_image(args.image, model, device, args)
@@ -144,25 +178,71 @@ def main() -> None:
         if not args.quiet:
             visualize_prediction(args.image, predicted_char, confidence, args)
 
+        if args.json:
+            payload = build_image_result_json(
+                image_path=args.image,
+                saved_copy_path=saved_copy_path,
+                predicted_char=predicted_char,
+                confidence=confidence,
+                probs=probs,
+                device=str(device),
+            )
+            print(dump_json(payload, pretty=args.json_pretty))
+            out_path = args.json_path
+            if out_path is None:
+                out_path = os.path.splitext(saved_copy_path)[0] + ".json"
+            write_json(out_path, payload, pretty=args.json_pretty)
+        else:
+            print_single_result(predicted_char, confidence)
+            print_top5(probs)
+
     # ── Wyraz ──
     elif args.word:
         _require_file(args.word)
+
         info(f"\nRozpoznawanie wyrazu: {args.word}")
-        save_image_to_today_folder(args.word)
+        saved_copy_path = save_image_to_today_folder(args.word)
 
         model = load_model(MODEL_PATH, device)
         word, avg_word_confidence, class_confidence = predict_word(args.word, model, device, args)
-        print_word_result(word, avg_word_confidence, class_confidence)
+        if args.json:
+            payload = build_word_result_json(
+                image_path=args.word,
+                saved_copy_path=saved_copy_path,
+                word=word,
+                device=str(device),
+            )
+            print(dump_json(payload, pretty=args.json_pretty))
+            out_path = args.json_path
+            if out_path is None:
+                out_path = os.path.splitext(saved_copy_path)[0] + ".json"
+            write_json(out_path, payload, pretty=args.json_pretty)
+        else:
+            print_word_result(word, avg_word_confidence, class_confidence)
 
     # ── Tekst wieloliniowy ──
     elif args.lines:
         _require_file(args.lines)
         info(f"\nRozpoznawanie tekstu: {args.lines}")
-        save_image_to_today_folder(args.lines)
+        saved_copy_path = save_image_to_today_folder(args.lines)
 
         model = load_model(MODEL_PATH, device)
         text, words_with_confidence, class_confidence = predict_segments(args.lines, model, device, args)
-        print_text_result(text, words_with_confidence, class_confidence)
+
+        if args.json:
+            payload = build_lines_result_json(
+                image_path=args.lines,
+                saved_copy_path=saved_copy_path,
+                text=text,
+                device=str(device),
+            )
+            print(dump_json(payload, pretty=args.json_pretty))
+            out_path = args.json_path
+            if out_path is None:
+                out_path = os.path.splitext(saved_copy_path)[0] + ".json"
+            write_json(out_path, payload, pretty=args.json_pretty)
+        else:
+            print_text_result(text, words_with_confidence, class_confidence)
 
     # ── Wiele zdjęć ──
     elif args.multi:
@@ -175,7 +255,7 @@ def main() -> None:
             if not os.path.exists(img_path):
                 info(f"  Pominięto (nie znaleziono): {img_path}")
                 continue
-            save_image_to_today_folder(img_path)
+            saved_copy_path = save_image_to_today_folder(img_path)
             predicted_char, confidence, probs = predict_image(img_path, model, device, args)
             results.append({
                 "file": img_path,
@@ -184,6 +264,20 @@ def main() -> None:
                 "probs": probs
             })
 
+            if not args.json:
+                print_multi_result(img_path, predicted_char, confidence)
+
+        if args.json:
+            payload = build_multi_result_json(
+                results=results,
+                device=str(device),
+            )
+            print(dump_json(payload, pretty=args.json_pretty))
+            out_path = args.json_path
+            if out_path is None:
+                # multi: zapisz w bieżącym katalogu jako wynik.json
+                out_path = "results.json"
+            write_json(out_path, payload, pretty=args.json_pretty)
             if args.output_format == "console":
                 info(f"  {img_path}  →  '{predicted_char}' ({confidence:.1f}%)")
 
@@ -213,6 +307,7 @@ def main() -> None:
 
             info(f"Zapisano wyniki do: {args.output}")
 
+
     # ── Brak argumentów → pomoc ──
     else:
         parser.print_help()
@@ -236,12 +331,6 @@ def main() -> None:
         print("  python main.py --word wyraz.png")
         print("  python main.py --lines tekst.png")
         print("  python main.py --multi a.png b.png c.png")
-        print("")
-        print("OPCJE WYJŚCIA (wyniki zapisywane w folderze 'wynik/'):")
-        print("  python main.py --image litera.png -f txt        # wynik/ + input.png + wynik.txt")
-        print("  python main.py --image litera.png -f json       # wynik/ + input.png + wynik.json")
-        print("  python main.py --word wyraz.png -o custom.json  # zapis do custom.json")
-        print("  python main.py --image litera.png -f json -q    # cichy tryb")
         print("=" * 60)
 
 

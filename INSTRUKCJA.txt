@@ -79,46 +79,21 @@ KROK 4: Rozpoznanie własnego zdjęcia
 ODSZUMIANIE (opcjonalne)
 ================================================================================
 
-Włączenie odszumiania:
-----------------------
-Dodaj flagę:
-    --denoise
+Aby włączyć odszumianie obrazu przed rozpoznawaniem, dodaj flagę --denoise:
 
-Wybór metody:
--------------
-    --denoise-method {nlm-color, median, bilateral, gaussian}
-    (domyślnie: nlm-color)
+    python run_local.py --image test_A.png --denoise
 
-Dodatkowe parametry:
---------------------
-    --nlm-h       (int, domyślnie 10)     siła NLM dla luminancji (nlm-color)
-    --nlm-h-color (int, domyślnie 10)     siła NLM dla kolorów (nlm-color)
-    --ksize       (int, domyślnie 3)      rozmiar jądra dla median/gaussian (3,5,7,...)
+Używany jest filtr bilateralny, który:
+- Skutecznie redukuje szum
+- Zachowuje krawędzie liter (ważne dla OCR)
+- Nie wymaga dodatkowej konfiguracji
 
-Przykłady użycia:
------------------
-1) NLM dla koloru (polecane jako start):
-    python run_local.py --image test_A.png --denoise --denoise-method nlm-color --nlm-h 12 --nlm-h-color 12
+Odszumianie działa ze wszystkimi trybami rozpoznawania:
+    python run_local.py --image litera.png --denoise
+    python run_local.py --word napis.png --denoise
+    python run_local.py --lines tekst.png --denoise
 
-2) Median (gdy masz szum „sól i pieprz"):
-    python run_local.py --image test_A.png --denoise --denoise-method median --ksize 5
-
-3) Bilateral (dobry kompromis: odszumia i zachowuje krawędzie):
-    python run_local.py --image test_A.png --denoise --denoise-method bilateral
-
-4) Gaussian (delikatne wygładzenie):
-    python run_local.py --image test_A.png --denoise --denoise-method gaussian --ksize 5
-
-Uwaga:
-------
-- Odszumianie działa także z trybami:
-    --word  (rozpoznanie wyrazu)
-    --lines (rozpoznanie linii/tekstu)
-  Wystarczy dodać flagi jak wyżej, np.:
-    python run_local.py --word napis.png --denoise --denoise-method nlm-color
-
-- Podgląd obrazu w wynikowym oknie (wizualizacja) pokazuje obraz po odszumianiu,
-  jeśli --denoise było włączone.
+Uwaga: Podgląd obrazu w oknie wizualizacji pokazuje obraz po odszumianiu.
 
 
 ================================================================================
@@ -143,11 +118,7 @@ WSZYSTKIE OPCJE
     --resume, -r  PLIK     Wznów trening z pliku checkpointu (.pth)
 
   ODSZUMIANIE OBRAZU:
-    --denoise              Włącz odszumianie wejścia
-    --denoise-method       Metoda: nlm-color | median | bilateral | gaussian
-    --nlm-h                Siła NLM – luminancja (domyślnie 10)
-    --nlm-h-color          Siła NLM – kolor (domyślnie 10)
-    --ksize                Rozmiar jądra (median/gaussian): 3, 5, 7, ...
+    --denoise              Włącz odszumianie (filtr bilateralny)
 
   FORMAT WYJŚCIA:
     --output, -o  PLIK     Ścieżka do pliku wyjściowego (txt/json)

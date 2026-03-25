@@ -13,7 +13,7 @@ Przykłady użycia:
   python main.py --prepare
   python main.py --train --epochs 15
   python main.py --image litera.png
-  python main.py --image litera.png --denoise --denoise-method nlm-color
+  python main.py --image litera.png --denoise
   python main.py --word wyraz.png
   python main.py --lines tekst.png
   python main.py --multi a.png b.png c.png
@@ -81,18 +81,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--resume", "-r", type=str, metavar="PLIK",
                         help="Wznów trening z checkpointu")
 
-    # Parametry odszumiania
+    # Parametr odszumiania
     parser.add_argument("--denoise", action="store_true",
-                        help="Włącz odszumianie")
-    parser.add_argument("--denoise-method", default="nlm-color",
-                        choices=["nlm-color", "median", "bilateral", "gaussian"],
-                        help="Metoda odszumiania (domyślnie: nlm-color)")
-    parser.add_argument("--h", type=int, default=10,
-                        help="Siła NLM – luminancja")
-    parser.add_argument("--hColor", type=int, default=10,
-                        help="Siła NLM – kolor")
-    parser.add_argument("--ksize", type=int, default=3,
-                        help="Rozmiar jądra dla median/gaussian (3, 5, 7…)")
+                        help="Włącz odszumianie (filtr bilateralny - zachowuje krawędzie)")
 
     # Parametry wyjścia
     parser.add_argument("--output", "-o", type=str, metavar="PLIK",
@@ -327,7 +318,7 @@ def main() -> None:
         print("")
         print("ROZPOZNAWANIE:")
         print("  python main.py --image litera.png")
-        print("  python main.py --image litera.png --denoise --denoise-method nlm-color")
+        print("  python main.py --image litera.png --denoise")
         print("  python main.py --word wyraz.png")
         print("  python main.py --lines tekst.png")
         print("  python main.py --multi a.png b.png c.png")

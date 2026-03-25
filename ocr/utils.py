@@ -1,7 +1,7 @@
 """
 Narzędzia pomocnicze:
   - transformacje obrazów
-  - odszumianie (OpenCV)
+  - odszumianie filtrem bilateralnym (OpenCV)
   - ładowanie obrazów (PNG/JPG/PDF) z opcjonalnym odszumianiem
   - zapis obrazu do folderu z dzisiejszą datą
 """
@@ -135,201 +135,33 @@ def preprocess_letter(img: np.ndarray) -> np.ndarray:
     new_img = cv2.resize(new_img, (28, 28))
     return new_img
 
-# ── Konwersje PIL ↔ OpenCV ─────────────────────────────────────────────────────
+# ── Odszumianie ────────────────────────────────────────────────────────────────
 
-def _pil_to_bgr(img_pil: Image.Image) -> np.ndarray:
+def denoise_pil(img_pil: Image.Image) -> Image.Image:
     """
-    Konwertuje obraz PIL do formatu BGR (OpenCV).
+    Odszumia obraz PIL filtrem bilateralnym.
     
-    Funkcja konwertuje obraz PIL na format skali szarości,
-    następnie do tablicy numpy i finalnie do formatu BGR
-    używanego przez OpenCV.
+    Filtr bilateralny wygładza obraz zachowując krawędzie, co jest idealne
+    dla OCR - redukuje szum bez rozmywania krawędzi liter.
     
     Argumenty:
-        img_pil (Image.Image): Obraz w formacie PIL (dowolny tryb kolorów).
+        img_pil (Image.Image): Obraz wejściowy w formacie PIL.
     
     Zwraca:
-        np.ndarray: Obraz w formacie BGR jako tablica numpy,
-                    gotowy do przetwarzania przez funkcje OpenCV.
+        Image.Image: Odszumiony obraz w formacie PIL.
     
-    Uwaga:
-        Ta funkcja jest pomocnicza i używana wewnętrznie przez
-        funkcje odszumiania.
+    Przykład:
+        >>> denoised = denoise_pil(img)
     """
-    rgb = img_pil.convert("L")
     if cv2 is None:
         raise ModuleNotFoundError(
             "Brak modułu 'cv2'. Zainstaluj: pip install opencv-python "
             "(wymagane tylko dla opcji --denoise)."
         )
     rgb = img_pil.convert("RGB")
-    return cv2.cvtColor(np.array(rgb), cv2.COLOR_RGB2BGR)
-
-
-def _bgr_to_pil(img_bgr: np.ndarray) -> Image.Image:
-    """
-    Konwertuje obraz z formatu BGR (OpenCV) do formatu PIL.
-    
-    Argumenty:
-        img_bgr (np.ndarray): Obraz w formacie BGR jako tablica numpy.
-    
-    Zwraca:
-        Image.Image: Obraz w formacie PIL w trybie RGB.
-    
-    Uwaga:
-        Ta funkcja jest pomocnicza i używana wewnętrznie przez
-        funkcje odszumiania.
-    """
-    if cv2 is None:
-        raise ModuleNotFoundError(
-            "Brak modułu 'cv2'. Zainstaluj: pip install opencv-python "
-            "(wymagane tylko dla opcji --denoise)."
-        )
-    return Image.fromarray(cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB))
-
-
-# ── Metody odszumiania ─────────────────────────────────────────────────────────
-
-def _denoise_nlm_color(bgr: np.ndarray, h: int, hColor: int) -> np.ndarray:
-    """
-    Odszumia obraz metodą Non-Local Means dla obrazów kolorowych.
-    
-    Metoda NLM porównuje podobieństwo bloków pikseli w całym obrazie,
-    uśredniając piksele o podobnym otoczeniu. Skuteczna przy szumie Gaussowskim.
-    
-    Argumenty:
-        bgr (np.ndarray): Obraz wejściowy w formacie BGR.
-        h (int): Siła filtrowania dla kanału jasności.
-                 Większa wartość = silniejsze odszumianie, ale utrata detali.
-        hColor (int): Siła filtrowania dla kanałów koloru.
-    
-    Zwraca:
-        np.ndarray: Odszumiony obraz w formacie BGR.
-    """
-    if cv2 is None:
-        raise ModuleNotFoundError(
-            "Brak modułu 'cv2'. Zainstaluj: pip install opencv-python "
-            "(wymagane tylko dla opcji --denoise)."
-        )
-    return cv2.fastNlMeansDenoisingColored(bgr, None, h, hColor, 7, 21)
-
-
-def _denoise_median(bgr: np.ndarray, ksize: int) -> np.ndarray:
-    """
-    Odszumia obraz filtrem medianowym.
-    
-    Filtr medianowy zastępuje każdy piksel medianą wartości w oknie.
-    Skuteczny przy usuwaniu szumu typu "sól i pieprz".
-    
-    Argumenty:
-        bgr (np.ndarray): Obraz wejściowy w formacie BGR.
-        ksize (int): Rozmiar okna filtra (musi być liczbą nieparzystą, np. 3, 5, 7).
-    
-    Zwraca:
-        np.ndarray: Odszumiony obraz w formacie BGR.
-    """
-
-    if cv2 is None:
-        raise ModuleNotFoundError(
-            "Brak modułu 'cv2'. Zainstaluj: pip install opencv-python "
-            "(wymagane tylko dla opcji --denoise)."
-        )
-    return cv2.medianBlur(bgr, ksize)
-
-
-def _denoise_bilateral(bgr: np.ndarray) -> np.ndarray:
-    """
-    Odszumia obraz filtrem bilateralnym.
-    
-    Filtr bilateralny wygładza obraz zachowując krawędzie.
-    Uwzględnia zarówno odległość przestrzenną, jak i różnicę intensywności.
-    
-    Argumenty:
-        bgr (np.ndarray): Obraz wejściowy w formacie BGR.
-    
-    Zwraca:
-        np.ndarray: Odszumiony obraz w formacie BGR z zachowanymi krawędziami.
-    
-    Uwaga:
-        Parametry filtra są ustalone: d=9, sigmaColor=75, sigmaSpace=75.
-    """
-    if cv2 is None:
-        raise ModuleNotFoundError(
-            "Brak modułu 'cv2'. Zainstaluj: pip install opencv-python "
-            "(wymagane tylko dla opcji --denoise)."
-        )
-    return cv2.bilateralFilter(bgr, 9, 75, 75)
-
-
-def _denoise_gaussian(bgr: np.ndarray, ksize: int) -> np.ndarray:
-    """
-    Odszumia obraz rozmyciem Gaussowskim.
-    
-    Stosuje filtr Gaussowski który wygładza obraz poprzez
-    uśrednianie ważone pikseli w oknie (wagi wg rozkładu Gaussa).
-    
-    Argumenty:
-        bgr (np.ndarray): Obraz wejściowy w formacie BGR.
-        ksize (int): Rozmiar jądra filtra (musi być liczbą nieparzystą).
-    
-    Zwraca:
-        np.ndarray: Rozmyty obraz w formacie BGR.
-    """
-    if cv2 is None:
-        raise ModuleNotFoundError(
-            "Brak modułu 'cv2'. Zainstaluj: pip install opencv-python "
-            "(wymagane tylko dla opcji --denoise)."
-        )
-    return cv2.GaussianBlur(bgr, (ksize, ksize), 0)
-
-
-def denoise_pil(
-    img_pil: Image.Image,
-    method: str,
-    h: int = 10,
-    hColor: int = 10,
-    ksize: int = 3,
-) -> Image.Image:
-    """
-    Odszumia obraz PIL wybraną metodą.
-    
-    Główna funkcja do odszumiania obrazów. Wspiera różne metody
-    odszumiania dostępne w OpenCV.
-    
-    Argumenty:
-        img_pil (Image.Image): Obraz wejściowy w formacie PIL.
-        method (str): Metoda odszumiania do użycia. Dostępne opcje:
-            - 'nlm-color': Non-Local Means dla obrazów kolorowych
-            - 'median': Filtr medianowy
-            - 'bilateral': Filtr bilateralny (zachowuje krawędzie)
-            - 'gaussian': Rozmycie Gaussowskie
-        h (int, opcjonalnie): Siła filtrowania dla NLM (jasność). Domyślnie 10.
-        hColor (int, opcjonalnie): Siła filtrowania dla NLM (kolor). Domyślnie 10.
-        ksize (int, opcjonalnie): Rozmiar jądra dla median/gaussian. Domyślnie 3.
-    
-    Zwraca:
-        Image.Image: Odszumiony obraz w formacie PIL.
-    
-    Wyjątki:
-        ValueError: Gdy podano nieznaną metodę odszumiania.
-    
-    Przykład:
-        >>> denoised = denoise_pil(img, method='bilateral')
-        >>> denoised = denoise_pil(img, method='median', ksize=5)
-    """
-    bgr = _pil_to_bgr(img_pil)
-    m = method.lower()
-    if m == "nlm-color":
-        out = _denoise_nlm_color(bgr, h, hColor)
-    elif m == "median":
-        out = _denoise_median(bgr, ksize)
-    elif m == "bilateral":
-        out = _denoise_bilateral(bgr)
-    elif m == "gaussian":
-        out = _denoise_gaussian(bgr, ksize)
-    else:
-        raise ValueError(f"Nieznana metoda odszumiania: {method}")
-    return _bgr_to_pil(out)
+    bgr = cv2.cvtColor(np.array(rgb), cv2.COLOR_RGB2BGR)
+    out = cv2.bilateralFilter(bgr, 9, 75, 75)
+    return Image.fromarray(cv2.cvtColor(out, cv2.COLOR_BGR2RGB))
 
 
 # ── Ładowanie obrazu ───────────────────────────────────────────────────────────
@@ -395,16 +227,12 @@ def load_and_optionally_denoise(image_path: str, args, mode: str = "L") -> Image
     Ładuje obraz i opcjonalnie stosuje odszumianie na podstawie argumentów CLI.
     
     Funkcja łączy ładowanie obrazu z opcjonalnym preprocessingiem (odszumianiem).
-    Parametry odszumiania są pobierane z obiektu args (argparse Namespace).
+    Jeśli args.denoise jest True, stosowany jest filtr bilateralny.
     
     Argumenty:
         image_path (str): Ścieżka do pliku obrazu (PNG, JPG, PDF).
         args: Obiekt argparse.Namespace z parametrami. Oczekiwane atrybuty:
             - denoise (bool): Czy stosować odszumianie
-            - denoise_method (str): Metoda odszumiania (jeśli denoise=True)
-            - h (int, opcjonalnie): Parametr siły dla NLM
-            - hColor (int, opcjonalnie): Parametr koloru dla NLM
-            - ksize (int, opcjonalnie): Rozmiar jądra dla median/gaussian
         mode (str, opcjonalnie): Tryb kolorów wyjściowych. Domyślnie "L".
             Używaj "RGB" dla klasyfikacji lub "L" dla segmentacji.
     
@@ -421,15 +249,7 @@ def load_and_optionally_denoise(image_path: str, args, mode: str = "L") -> Image
         img = Image.open(image_path)
 
     if getattr(args, "denoise", False):
-        img_rgb = img.convert("L")
-        img_rgb = denoise_pil(
-            img_rgb,
-            method=args.denoise_method,
-            h=getattr(args, "h", 10),
-            hColor=getattr(args, "hColor", 10),
-            ksize=getattr(args, "ksize", 3),
-        )
-        return img_rgb.convert("L")
+        img = denoise_pil(img)
 
     return img.convert(mode)
 

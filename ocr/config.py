@@ -57,6 +57,4 @@ STD  = [0.5, 0.5, 0.5]
 # ── Klasy (46: A-z - alfabet bez znaków polskich) ──────────────────────────────────────
 # Zestaw znaków obsługiwanych przez model OCR (wielkie litery A-z)
 CHARS = "ABCDEFGHIJKLMNOPRSTUWYZabcderghijklmnoprstuwyz"
-
-# Liczba klas wyjściowych modelu (26 liter)
 NUM_CLASSES = len(CHARS)

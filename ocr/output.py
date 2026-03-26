@@ -47,7 +47,8 @@ class OCRResult:
         text: str,
         confidence: Optional[float] = None,
         probs: Optional[torch.Tensor] = None,
-        mode: str = "single"  # single, word, lines, multi
+        mode: str = "single",  # single, word, lines, multi
+        class_labels: Optional[list[str]] = None,
     ):
         """
         Inicjalizuje obiekt OCRResult.
@@ -67,6 +68,7 @@ class OCRResult:
         self.confidence = confidence
         self.probs = probs
         self.mode = mode
+        self.class_labels = class_labels or list(CHARS)
     
     def get_all_probs(self) -> dict[str, float]:
         """
@@ -86,9 +88,10 @@ class OCRResult:
         """
         if self.probs is None:
             return {}
+        limit = min(len(self.class_labels), len(self.probs))
         return {
-            CHARS[i]: round(self.probs[i].item() * 100, 2)
-            for i in range(len(CHARS))
+            self.class_labels[i]: round(self.probs[i].item() * 100, 2)
+            for i in range(limit)
         }
     
     def get_top_n(self, n: int = 5) -> list[tuple[str, float]]:
@@ -109,9 +112,12 @@ class OCRResult:
         if self.probs is None:
             return [(self.text, self.confidence or 0.0)]
         
-        top_probs, top_indices = torch.topk(self.probs, min(n, len(CHARS)))
+        top_probs, top_indices = torch.topk(self.probs, min(n, len(self.probs)))
         return [
-            (CHARS[idx.item()], round(prob.item() * 100, 2))
+            (
+                self.class_labels[idx.item()] if idx.item() < len(self.class_labels) else f"<UNK:{idx.item()}>",
+                round(prob.item() * 100, 2)
+            )
             for prob, idx in zip(top_probs, top_indices)
         ]
 

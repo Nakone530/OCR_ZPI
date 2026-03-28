@@ -419,12 +419,14 @@ def create_output_handler(args, source_image: Optional[str] = None) -> OutputHan
     """
     Funkcja fabryczna tworząca OutputHandler na podstawie argumentów CLI.
     
-    Automatycznie wykrywa format wyjścia z rozszerzenia pliku
-    jeśli nie został jawnie podany.
+    Automatycznie wykrywa format wyjścia:
+      - jeśli --json: format JSON
+      - jeśli --output z rozszerzeniem .json/.txt: wykrywa z rozszerzenia
+      - w przeciwnym razie: konsola
     
     Argumenty:
         args: Obiekt argparse.Namespace z parametrami. Oczekiwane atrybuty:
-            - output_format (str, opcjonalnie): Format wyjścia ('console', 'txt', 'json')
+            - json (bool, opcjonalnie): Wymuś format JSON
             - output (str, opcjonalnie): Ścieżka do pliku wyjściowego
             - quiet (bool, opcjonalnie): Czy wyłączyć komunikaty (verbose=False)
         source_image (str, opcjonalnie): Ścieżka do obrazu źródłowego do skopiowania.
@@ -435,22 +437,24 @@ def create_output_handler(args, source_image: Optional[str] = None) -> OutputHan
     Przykład:
         >>> handler = create_output_handler(args, source_image="input.png")
         >>> handler.output(result)
-    
-    Uwaga:
-        Jeśli output_format=="console" ale podano ścieżkę z rozszerzeniem
-        .json lub .txt, format zostanie automatycznie wykryty.
     """
-    output_format = getattr(args, "output_format", "console")
+    use_json = getattr(args, "json", False)
     output_path = getattr(args, "output", None)
     quiet = getattr(args, "quiet", False)
     
-    # Jeśli podano ścieżkę bez formatu, wykryj z rozszerzenia
-    if output_path and output_format == "console":
+    # Określ format wyjścia
+    if use_json:
+        output_format = "json"
+    elif output_path:
         ext = Path(output_path).suffix.lower()
         if ext == ".json":
             output_format = "json"
         elif ext == ".txt":
             output_format = "txt"
+        else:
+            output_format = "console"
+    else:
+        output_format = "console"
     
     # Automatycznie zapisuj do folderu wynik/ gdy format != console
     save_to_result_dir = output_format != "console"

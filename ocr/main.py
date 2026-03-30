@@ -25,6 +25,7 @@ import sys
 
 import torch
 
+from typing import Optional, List
 from ocr.config import MODEL_PATH
 from ocr.inference import load_model, predict_image, predict_segments, predict_word
 from ocr.output import OCRResult, create_output_handler
@@ -46,6 +47,9 @@ from ocr.display import (
     print_word_result,
     visualize_prediction,
 )
+
+#--State
+
 
 
 # ── Parsowanie argumentów ──────────────────────────────────────────────────────
@@ -113,32 +117,69 @@ def build_parser() -> argparse.ArgumentParser:
 
     return parser
 
+#-- state -> args
+
+def build_args(state):
+    args = []
+
+    if state["mode"] == "train":
+        args.append("--train")
+        args += ["--epochs", str(state["epochs"])]
+        args += ["--batch-size", str(state["batch_size"])]
+        
+    if state["denoise"]:
+        args.append("--denoise")
+
+    elif state["mode"] == "image":
+        args += ["--image", state["input_path"]]
+
+    if state["json"]:
+        args.append("--json")
+
+    return args
 
 # ── Pomocnik walidacji pliku ───────────────────────────────────────────────────
 
-def _require_file(path: str) -> None:
+def _require_file(path: str):
     if not os.path.exists(path):
         print(f"Błąd: Nie znaleziono pliku {path}")
         sys.exit(1)
 
 
-# ── Main ───────────────────────────────────────────────────────────────────────
 
-def main() -> None:
+#--args
+def make_args() -> None:
     parser = build_parser()
     args = parser.parse_args()
+    return args
 
-    # W trybie quiet, komunikaty informacyjne idą na stderr
-    import sys
-    def info(msg):
-        if args.quiet:
+# ── Main ───────────────────────────────────────────────────────────────────────
+
+def make_info(buffer= None):
+    if buffer is None:
+        buffer = []
+
+    def info(msg, quiet=False):
+        buffer.append(msg)
+        if quiet:
             print(msg, file=sys.stderr)
         else:
             print(msg)
+    return info, buffer
 
+def main(args=None, info=None, buffor=None) -> None:
+    if args is None:
+        args = make_args()
+
+    if info is None:
+        info, buffor = make_info()
+        
+    if buffor is None:
+        buffor = []
+        
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     info(f"Używane urządzenie: {device}")
-
+    parser = build_parser()
     # ── Trening ──
     if args.train:
         train_model(epochs=args.epochs, batch_size=args.batch_size, model_path=args.resume)
@@ -323,7 +364,8 @@ def main() -> None:
         print("  python main.py --lines tekst.png")
         print("  python main.py --multi a.png b.png c.png")
         print("=" * 60)
-
-
+        
+    all_text = "\n".join(buffor)
+    return all_text
 if __name__ == "__main__":
     main()

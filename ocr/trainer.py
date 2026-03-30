@@ -23,10 +23,12 @@ import torch.nn as nn
 from torchvision import datasets
 
 from .config import (
-    DATA_URL, DATA_DIR, ARCHIVE_PATH, EXTRACTED_DIR, MODEL_PATH, CHECKPOINT_PATH
+    DATA_URL, DATA_DIR, ARCHIVE_PATH, EXTRACTED_DIR, MODEL_PATH, CHECKPOINT_PATH,
+    MODEL_ARCHIVE_DIR, MODEL_ARCHIVE_KEEP_COUNT
 )
 from .model import SimpleCNN
 from .utils import get_train_transform
+from .model_archive import ModelArchiver
 
 
 # -- globalne
@@ -162,6 +164,22 @@ def infinite_handler(signum, frame):
 # Rejestracja obsługi sygnału SIGINT (Ctrl+C)
 signal.signal(signal.SIGINT, handler)
 
+def _archive_previous_model(current_model_path):
+    """Archiwizuje poprzedni model jeśli istnieje."""
+    try:
+        if os.path.exists(current_model_path):
+            archiver = ModelArchiver(MODEL_ARCHIVE_DIR)
+            archiver.archive_model(
+                current_model_path,
+                accuracy=GLOBAL_BEST_ACC,
+                epoch=GLOBAL_EPOCH,
+                tags=["auto-archived"]
+            )
+            # Czyszczenie starych archiwów
+            archiver.cleanup_old_archives(keep_count=MODEL_ARCHIVE_KEEP_COUNT)
+    except Exception as e:
+        print(f"[WARN] Błąd podczas archiwizacji modelu: {e}")
+
 def save_model(path):
     """Zapisuje aktualny stan modelu do pliku."""
     global GLOBAL_MODEL, GLOBAL_OPTIMIZER, GLOBAL_EPOCH, GLOBAL_BEST_ACC, GLOBAL_CLASS_NAMES
@@ -178,6 +196,10 @@ def save_model(path):
     }, path)
 
     print(f"Model zapisany do: {saved_path}")
+    
+    # Archiwizuj poprzedni model jeśli jest to główny model
+    if path == MODEL_PATH:
+        _archive_previous_model(saved_path)
 
     return saved_path
 

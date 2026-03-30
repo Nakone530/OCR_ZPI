@@ -44,6 +44,12 @@ MODEL_PATH = "./model_ocr.pth"
 # Ścieżka do checkpointu (do wznawiania treningu)
 CHECKPOINT_PATH = "./checkpoint.pth"
 
+# Ścieżka do archiwum starych modeli
+MODEL_ARCHIVE_DIR = "./model_archive"
+
+# Liczba ostatnich modeli do zachowania przed czyszczeniem
+MODEL_ARCHIVE_KEEP_COUNT = 10
+
 # ── Obraz ─────────────────────────────────────────────────────────────────────
 # Rozmiar obrazu wejściowego dla modelu CNN (szerokość i wysokość)
 IMAGE_SIZE = 28

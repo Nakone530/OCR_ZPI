@@ -65,6 +65,24 @@ KROK 3b: Nieskończony trening (opcjonalnie)
     python run_local.py --infinite --batch-size 64 --resume checkpoint.pth
 
 
+KROK 3c: Zarządzanie archiwami modeli (opcjonalnie)
+----------------------------------------------------
+    Podczas treningu modele są automatycznie archiwizowane do folderu ./model_archive/
+    Ostatnie 10 modeli jest zachowywane, starsze są automatycznie usuwane.
+
+    Wylistuj wszystkie zarchiwizowane modele:
+    python manage_models.py list
+
+    Czyszczenie - zachowaj tylko N ostatnich modeli:
+    python manage_models.py cleanup 5
+
+    Ręczna archiwizacja modelu:
+    python manage_models.py archive ./model_ocr.pth 92.50 50
+
+    Przywrócenie modelu z archiwum:
+    python manage_models.py restore model_20260330_143022.pth ./model_ocr.pth
+
+
 KROK 4: Rozpoznanie własnego zdjęcia
 --------------------------------------
     python run_local.py --image sciezka/do/zdjecia.png
@@ -162,11 +180,13 @@ STRUKTURA PLIKÓW
 
 OCR_ZPI/
 ├── run_local.py                   <- Główny skrypt uruchomieniowy
+├── manage_models.py               <- Zarządzanie archiwami modeli
 ├── ocr/
 │   ├── __init__.py
 │   ├── main.py                    <- Punkt wejścia (logika CLI)
 │   ├── config.py                  <- Stałe konfiguracyjne (ścieżki, rozmiary, klasy)
 │   ├── model.py                   <- Architektura sieci CNN (SimpleCNN)
+│   ├── model_archive.py           <- Archiwizacja poprzednich modeli
 │   ├── trainer.py                 <- Pobieranie danych i trenowanie modelu
 │   ├── inference.py               <- Rozpoznawanie liter / wyrazów / tekstu
 │   ├── display.py                 <- Wizualizacja i wyświetlanie wyników
@@ -177,6 +197,8 @@ OCR_ZPI/
 ├── instrukcja.txt                 <- Ta instrukcja
 ├── model_ocr.pth                  <- Wytrenowany model (po trenowaniu)
 ├── prediction_result.png          <- Wynik wizualizacji (po predykcji)
+├── model_archive/                 <- Archiwum poprzednich modeli
+│   └── manifest.json              <- Historia i metadane archiwów
 ├── YYYY-MM-DD/                    <- Foldery z datą – historia rozpoznanych zdjęć
 └── data/                          <- Dane (tworzone automatycznie)
     ├── EnglishFnt.tgz             <- Pobrany dataset
@@ -277,5 +299,18 @@ ROZWIĄZANIE:
 - Wytrenuj model dłużej: python run_local.py --train --epochs 20
 - Użyj nieskończonego treningu: python run_local.py --infinite
 - Spróbuj odszumiania: python run_local.py --image plik.png --denoise
+
+PROBLEM: "Zbyt dużo archiwów modeli na dysku"
+ROZWIĄZANIE:
+- Wylistuj archiwa: python manage_models.py list
+- Czyszczenie archiwów (zachowaj 5 ostatnich):
+  python manage_models.py cleanup 5
+- Domyślnie system automatycznie przechowuje ostatnie 10 modeli
+
+PROBLEM: "Chcę przywrócić starszy model"
+ROZWIĄZANIE:
+- Wylistuj dostępne modele: python manage_models.py list
+- Przywróć wybrany model:
+  python manage_models.py restore model_YYYYMMDD_HHMMSS.pth ./model_ocr.pth
 
 ================================================================================

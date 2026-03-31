@@ -208,7 +208,7 @@ def main(args=None, info=None, buffor=None) -> None:
         output_handler.output(result)
 
         if not args.quiet:
-            visualize_prediction(args.image, predicted_char, confidence, args)
+            visualize_prediction(args.image, predicted_char, confidence, args, info)
 
         if args.json:
             payload = build_image_result_json(
@@ -225,8 +225,8 @@ def main(args=None, info=None, buffor=None) -> None:
                 out_path = os.path.splitext(saved_copy_path)[0] + ".json"
             write_json(out_path, payload, pretty=args.json_pretty)
         else:
-            print_single_result(predicted_char, confidence)
-            print_top5(probs)
+            print_single_result(predicted_char, confidence, info)
+            print_top5(probs, info)
 
     # ── Wyraz ──
     elif args.word:
@@ -250,7 +250,7 @@ def main(args=None, info=None, buffor=None) -> None:
                 out_path = os.path.splitext(saved_copy_path)[0] + ".json"
             write_json(out_path, payload, pretty=args.json_pretty)
         else:
-            print_word_result(word, avg_word_confidence, class_confidence)
+            print_word_result(word, avg_word_confidence, class_confidence, info)
 
     # ── Tekst wieloliniowy ──
     elif args.lines:
@@ -274,7 +274,7 @@ def main(args=None, info=None, buffor=None) -> None:
                 out_path = os.path.splitext(saved_copy_path)[0] + ".json"
             write_json(out_path, payload, pretty=args.json_pretty)
         else:
-            print_text_result(text, words_with_confidence, class_confidence)
+            print_text_result(text, words_with_confidence, class_confidence, info)
 
     # ── Wiele zdjęć ──
     elif args.multi:
@@ -297,7 +297,7 @@ def main(args=None, info=None, buffor=None) -> None:
             })
 
             if not args.json:
-                print_multi_result(img_path, predicted_char, confidence)
+                print_multi_result(img_path, predicted_char, confidence, info)
 
         if args.json:
             payload = build_multi_result_json(

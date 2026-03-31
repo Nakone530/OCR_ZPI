@@ -12,7 +12,13 @@ def state_to_argv(state):
 
     if state["mode"] == "image":
         args += ["--image", state["input_path"]]
+        
+    if state["mode"] == "train":
+        args += ["--train"]
 
+    if state["mode"] == "word":
+        args += ["--word", state["input_path"]]
+        
     if state["denoise"]:
         args.append("--denoise")
 

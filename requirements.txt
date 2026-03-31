@@ -36,6 +36,7 @@ python-dateutil==2.9.0.post0
 setuptools==82.0.0
 six==1.17.0
 sympy==1.14.0
+textual==1.8.0
 torch==2.10.0
 torchaudio==2.10.0
 torchvision==0.25.0

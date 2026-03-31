@@ -89,6 +89,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--denoise", action="store_true",
                         help="Włącz odszumianie (filtr bilateralny - zachowuje krawędzie)")
 
+    # Parametr modelu
+    parser.add_argument("--model-path", type=str, default=None, metavar="PLIK",
+                        help="Ścieżka do wytrenowanego modelu (domyślnie: model_ocr.pth)")
+
     # Parametry wyjścia
     parser.add_argument("--output", "-o", type=str, metavar="PLIK",
                         help="Zapisz wynik do pliku (txt/json)")
@@ -176,9 +180,13 @@ def main(args=None, info=None, buffor=None) -> None:
         
     if buffor is None:
         buffor = []
-        
+    
+    # Ustal ścieżkę modelu: użyj args.model_path jeśli jest dostępne, inaczej MODEL_PATH
+    model_path = getattr(args, 'model_path', None) or MODEL_PATH
+    
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     info(f"Używane urządzenie: {device}")
+    info(f"Używany model: {model_path}")
     parser = build_parser()
     # ── Trening ──
     if args.train:
@@ -200,7 +208,7 @@ def main(args=None, info=None, buffor=None) -> None:
         info(f"\nRozpoznawanie: {args.image}")
         saved_copy_path = save_image_to_today_folder(args.image)
 
-        model = load_model(MODEL_PATH, device)
+        model = load_model(model_path, device)
         predicted_char, confidence, probs = predict_image(args.image, model, device, args)
 
         output_handler = create_output_handler(args, source_image=args.image)
@@ -235,7 +243,7 @@ def main(args=None, info=None, buffor=None) -> None:
         info(f"\nRozpoznawanie wyrazu: {args.word}")
         saved_copy_path = save_image_to_today_folder(args.word)
 
-        model = load_model(MODEL_PATH, device)
+        model = load_model(model_path, device)
         word, avg_word_confidence, class_confidence = predict_word(args.word, model, device, args)
         if args.json:
             payload = build_word_result_json(
@@ -258,7 +266,7 @@ def main(args=None, info=None, buffor=None) -> None:
         info(f"\nRozpoznawanie tekstu: {args.lines}")
         saved_copy_path = save_image_to_today_folder(args.lines)
 
-        model = load_model(MODEL_PATH, device)
+        model = load_model(model_path, device)
         text, words_with_confidence, class_confidence = predict_segments(args.lines, model, device, args)
 
         if args.json:
@@ -278,7 +286,7 @@ def main(args=None, info=None, buffor=None) -> None:
 
     # ── Wiele zdjęć ──
     elif args.multi:
-        model = load_model(MODEL_PATH, device)
+        model = load_model(model_path, device)
         info(f"\nRozpoznawanie {len(args.multi)} pliku(-ów):")
 
         results = []

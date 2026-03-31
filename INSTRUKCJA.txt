@@ -1,343 +1,216 @@
-═══════════════════════════════════════════════════════════════════════════════
-                    INSTRUKCJA OBSŁUGI - OCR (Optical Character Recognition)
-═══════════════════════════════════════════════════════════════════════════════
+================================================================================
+INSTRUKCJA URUCHOMIENIA LOKALNIE
+================================================================================
 
-1. INSTALACJA ZALEŻNOŚCI
-═══════════════════════════════════════════════════════════════════════════════
+WYMAGANIA:
+----------
+- Python 3.8+
+- PyTorch
+- torchvision
+- matplotlib
+- Pillow
 
-Przed pierwszym uruchomieniem zainstaluj wymagane pakiety:
+INSTALACJA ZALEŻNOŚCI:
+----------------------
+Otwórz terminal/cmd i wpisz:
 
-  pip install -r requirements.txt
+    pip install torch torchvision matplotlib pillow
 
-lub
+Lub jeśli masz GPU NVIDIA (szybsze trenowanie):
 
-  python -m pip install -r requirements.txt
+    pip install torch torchvision --index-url https://download.pytorch.org/whl/cu118
 
 
-2. URUCHOMIENIE APLIKACJI
-═══════════════════════════════════════════════════════════════════════════════
+================================================================================
+JAK URUCHOMIĆ
+================================================================================
 
-2.1 GRAFICZNY INTERFEJS UŻYTKOWNIKA (TUI - Textual User Interface)
-───────────────────────────────────────────────────────────────────────────────
+KROK 1: Otwórz terminal w folderze projektu
+-------------------------------------------
+    cd C:\Users\User\Desktop\Czytanie
 
-  python tui.py
 
-  Interfejs wyświetla:
-  • Wybór trybu pracy (Train, Infinite, Image, Word)
-  • Listę dostępnych modeli do wyboru
-  • Pole do ręcznego podania ścieżki do modelu
-  • Opcję odszumiania (Denoise)
-  • Pole do wpisania ścieżki do pliku
-  • Logi wykonywania operacji
+KROK 2: Pobranie i przygotowanie danych
+--------------------------------
+    python run_local.py --prepare
 
-  Sposób użycia:
-  1. Wybierz tryb pracy z menu Radio Buttons
-  2. Wybierz model z dropdown lub wpisz ścieżkę w pole "Lub podaj ścieżkę do modelu"
-  3. Wpisz ścieżkę do pliku (jeśli wymagane)
-  4. Zaznacz "Denoise" jeśli chcesz odszumić obraz (opcjonalnie)
-  5. Kliknij "Uruchom"
-  6. Obejrzyj wyniki w panelu logów
+    To pobierze dataset Chars74K (~25 MB) i rozpakuje go.
 
 
-2.2 INTERFEJS WIERSZA POLECEŃ (CLI)
-───────────────────────────────────────────────────────────────────────────────
+KROK 3: Wytrenowanie modelu 
+-------------------------------------------------
+    python run_local.py --train --epochs 10
 
-  python run_local.py --help
+    Trenowanie na CPU może potrwać. Na GPU będzie szybciej.
+    Model zostanie zapisany do pliku: model_ocr.pth
 
-  Wyświetla pełną listę dostępnych opcji.
 
+KROK 4: Rozpoznanie własnego zdjęcia
+--------------------------------
+    python run_local.py --image sciezka/do/zdjecia.png
 
-3. TRYBY PRACY
-═══════════════════════════════════════════════════════════════════════════════
+    Przykłady:
+    python run_local.py --image C:\Users\User\Desktop\litera_A.png
+    python run_local.py --image ./test_images/znak.jpg
+    python run_local.py -i moje_zdjecie.png
 
-3.1 ROZPOZNAWANIE POJEDYNCZEJ LITERY
-───────────────────────────────────────────────────────────────────────────────
+================================================================================
+ODSZUMIANIE (opcjonalne)
+================================================================================
 
-  python run_local.py --image PLIK.png [opcje]
+Włączenie odszumiania:
+----------------------
+Dodaj flagę:
+    --denoise
 
-  Przykłady:
-  • Rozpoznaj literkę z domyślnym modelem:
-    python run_local.py --image litera.png
+Wybór metody:
+-------------
+    --denoise-method {nlm-color, median, bilateral, gaussian}
+    (domyślnie: nlm-color)
 
-  • Rozpoznaj literkę z odszumianiem:
-    python run_local.py --image litera.png --denoise
+Dodatkowe parametry:
+--------------------
+    --h       (int, domyślnie 10)     siła NLM dla luminancji (nlm-color)
+    --hColor  (int, domyślnie 10)     siła NLM dla kolorów (nlm-color)
+    --ksize   (int, domyślnie 3)      rozmiar jądra dla median/gaussian (3,5,7,...)
+
+Przykłady użycia:
+-----------------
+1) NLM dla koloru (polecane jako start):
+    python run_local.py --image test_A.png --denoise --denoise-method nlm-color --h 12 --hColor 12
+
+2) Median (gdy masz szum „sól i pieprz”):
+    python run_local.py --image test_A.png --denoise --denoise-method median --ksize 5
+
+3) Bilateral (dobry kompromis: odszumia i zachowuje krawędzie):
+    python run_local.py --image test_A.png --denoise --denoise-method bilateral
+
+4) Gaussian (delikatne wygładzenie):
+    python run_local.py --image test_A.png --denoise --denoise-method gaussian --ksize 5
+
+Uwaga:
+------
+- Odszumianie działa także z trybami:
+    --word  (rozpoznanie wyrazu)
+    --lines (rozpoznanie linii/tekstu)
+  Wystarczy dodać flagi jak wyżej, np.:
+    python run_local.py --word napis.png --denoise --denoise-method nlm-color
+
+- Podgląd obrazu w wynikowym oknie (visualizacja) pokazuje obraz po odszumianiu,
+  jeśli --denoise było włączone.
+
 
-  • Rozpoznaj literkę z wybranym modelem:
-    python run_local.py --image litera.png --model-path ./model_archive/model_20260330_124247.pth
-
-  • Rozpoznaj literkę i zapisz wynik do JSON:
-    python run_local.py --image litera.png --json --json-path wynik.json
-
-
-3.2 ROZPOZNAWANIE WYRAZU (JEDNA LINIA)
-───────────────────────────────────────────────────────────────────────────────
-
-  python run_local.py --word PLIK.png [opcje]
-
-  Przykłady:
-  • Rozpoznaj wyraz:
-    python run_local.py --word wyraz.png
-
-  • Rozpoznaj wyraz z wybranym modelem:
-    python run_local.py --word wyraz.png --model-path ./model_archive/model_20260330_124247.pth
-
-  • Rozpoznaj wyraz z odszumianiem:
-    python run_local.py --word wyraz.png --denoise
-
-
-3.3 ROZPOZNAWANIE TEKSTU WIELOLINIOWEGO
-───────────────────────────────────────────────────────────────────────────────
-
-  python run_local.py --lines PLIK.png [opcje]
-
-  Przykłady:
-  • Rozpoznaj tekst wieloliniowy:
-    python run_local.py --lines tekst.png
-
-  • Rozpoznaj tekst z wybranym modelem:
-    python run_local.py --lines tekst.png --model-path ./model_archive/model_20260330_124247.pth
-
-
-3.4 ROZPOZNAWANIE WIELU ZDJĘĆ LITER
-───────────────────────────────────────────────────────────────────────────────
-
-  python run_local.py --multi PLIK1.png PLIK2.png PLIK3.png [opcje]
-
-  Przykłady:
-  • Rozpoznaj wiele liter:
-    python run_local.py --multi a.png b.png c.png
-
-  • Rozpoznaj wiele liter z wybranym modelem:
-    python run_local.py --multi a.png b.png --model-path ./model_archive/model_20260330_124247.pth
-
-  • Rozpoznaj wiele liter i zapisz do pliku JSON:
-    python run_local.py --multi a.png b.png --json --json-path wyniki.json
-
-
-3.5 TRENING MODELU
-───────────────────────────────────────────────────────────────────────────────
-
-  python run_local.py --train [opcje]
-
-  Opcje treningu:
-  • --epochs LICZBA       - Liczba epok (domyślnie: 10)
-  • --batch-size ROZMIAR  - Rozmiar batcha (domyślnie: 32)
-  • --resume PLIK         - Wznów trening z checkpointu
-
-  Przykłady:
-  • Trenuj model przez 20 epok:
-    python run_local.py --train --epochs 20
-
-  • Trenuj model z większym batchem:
-    python run_local.py --train --epochs 15 --batch-size 64
-
-  • Wznów trening z checkpointu:
-    python run_local.py --train --resume checkpoint.pth
-
-
-3.6 NIESKOŃCZONY TRENING (DO PRZERWANIA CTRL+C)
-───────────────────────────────────────────────────────────────────────────────
-
-  python run_local.py --infinite [opcje]
-
-  Opcje:
-  • --batch-size ROZMIAR       - Rozmiar batcha (domyślnie: 32)
-  • --checkpoint-interval LICZBA - Co ile epok zapisywać checkpoint (domyślnie: 5)
-  • --resume PLIK              - Wznów trening z checkpointu
-
-  Przykłady:
-  • Nieskończony trening z domyślnymi ustawieniami:
-    python run_local.py --infinite
-
-  • Nieskończony trening z większym batchem:
-    python run_local.py --infinite --batch-size 64
-
-  • Nieskończony trening ze checkpointem co 10 epok:
-    python run_local.py --infinite --checkpoint-interval 10
-
-
-4. WYBÓR MODELU
-═══════════════════════════════════════════════════════════════════════════════
-
-4.1 DOSTĘPNE MODELE
-───────────────────────────────────────────────────────────────────────────────
-
-Domyślny model:
-  • ./model_ocr.pth - Główny wytrenowany model
-
-Modele archiwalne (folder ./model_archive):
-  • model_20260330_124247.pth
-  • model_20260330_124249.pth
-  • model_20260330_124250.pth
-  • model_20260330_124251.pth
-  • model_20260330_124252.pth
-  • model_20260330_124253.pth
-
-4.2 UŻYCIE WYBRANEGO MODELU - CLI
-───────────────────────────────────────────────────────────────────────────────
-
-  python run_local.py --image obraz.png --model-path ./model_archive/model_20260330_124250.pth
-
-4.3 UŻYCIE WYBRANEGO MODELU - TUI
-───────────────────────────────────────────────────────────────────────────────
-
-  1. Uruchom: python tui.py
-  2. Wybierz tryb pracy
-  3. W sekcji "Wybierz model:" kliknij na dropdown i wybierz model
-     LUB
-     W polu "Lub podaj ścieżkę do modelu:" wpisz ścieżkę do pliku .pth
-  4. Wpisz ścieżkę do pliku do przetworzenia
-  5. Kliknij "Uruchom"
-
-
-5. OPCJE WYJŚCIA
-═══════════════════════════════════════════════════════════════════════════════
-
-5.1 FORMAT WYJŚCIA
-───────────────────────────────────────────────────────────────────────────────
-
-  --output-format FORMAT  - console | txt | json (domyślnie: console)
-
-  Przykłady:
-  • Wyświetl wynik w konsoli (domyślnie):
-    python run_local.py --image obraz.png
-
-  • Wyświetl wynik jako JSON:
-    python run_local.py --image obraz.png --json
-
-  • Sformatuj JSON (czytelny dla człowieka):
-    python run_local.py --image obraz.png --json --json-pretty
-
-
-5.2 ZAPIS WYNIKU DO PLIKU
-───────────────────────────────────────────────────────────────────────────────
-
-  --output PLIK       - Zapisz wynik do pliku (txt/json)
-  --json-path PLIK    - Zapisz wynik JSON do konkretnego pliku
-
-  Przykłady:
-  • Zapisz wynik do pliku tekstowego:
-    python run_local.py --image obraz.png --output wynik.txt
-
-  • Zapisz wynik jako JSON:
-    python run_local.py --image obraz.png --json --json-path wynik.json
-
-  • Cichy tryb - tylko zapis, bez wypisywania na konsoli:
-    python run_local.py --image obraz.png --quiet --json-path wynik.json
-
-
-6. ODSZUMIANIE
-═══════════════════════════════════════════════════════════════════════════════
-
-Opcja --denoise włącza filtr bilateralny, który:
-  ✓ Zmniejsza szum na obrazie
-  ✓ Zachowuje krawędzie liter
-  ✓ Poprawia dokładność rozpoznawania
-
-  python run_local.py --image zaszumiony_obraz.png --denoise
-
-
-7. PRZYKŁADY UŻYCIA
-═══════════════════════════════════════════════════════════════════════════════
-
-Najprostszy przypadek - rozpoznaj literkę:
-  python run_local.py --image A.png
-
-Rozpoznaj słowo z najnowszym modelem:
-  python run_local.py --word test_word.png --model-path ./model_archive/model_20260330_124253.pth
-
-Rozpoznaj kilka liter i zapisz wyniki:
-  python run_local.py --multi a.png b.png c.png --json --json-pretty --json-path results.json
-
-Trenuj nowy model:
-  python run_local.py --train --epochs 30 --batch-size 64
-
-Nieskończony trening (przerwij Ctrl+C):
-  python run_local.py --infinite --batch-size 32 --checkpoint-interval 5
-
-Użyj TUI do graficznej obsługi:
-  python tui.py
-
-
-8. STRUKTURA KATALOGÓW
-═══════════════════════════════════════════════════════════════════════════════
-
-OCR_ZPI/
-├── tui.py                 - Interfejs graficzny (TUI)
-├── run_local.py           - Skrypt uruchomieniowy CLI
-├── requirements.txt       - Zależności projektu
-├── model_ocr.pth          - Domyślny wytrenowany model
-├── checkpoint.pth         - Checkpoint z ostatniego treningu
-├── model_archive/         - Archiwum wcześniejszych modeli
-│   ├── model_20260330_124247.pth
-│   ├── model_20260330_124249.pth
-│   └── ... (inne modele)
-├── data/                  - Dataset do treningu
-│   └── English/Fnt/       - Obrazy liter
-├── ocr/                   - Moduł OCR
-│   ├── main.py           - Punkt wejścia aplikacji
-│   ├── model.py          - Architektura sieci neuronowej
-│   ├── trainer.py        - Logika treningu
-│   ├── inference.py      - Logika rozpoznawania
-│   ├── config.py         - Konfiguracja projektu
-│   ├── utils.py          - Funkcje pomocnicze
-│   └── ... (inne moduły)
-└── wynik/                 - Katalog z wynikami (tworzy się automatycznie)
-
-
-9. ROZWIĄZYWANIE PROBLEMÓW
-═══════════════════════════════════════════════════════════════════════════════
-
-Problem: ModuleNotFoundError: No module named 'textual'
-Rozwiązanie:
-  pip install textual
-  lub
-  pip install -r requirements.txt
-
-Problem: UWAGA: Nie znaleziono modelu ./model_ocr.pth
-Rozwiązanie:
-  - Najpierw wytrenuj model: python run_local.py --train
-  - Lub użyj model z archiwum: python run_local.py --image obraz.png --model-path ./model_archive/model_20260330_124253.pth
-
-Problem: Model nie istnieje: ./model_archive/model_XXXX.pth
-Rozwiązanie:
-  - Sprawdź nazwy modeli w folderze model_archive
-  - Użyj pełną ścieżkę do modelu
-  - W TUI wybierz model z dropdown zamiast ręcznego wpisywania
-
-Problem: CUDA/GPU nie jest dostępny
-Rozwiązanie:
-  - Aplikacja automatycznie spadnie na CPU
-  - Rozpoznawanie będzie wolniejsze, ale powinno działać poprawnie
-
-Problem: Out of Memory (OOM) podczas treningu
-Rozwiązanie:
-  - Zmniejsz batch-size: --batch-size 16
-  - Zmniejsz epochs: --epochs 5
-  - Zabiłem procesy na GPU: nvidia-smi (Linux/WSL) lub Task Manager (Windows)
-
-
-10. SKRÓTY KLAWISZOWE - TUI
-═══════════════════════════════════════════════════════════════════════════════
-
-  Tab            - Przełączanie między elementami interfejsu
-  Enter/Space    - Zatwierdzenie wyboru
-  Ctrl+C         - Wyjście z aplikacji (w trakcie treningu: Stop)
-  Arrow Keys     - Nawigacja w menu
-
-
-11. NOTATKI
-═══════════════════════════════════════════════════════════════════════════════
-
-• Modele są zapisane w formacie PyTorch (.pth)
-• Każda sesja rozpoznawania tworzy kopię obrazu w folderze z datą (./YYYY-MM-DD/)
-• Wyniki JSON zawierają pewność rozpoznania (confidence) i prawdopodobieństwa dla każdej litery
-• Zalecane wymiary obrazu: 28x28 pikseli dla pojedynczych liter
-• Model obsługuje litery A-Z i a-z (46 klas)
-• Trening wymaga datasetu EnglishFnt (pobierany automatycznie)
-
-
-═══════════════════════════════════════════════════════════════════════════════
-                              AUTOR: OCR_ZPI
-                           OSTATNIA AKTUALIZACJA: 2026-03-31
-═══════════════════════════════════════════════════════════════════════════════
+================================================================================
+WSZYSTKIE OPCJE
+================================================================================
+
+    python run_local.py --help
+
+    --prepare, -p     Tylko pobierz i przygotuj dane
+    --train, -t       Trenuj model
+    --epochs, -e      Liczba epok trenowania (domyślnie 10)
+    --image, -i       Ścieżka do zdjęcia do rozpoznania
+
+
+================================================================================
+JAK DODAĆ WŁASNE ZDJĘCIE
+================================================================================
+
+1. PRZYGOTOWANIE ZDJĘCIA:
+   - Zdjęcie powinno zawierać JEDEN znak (literę lub cyfrę)
+   - Najlepiej na jasnym/białym tle
+   - Formaty: PNG, JPG, JPEG, BMP
+   - Dowolny rozmiar (zostanie przeskalowane do 48x48)
+
+2. PRZYKŁADOWE ZDJĘCIA TESTOWE:
+   Możesz stworzyć własne zdjęcia w programie Paint:
+   - Otwórz Paint
+   - Ustaw rozmiar obrazu np. 100x100 pikseli
+   - Napisz jedną literę lub cyfrę
+   - Zapisz jako PNG
+
+3. URUCHOMIENIE:
+   python run_local.py --image nazwa_pliku.png
+
+
+================================================================================
+STRUKTURA PLIKÓW
+================================================================================
+
+Czytanie/
+├── run_local.py              <- Główny skrypt (uruchamiasz ten plik)
+├── chars74k_ocr_preparation.py  <- Wersja jako moduł Python
+├── chars74k_ocr_colab.ipynb     <- Wersja dla Google Colab
+├── INSTRUKCJA.txt            <- Ta instrukcja
+├── model_ocr.pth             <- Wytrenowany model (po trenowaniu)
+├── prediction_result.png     <- Wynik rozpoznawania (po predykcji)
+└── data/                     <- Folder z danymi (tworzony automatycznie)
+    ├── EnglishFnt.tgz        <- Pobrany dataset
+    └── English/
+        └── Fnt/              <- Rozpakowane obrazy znaków
+
+
+================================================================================
+PRZYKŁAD SESJI
+================================================================================
+
+C:\Users\User\Desktop\Czytanie> python run_local.py --prepare
+Pobieranie datasetu z http://www.ee.surrey.ac.uk/CVSSP/demos/chars74k/EnglishFnt.tgz...
+Postęp: 100.0%
+Pobrano!
+Rozpakowywanie...
+Rozpakowano!
+Dane przygotowane!
+
+C:\Users\User\Desktop\Czytanie> python run_local.py --train --epochs 5
+============================================================
+TRENOWANIE MODELU
+============================================================
+Urządzenie: cpu
+Zbiór treningowy: 5765 obrazów
+Zbiór walidacyjny: 1442 obrazów
+Liczba klas: 62
+Epoch [1/5], Step [50/181], Loss: 2.3456
+...
+Trenowanie zakończone! Najlepsza dokładność: 85.23%
+Model zapisany do: ./model_ocr.pth
+
+C:\Users\User\Desktop\Czytanie> python run_local.py --image test_A.png
+Używane urządzenie: cpu
+Rozpoznawanie zdjęcia: test_A.png
+Wczytywanie modelu z ./model_ocr.pth...
+Model wczytany!
+
+========================================
+WYNIK: 'A' (pewność: 94.5%)
+========================================
+
+Top 5 predykcji:
+  1. 'A' - 94.5%
+  2. '4' - 2.1%
+  3. 'H' - 1.3%
+  4. 'a' - 0.8%
+  5. 'R' - 0.5%
+
+
+================================================================================
+ROZWIĄZYWANIE PROBLEMÓW
+================================================================================
+
+PROBLEM: "ModuleNotFoundError: No module named 'torch'"
+ROZWIĄZANIE: pip install torch torchvision
+
+PROBLEM: "No such file or directory"
+ROZWIĄZANIE: Upewnij się, że jesteś w folderze Czytanie
+             cd C:\Users\User\Desktop\Czytanie
+
+PROBLEM: "UWAGA: Nie znaleziono modelu model_ocr.pth"
+ROZWIĄZANIE: Najpierw wytrenuj model: python run_local.py --train
+
+PROBLEM: Rozpoznawanie słabe/niepoprawne
+ROZWIĄZANIE:
+- Upewnij się, że zdjęcie zawiera tylko jeden znak
+- Znak powinien być czytelny i na kontrastowym tle
+- Wytrenuj model dłużej: python run_local.py --train --epochs 20
+
+================================================================================

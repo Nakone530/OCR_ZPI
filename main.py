@@ -87,6 +87,12 @@ def build_parser() -> argparse.ArgumentParser:
                         help="Minimalna wysokość boxa litery po segmentacji (domyślnie: 5)")
     parser.add_argument("--ws-min-box-area", type=int, default=20,
                         help="Minimalne pole boxa litery po segmentacji (domyślnie: 20)")
+    parser.add_argument("--ws-merge-gap", type=int, default=4,
+                        help="Maksymalna przerwa pozioma między fragmentami do scalenia (domyślnie: 4)")
+    parser.add_argument("--ws-merge-height-ratio", type=float, default=1.8,
+                        help="Maksymalny stosunek wysokości fragmentów do scalenia (domyślnie: 1.8)")
+    parser.add_argument("--ws-merge-vert-dist", type=int, default=4,
+                        help="Maksymalna odległość pionowa do scalenia fragmentów (domyślnie: 4)")
 
     # Parametry wyjścia
     parser.add_argument("--output", "-o", type=str, metavar="PLIK",

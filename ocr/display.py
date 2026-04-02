@@ -24,8 +24,8 @@ def visualize_prediction(
     predicted_char: str,
     confidence: float,
     args,
-    save_path: str = RESULT_IMAGE_PATH,
     info=print,
+    save_path: str = RESULT_IMAGE_PATH,
 ) -> None:
     """
     Wizualizuje wynik predykcji - wyświetla obraz z tytułem i zapisuje do pliku.
@@ -209,4 +209,4 @@ def print_multi_result(image_path: str, predicted_char: str, confidence: float, 
         >>> print_multi_result("letter1.png", "A", 98.2)
           letter1.png  →  'A' (98.2%)
     """
-    info(f"  {image_path}  →  '{predicted_char}' ({confidence:.1f}%)")
+    info(f"  {image_path}  ->  '{predicted_char}' ({confidence:.1f}%)")

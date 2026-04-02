@@ -1,6 +1,7 @@
 import sys
 import os
 import threading
+import queue
 from pathlib import Path
 from textual.app import App, ComposeResult
 from textual.widgets import (
@@ -205,15 +206,15 @@ class RecognizeScreen(Screen):
                 
                 def info(msg):
                     # Thread-safe write to log
-                    self.call_from_thread(log.write_line, msg)
+                    self.app.call_from_thread(log.write_line, msg)
                 
                 main(parsed_args, info)
-                self.call_from_thread(log.write_line, "\n" + "━" * 40)
-                self.call_from_thread(log.write_line, " Rozpoznawanie ukończone!")
+                self.app.call_from_thread(log.write_line, "\n" + "━" * 40)
+                self.app.call_from_thread(log.write_line, " Rozpoznawanie ukończone!")
             except Exception as e:
-                self.call_from_thread(log.write_line, f"\n Błąd: {str(e)}")
+                self.app.call_from_thread(log.write_line, f"\n Błąd: {str(e)}")
                 import traceback
-                self.call_from_thread(log.write_line, traceback.format_exc())
+                self.app.call_from_thread(log.write_line, traceback.format_exc())
         
         # Start thread
         thread = threading.Thread(target=run_recognition_thread, daemon=True)
@@ -272,6 +273,7 @@ class TrainScreen(Screen):
         yield Static("\n")
         with Horizontal():
             yield Button(" Rozpocznij trening [Enter]", id="train_run")
+            yield Button(" Zatrzymaj trening", id="train_stop", variant="error")
             yield Button(" Powrót [Esc]", id="back_btn")
         
         yield Static("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
@@ -281,6 +283,8 @@ class TrainScreen(Screen):
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "train_run":
             self._run_training()
+        elif event.button.id == "train_stop":
+            self._stop_training()
         elif event.button.id == "back_btn":
             self.app.pop_screen()
     
@@ -291,6 +295,13 @@ class TrainScreen(Screen):
     def action_back(self):
         """Action dla Escape key"""
         self.app.pop_screen()
+    
+    def _stop_training(self):
+        """Zatrzymaj nieskończony trening"""
+        from ocr.trainer import stop_training
+        stop_training()
+        log = self.query_one("#output_log", Log)
+        log.write_line("\n⏹️  Zatrzymywanie treningu...")
 
     def _run_training(self):
         """Uruchom trening w oddzielnym wątku"""
@@ -345,17 +356,17 @@ class TrainScreen(Screen):
                 
                 def info(msg):
                     # Thread-safe write to log
-                    self.call_from_thread(log.write_line, msg)
+                    self.app.call_from_thread(log.write_line, msg)
                 
                 main(parsed_args, info)
-                self.call_from_thread(log.write_line, "\n" + "━" * 40)
-                self.call_from_thread(log.write_line, " Trening ukończony!")
+                self.app.call_from_thread(log.write_line, "\n" + "━" * 40)
+                self.app.call_from_thread(log.write_line, " Trening ukończony!")
             except KeyboardInterrupt:
-                self.call_from_thread(log.write_line, "\n  Trening przerwany przez użytkownika")
+                self.app.call_from_thread(log.write_line, "\n  Trening przerwany przez użytkownika")
             except Exception as e:
-                self.call_from_thread(log.write_line, f"\n Błąd: {str(e)}")
+                self.app.call_from_thread(log.write_line, f"\n Błąd: {str(e)}")
                 import traceback
-                self.call_from_thread(log.write_line, traceback.format_exc())
+                self.app.call_from_thread(log.write_line, traceback.format_exc())
         
         # Start thread
         thread = threading.Thread(target=run_training_thread, daemon=True)

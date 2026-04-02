@@ -190,7 +190,7 @@ def main(args=None, info=None, buffor=None) -> None:
     parser = build_parser()
     # ── Trening ──
     if args.train:
-        train_model(epochs=args.epochs, batch_size=args.batch_size, model_path=args.resume)
+        train_model(epochs=args.epochs, batch_size=args.batch_size, model_path=args.resume, info=info)
 
     # ── Nieskończony trening ──
     elif args.infinite:
@@ -199,7 +199,8 @@ def main(args=None, info=None, buffor=None) -> None:
         infinite_train(
             batch_size=args.batch_size,
             model_path=args.resume,
-            checkpoint_interval=args.checkpoint_interval
+            checkpoint_interval=args.checkpoint_interval,
+            info=info
         )
 
     # ── Pojedyncza litera ──
@@ -208,7 +209,7 @@ def main(args=None, info=None, buffor=None) -> None:
         info(f"\nRozpoznawanie: {args.image}")
         saved_copy_path = save_image_to_today_folder(args.image)
 
-        model = load_model(model_path, device)
+        model = load_model(model_path, device, info)
         predicted_char, confidence, probs = predict_image(args.image, model, device, args)
 
         output_handler = create_output_handler(args, source_image=args.image)
@@ -236,14 +237,14 @@ def main(args=None, info=None, buffor=None) -> None:
             print_single_result(predicted_char, confidence, info)
             print_top5(probs, info)
 
-    # ── Wyraz ──
+     # ── Wyraz ──
     elif args.word:
         _require_file(args.word)
 
         info(f"\nRozpoznawanie wyrazu: {args.word}")
         saved_copy_path = save_image_to_today_folder(args.word)
 
-        model = load_model(model_path, device)
+        model = load_model(model_path, device, info)
         word, avg_word_confidence, class_confidence = predict_word(args.word, model, device, args)
         if args.json:
             payload = build_word_result_json(
@@ -260,13 +261,13 @@ def main(args=None, info=None, buffor=None) -> None:
         else:
             print_word_result(word, avg_word_confidence, class_confidence, info)
 
-    # ── Tekst wieloliniowy ──
+     # ── Tekst wieloliniowy ──
     elif args.lines:
         _require_file(args.lines)
         info(f"\nRozpoznawanie tekstu: {args.lines}")
         saved_copy_path = save_image_to_today_folder(args.lines)
 
-        model = load_model(model_path, device)
+        model = load_model(model_path, device, info)
         text, words_with_confidence, class_confidence = predict_segments(args.lines, model, device, args)
 
         if args.json:
@@ -284,9 +285,9 @@ def main(args=None, info=None, buffor=None) -> None:
         else:
             print_text_result(text, words_with_confidence, class_confidence, info)
 
-    # ── Wiele zdjęć ──
+     # ── Wiele zdjęć ──
     elif args.multi:
-        model = load_model(model_path, device)
+        model = load_model(model_path, device, info)
         info(f"\nRozpoznawanie {len(args.multi)} pliku(-ów):")
 
         results = []

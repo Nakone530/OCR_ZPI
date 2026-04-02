@@ -27,7 +27,7 @@ from .display import visualize_prediction
 
 #print(matplotlib.get_backend())
 
-def load_model(model_path: str = MODEL_PATH, device: torch.device = None) -> nn.Module:
+def load_model(model_path: str = MODEL_PATH, device: torch.device = None, info=None) -> nn.Module:
     """
     Wczytuje wytrenowany model SimpleCNN z pliku.
     
@@ -42,6 +42,7 @@ def load_model(model_path: str = MODEL_PATH, device: torch.device = None) -> nn.
                                     Domyślnie MODEL_PATH z config.
         device (torch.device, opcjonalnie): Urządzenie do załadowania modelu.
                                          Domyślnie auto-wykrywane (CUDA/CPU).
+        info (callable, opcjonalnie): Funkcja do logowania. Domyślnie print.
     
     Zwraca:
         nn.Module: Załadowany model SimpleCNN w trybie ewaluacji (eval mode).
@@ -60,11 +61,14 @@ def load_model(model_path: str = MODEL_PATH, device: torch.device = None) -> nn.
         Jeśli plik modelu nie istnieje, zwraca niezainicjowany model
         z losowymi wagami (wyniki będą losowe).
     """
+    if info is None:
+        info = print
+    
     if device is None:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     if os.path.exists(model_path):
-        print(f"Wczytywanie modelu z {model_path}...")
+        info(f"Wczytywanie modelu z {model_path}...")
 
         checkpoint = torch.load(model_path, map_location=device)
 
@@ -78,16 +82,16 @@ def load_model(model_path: str = MODEL_PATH, device: torch.device = None) -> nn.
 
         # Automatycznie wykryj liczbę klas z zapisanego modelu
         num_classes_from_model = state_dict["classifier.4.weight"].shape[0]
-        print(f"Wykryto {num_classes_from_model} klas w zapisanym modelu")
+        info(f"Wykryto {num_classes_from_model} klas w zapisanym modelu")
 
         model = SimpleCNN(num_classes=num_classes_from_model)
         model.load_state_dict(state_dict)
-        print(f"Wczytano {format_info}")
-        print("Model wczytany!")
+        info(f"Wczytano {format_info}")
+        info("Model wczytany!")
     else:
-        print(f"UWAGA: Nie znaleziono modelu {model_path}")
-        print("Model nie jest wytrenowany - wyniki będą losowe!")
-        print("Najpierw uruchom: python run_local.py --train")
+        info(f"UWAGA: Nie znaleziono modelu {model_path}")
+        info("Model nie jest wytrenowany - wyniki będą losowe!")
+        info("Najpierw uruchom: python run_local.py --train")
         model = SimpleCNN(num_classes=NUM_CLASSES)
 
     model.to(device)

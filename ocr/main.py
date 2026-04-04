@@ -25,6 +25,7 @@ import sys
 
 import torch
 
+from typing import Optional, List
 from ocr.config import MODEL_PATH
 from ocr.inference import get_active_chars, load_model, predict_image, predict_segments, predict_word
 from ocr.output import OCRResult, create_output_handler
@@ -46,6 +47,9 @@ from ocr.display import (
     print_word_result,
     visualize_prediction,
 )
+
+#--State
+
 
 
 # ── Parsowanie argumentów ──────────────────────────────────────────────────────
@@ -85,6 +89,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--denoise", action="store_true",
                         help="Włącz odszumianie (filtr bilateralny - zachowuje krawędzie)")
 
+    # Parametr modelu
+    parser.add_argument("--model-path", type=str, default=None, metavar="PLIK",
+                        help="Ścieżka do wytrenowanego modelu (domyślnie: model_ocr.pth)")
+
     # Parametry wyjścia
     parser.add_argument("--output", "-o", type=str, metavar="PLIK",
                         help="Zapisz wynik do pliku (txt/json)")
@@ -113,32 +121,73 @@ def build_parser() -> argparse.ArgumentParser:
 
     return parser
 
+#-- state -> args
+
+def build_args(state):
+    args = []
+
+    if state["mode"] == "train":
+        args.append("--train")
+        args += ["--epochs", str(state["epochs"])]
+        args += ["--batch-size", str(state["batch_size"])]
+        
+    if state["denoise"]:
+        args.append("--denoise")
+
+    elif state["mode"] == "image":
+        args += ["--image", state["input_path"]]
+
+    if state["json"]:
+        args.append("--json")
+
+    return args
 
 # ── Pomocnik walidacji pliku ───────────────────────────────────────────────────
 
-def _require_file(path: str) -> None:
+def _require_file(path: str):
     if not os.path.exists(path):
         print(f"Błąd: Nie znaleziono pliku {path}")
         sys.exit(1)
 
 
-# ── Main ───────────────────────────────────────────────────────────────────────
 
-def main() -> None:
+#--args
+def make_args() -> None:
     parser = build_parser()
     args = parser.parse_args()
+    return args
 
-    # W trybie quiet, komunikaty informacyjne idą na stderr
-    import sys
-    def info(msg):
-        if args.quiet:
+# ── Main ───────────────────────────────────────────────────────────────────────
+
+def make_info(buffer= None):
+    if buffer is None:
+        buffer = []
+
+    def info(msg, quiet=False):
+        buffer.append(msg)
+        if quiet:
             print(msg, file=sys.stderr)
         else:
             print(msg)
+    return info, buffer
 
+def main(args=None, info=None, buffor=None) -> None:
+    if args is None:
+        args = make_args()
+
+    if info is None:
+        info, buffor = make_info()
+        
+    if buffor is None:
+        buffor = []
+    
+    # Ustal ścieżkę modelu: użyj args.model_path jeśli jest dostępne, inaczej MODEL_PATH
+    model_path = getattr(args, 'model_path', None) or MODEL_PATH
+    
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     info(f"Używane urządzenie: {device}")
-
+    info(f"Używany model: {model_path}")
+    parser = build_parser()
     # ── Trening ──
     if args.train:
         train_model(epochs=args.epochs, batch_size=args.batch_size, model_path=args.resume)
@@ -159,13 +208,13 @@ def main() -> None:
         info(f"\nRozpoznawanie: {args.image}")
         saved_copy_path = save_image_to_today_folder(args.image)
 
-        model = load_model(MODEL_PATH, device)
+        model = load_model(model_path, device)
         predicted_char, confidence, probs = predict_image(args.image, model, device, args)
         active_labels = get_active_chars()
 
 
         if not args.quiet:
-            visualize_prediction(args.image, predicted_char, confidence, args)
+            visualize_prediction(args.image, predicted_char, confidence, args, info)
 
         if args.json:
             payload = build_image_result_json(
@@ -182,8 +231,8 @@ def main() -> None:
                 out_path = os.path.splitext(saved_copy_path)[0] + ".json"
             write_json(out_path, payload, pretty=args.json_pretty)
         else:
-            print_single_result(predicted_char, confidence)
-            print_top5(probs)
+            print_single_result(predicted_char, confidence, info)
+            print_top5(probs, info)
 
     # ── Wyraz ──
     elif args.word:
@@ -192,7 +241,7 @@ def main() -> None:
         info(f"\nRozpoznawanie wyrazu: {args.word}")
         saved_copy_path = save_image_to_today_folder(args.word)
 
-        model = load_model(MODEL_PATH, device)
+        model = load_model(model_path, device)
         word, avg_word_confidence, class_confidence = predict_word(args.word, model, device, args)
         if args.json:
             payload = build_word_result_json(
@@ -207,7 +256,7 @@ def main() -> None:
                 out_path = os.path.splitext(saved_copy_path)[0] + ".json"
             write_json(out_path, payload, pretty=args.json_pretty)
         else:
-            print_word_result(word, avg_word_confidence, class_confidence)
+            print_word_result(word, avg_word_confidence, class_confidence, info)
 
     # ── Tekst wieloliniowy ──
     elif args.lines:
@@ -215,7 +264,7 @@ def main() -> None:
         info(f"\nRozpoznawanie tekstu: {args.lines}")
         saved_copy_path = save_image_to_today_folder(args.lines)
 
-        model = load_model(MODEL_PATH, device)
+        model = load_model(model_path, device)
         text, words_with_confidence, class_confidence = predict_segments(args.lines, model, device, args)
 
         if args.json:
@@ -231,11 +280,11 @@ def main() -> None:
                 out_path = os.path.splitext(saved_copy_path)[0] + ".json"
             write_json(out_path, payload, pretty=args.json_pretty)
         else:
-            print_text_result(text, words_with_confidence, class_confidence)
+            print_text_result(text, words_with_confidence, class_confidence, info)
 
     # ── Wiele zdjęć ──
     elif args.multi:
-        model = load_model(MODEL_PATH, device)
+        model = load_model(model_path, device)
         info(f"\nRozpoznawanie {len(args.multi)} pliku(-ów):")
 
         results = []
@@ -254,7 +303,7 @@ def main() -> None:
             })
 
             if not args.json:
-                print_multi_result(img_path, predicted_char, confidence)
+                print_multi_result(img_path, predicted_char, confidence, info)
 
         if args.json:
             payload = build_multi_result_json(
@@ -321,7 +370,8 @@ def main() -> None:
         print("  python main.py --lines tekst.png")
         print("  python main.py --multi a.png b.png c.png")
         print("=" * 60)
-
-
+        
+    all_text = "\n".join(buffor)
+    return all_text
 if __name__ == "__main__":
     main()

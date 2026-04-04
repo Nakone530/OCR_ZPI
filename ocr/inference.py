@@ -69,7 +69,7 @@ def _label_for_idx(idx: int) -> str:
         return ACTIVE_CHARS[idx]
     return f"<UNK:{idx}>"
 
-print(matplotlib.get_backend())
+#print(matplotlib.get_backend())
 
 def load_model(model_path: str = MODEL_PATH, device: torch.device = None) -> nn.Module:
     """

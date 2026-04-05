@@ -14,7 +14,6 @@ from .config import CHARS
 from .utils import load_and_optionally_denoise
 
 
-RESULT_IMAGE_PATH = "prediction_result.png"
 
 
 # ── Wizualizacja ───────────────────────────────────────────────────────────────
@@ -24,7 +23,6 @@ def visualize_prediction(
     predicted_char: str,
     confidence: float,
     args,
-    save_path: str = RESULT_IMAGE_PATH,
     info=print,
 ) -> None:
     """
@@ -38,16 +36,12 @@ def visualize_prediction(
         predicted_char (str): Rozpoznany znak (np. "A").
         confidence (float): Pewność predykcji w procentach (0-100).
         args: Obiekt argparse.Namespace z parametrami odszumiania.
-        save_path (str, opcjonalnie): Ścieżka do zapisania wizualizacji.
-                                   Domyślnie "prediction_result.png".
     
     Zwraca:
         None
     
-    Efekty uboczne:
+    Efekty:
         - Wyświetla okno matplotlib z obrazem
-        - Zapisuje wizualizację do pliku PNG
-        - Wypisuje komunikat o zapisie na konsolę
     
     Przykład:
         >>> visualize_prediction("letter.png", "B", 95.5, args)
@@ -63,9 +57,7 @@ def visualize_prediction(
     )
     plt.axis("off")
     plt.tight_layout()
-    plt.savefig(save_path, dpi=150, bbox_inches="tight")
     plt.show()
-    info(f"Zapisano wizualizację do: {save_path}")
 
 
 # ── Wyniki w konsoli ───────────────────────────────────────────────────────────

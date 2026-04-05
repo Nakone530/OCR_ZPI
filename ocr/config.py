@@ -39,10 +39,10 @@ EXTRACTED_DIR = os.path.join(DATA_DIR, "English", "Fnt")
 
 # ── Model ─────────────────────────────────────────────────────────────────────
 # Ścieżka do zapisanego wytrenowanego modelu
-MODEL_PATH = "./model_ocr.pth"
+MODEL_PATH = "./models/model_ocr.pth"
 
 # Ścieżka do checkpointu (do wznawiania treningu)
-CHECKPOINT_PATH = "./checkpoint.pth"
+CHECKPOINT_PATH = "./models/checkpoint.pth"
 
 # Ścieżka do archiwum starych modeli
 MODEL_ARCHIVE_DIR = "./model_archive"

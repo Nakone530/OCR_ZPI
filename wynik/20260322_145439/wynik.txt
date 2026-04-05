@@ -1,9 +1,0 @@
-Rozpoznany znak: T
-Pewność: 68.4%
-
-Top 5 predykcji:
-  1. 'T' - 68.4%
-  2. 'I' - 31.2%
-  3. 'J' - 0.3%
-  4. 'S' - 0.0%
-  5. 'L' - 0.0%

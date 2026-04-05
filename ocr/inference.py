@@ -515,9 +515,6 @@ def predict_segments(
                     continue
 
                 letter_img = preprocess_letter(letter_img)
-                plt.imshow(letter_img, cmap='gray')
-                plt.axis('off')  # optional: hide axes
-                plt.show()
                 predicted_char, confidence, _ = _classify_letter(letter_img, model, device, 1)
                 line_text += predicted_char
                 current_word_chars.append(predicted_char)

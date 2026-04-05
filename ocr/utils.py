@@ -274,7 +274,7 @@ def get_today_folder() -> str:
         >>> print(folder)
         './2024-01-15'
     """
-    folder = os.path.join(".", date.today().strftime("%Y-%m-%d"))
+    folder = os.path.join("./outputs/", date.today().strftime("%Y-%m-%d"))
     os.makedirs(folder, exist_ok=True)
     return folder
 

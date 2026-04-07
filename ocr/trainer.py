@@ -29,6 +29,7 @@ from .config import (
 from .model import SimpleCNN
 from .utils import get_train_transform
 from .model_archive import ModelArchiver
+from . import info
 
 
 # -- globalne
@@ -51,24 +52,24 @@ BEST_MODEL_STATE = None  # przechowuje stan najlepszego modelu
 def download_dataset() -> None:
     """Pobiera archiwum datasetu, jeśli jeszcze go nie ma."""
     if not os.path.exists(ARCHIVE_PATH):
-        print(f"Brak archiwum datasetu: {ARCHIVE_PATH}")
+        info(f"Brak archiwum datasetu: {ARCHIVE_PATH}")
         os.makedirs(os.path.dirname(ARCHIVE_PATH), exist_ok=True)
 
         def _show_progress(block_num, block_size, total_size):
             downloaded = block_num * block_size
             if total_size > 0:
                 percent = min(100, downloaded * 100 / total_size)
-                print(f"\rPobieranie: {percent:5.1f}%", end="")
+                info(f"Pobieranie: {percent:5.1f}%")
 
-        print(f"Pobieranie datasetu z: {DATA_URL}")
+        info(f"Pobieranie datasetu z: {DATA_URL}")
         urllib.request.urlretrieve(DATA_URL, ARCHIVE_PATH, _show_progress)
-        print("\nPobrano!")
+        info("Pobrano!")
 
     if not os.path.exists(EXTRACTED_DIR):
-        print("Rozpakowywanie...")
+        info("Rozpakowywanie...")
         with tarfile.open(ARCHIVE_PATH, "r:gz") as tar:
             tar.extractall(path=DATA_DIR)
-        print("Rozpakowano!")
+        info("Rozpakowano!")
 
 
 def _dataset_has_lowercase_classes(class_names: list[str]) -> bool:
@@ -80,21 +81,21 @@ def _dataset_looks_like_chars74k(class_names: list[str]) -> bool:
 
 
 def _print_dataset_class_diagnostics(class_names: list[str]) -> None:
-    print(f"Wykryto {len(class_names)} klas w datasecie.")
+    info(f"Wykryto {len(class_names)} klas w datasecie.")
 
     if _dataset_has_lowercase_classes(class_names):
-        print("Dataset zawiera małe litery.")
+        info("Dataset zawiera małe litery.")
         return
 
     if _dataset_looks_like_chars74k(class_names):
-        print("[UWAGA] Wykryto klasy w formacie Chars74K (SampleXXX).")
-        print("        Upewnij się, że używasz pełnego zestawu liter (A-Z + a-z).")
+        info("[UWAGA] Wykryto klasy w formacie Chars74K (SampleXXX).")
+        info("        Upewnij się, że używasz pełnego zestawu liter (A-Z + a-z).")
         return
 
-    print("[UWAGA] Dataset nie zawiera małych liter jako osobnych klas.")
-    print("        W tym stanie model nie nauczy się rozpoznawać a-z.")
-    print("        Sprawdź katalog treningowy:")
-    print(f"        {EXTRACTED_DIR}")
+    info("[UWAGA] Dataset nie zawiera małych liter jako osobnych klas.")
+    info("        W tym stanie model nie nauczy się rozpoznawać a-z.")
+    info("        Sprawdź katalog treningowy:")
+    info(f"        {EXTRACTED_DIR}")
 
 
 # -- Trening
@@ -112,42 +113,42 @@ def _robust_torch_save(payload: dict, path: str, retries: int = 3, delay_s: floa
             return path
         except Exception as exc:
             last_exc = exc
-            print(f"[WARN] Nie udało się zapisać '{path}' (próba {attempt}/{retries}): {exc}")
+            info(f"[WARN] Nie udało się zapisać '{path}' (próba {attempt}/{retries}): {exc}")
             if attempt < retries:
                 time.sleep(delay_s)
 
     base, ext = os.path.splitext(path)
     fallback = f"{base}_{datetime.now().strftime('%Y%m%d_%H%M%S')}{ext}"
-    print(f"[WARN] Zapis awaryjny do: {fallback}")
+    info(f"[WARN] Zapis awaryjny do: {fallback}")
     torch.save(payload, fallback)
     return fallback
 
 def handler(signum, frame):
     """Handler dla zwykłego treningu (nie-nieskończonego)."""
-    print(f"\nOdebrano sygnał: {signum}")
+    info(f"\nOdebrano sygnał: {signum}")
     checkpoint_path = save_model(CHECKPOINT_PATH)
-    print("Program działa.")
+    info("Program działa.")
     paused = True
     while paused:
-        print("\n--- MENU ---")
-        print("1. Wznów")
-        print("2. Zapisz najlepszy")
-        print("3. Wyjście bez zapisu")
+        info("\n--- MENU ---")
+        info("1. Wznów")
+        info("2. Zapisz najlepszy")
+        info("3. Wyjście bez zapisu")
 
         choice = input("Wybierz opcję: ")
 
         if choice == "1":
-            print("Wznawianie")
+            info("Wznawianie")
             train_model(10, 32, CHECKPOINT_PATH)
         elif choice == "2":
-            print("Zapisywanie najlepszego (obecnie nie do końca działa, zapisuje ostatni stan)")
+            info("Zapisywanie najlepszego (obecnie nie do końca działa, zapisuje ostatni stan)")
             save_model(MODEL_PATH)
         elif choice == "3":
-            print("Zamykanie programu...")
+            info("Zamykanie programu...")
             paused = False
 
         else:
-            print("Nieprawidłowy wybór!")
+            info("Nieprawidłowy wybór!")
     sys.exit(0)
 
 
@@ -155,10 +156,10 @@ def infinite_handler(signum, frame):
     """Handler dla nieskończonego treningu - ustawia flagę pauzy."""
     global TRAINING_PAUSED
     TRAINING_PAUSED = True
-    print("\n\n" + "="*60)
-    print("  PRZERWANIE TRENINGU (Ctrl+C)")
-    print("  Trening zostanie wstrzymany po aktualnym kroku...")
-    print("="*60 + "\n")
+    info("\n\n" + "="*60)
+    info("  PRZERWANIE TRENINGU (Ctrl+C)")
+    info("  Trening zostanie wstrzymany po aktualnym kroku...")
+    info("="*60 + "\n")
 
 
 # Rejestracja obsługi sygnału SIGINT (Ctrl+C)
@@ -178,7 +179,7 @@ def _archive_previous_model(current_model_path):
             # Czyszczenie starych archiwów
             archiver.cleanup_old_archives(keep_count=MODEL_ARCHIVE_KEEP_COUNT)
     except Exception as e:
-        print(f"[WARN] Błąd podczas archiwizacji modelu: {e}")
+        info(f"[WARN] Błąd podczas archiwizacji modelu: {e}")
 
 def save_model(path):
     """Zapisuje aktualny stan modelu do pliku."""
@@ -195,7 +196,7 @@ def save_model(path):
         "class_names": GLOBAL_CLASS_NAMES,
     }, path)
 
-    print(f"Model zapisany do: {saved_path}")
+    info(f"Model zapisany do: {saved_path}")
     
     # Archiwizuj poprzedni model jeśli jest to główny model
     if path == MODEL_PATH:
@@ -209,11 +210,11 @@ def save_best_model(path):
     global BEST_MODEL_STATE, GLOBAL_BEST_ACC
     
     if BEST_MODEL_STATE is None:
-        print("Brak zapisanego najlepszego modelu - zapisuję aktualny stan.")
+        info("Brak zapisanego najlepszego modelu - zapisuję aktualny stan.")
         return save_model(path)
-    
+
     saved_path = _robust_torch_save(BEST_MODEL_STATE, path)
-    print(f"Najlepszy model (acc: {BEST_MODEL_STATE.get('best_acc', 0):.2f}%) zapisany do: {saved_path}")
+    info(f"Najlepszy model (acc: {BEST_MODEL_STATE.get('best_acc', 0):.2f}%) zapisany do: {saved_path}")
     return saved_path
 
 
@@ -246,7 +247,7 @@ def init_or_load_model(num_classes, model_path=None):
     GLOBAL_OPTIMIZER = torch.optim.Adam(GLOBAL_MODEL.parameters(), lr=0.001)
 
     if model_path and os.path.exists(model_path):
-        print(f"Wczytywanie modelu z: {model_path}")
+        info(f"Wczytywanie modelu z: {model_path}")
         checkpoint = torch.load(model_path, map_location=GLOBAL_DEVICE)
 
         if "model_state_dict" in checkpoint:
@@ -285,14 +286,14 @@ def train_model(epochs=10, batch_size=32, model_path=None):
     training_start = time.time()
     target_epoch = GLOBAL_EPOCH + epochs
 
-    print("\n" + "=" * 60)
-    print("  TRENING OCR")
-    print("=" * 60)
-    print(f"  Urządzenie: {GLOBAL_DEVICE}")
-    print(f"  Batch size: {batch_size}")
-    print(f"  Epoki do wykonania: {epochs}")
-    print(f"  Zakres epok: {GLOBAL_EPOCH + 1} -> {target_epoch}")
-    print("=" * 60 + "\n")
+    info("\n" + "=" * 60)
+    info("  TRENING OCR")
+    info("=" * 60)
+    info(f"  Urządzenie: {GLOBAL_DEVICE}")
+    info(f"  Batch size: {batch_size}")
+    info(f"  Epoki do wykonania: {epochs}")
+    info(f"  Zakres epok: {GLOBAL_EPOCH + 1} -> {target_epoch}")
+    info("=" * 60 + "\n")
 
     for epoch in range(GLOBAL_EPOCH, target_epoch):
         epoch_start = time.time()
@@ -312,7 +313,7 @@ def train_model(epochs=10, batch_size=32, model_path=None):
 
             # log co 50 kroków
             if step % 50 == 0 or step == total_steps:
-                print(f"Epoch [{epoch+1}/{target_epoch}] Step [{step}/{total_steps}] Loss: {loss.item():.4f}")
+                info(f"Epoch [{epoch+1}/{target_epoch}] Step [{step}/{total_steps}] Loss: {loss.item():.4f}")
             
         # walidacja
         GLOBAL_MODEL.eval()
@@ -330,7 +331,7 @@ def train_model(epochs=10, batch_size=32, model_path=None):
         val_acc = 100 * correct / total
         epoch_time = time.time() - epoch_start
         avg_loss = running_loss / total_steps
-        print(
+        info(
             f"Epoch [{epoch+1}/{target_epoch}] - Val Acc: {val_acc:.2f}% "
             f"| Avg Loss: {avg_loss:.4f} | Czas epoki: {epoch_time:.1f}s"
         )
@@ -342,13 +343,13 @@ def train_model(epochs=10, batch_size=32, model_path=None):
             save_model(MODEL_PATH)
 
     total_training_time = time.time() - training_start
-    print("\n" + "=" * 60)
-    print("  PODSUMOWANIE TRENINGU")
-    print("=" * 60)
-    print(f"  Zakończona epoka: {GLOBAL_EPOCH}")
-    print(f"  Najlepsza dokładność: {GLOBAL_BEST_ACC:.2f}%")
-    print(f"  Całkowity czas treningu: {total_training_time:.1f}s")
-    print("=" * 60)
+    info("\n" + "=" * 60)
+    info("  PODSUMOWANIE TRENINGU")
+    info("=" * 60)
+    info(f"  Zakończona epoka: {GLOBAL_EPOCH}")
+    info(f"  Najlepsza dokładność: {GLOBAL_BEST_ACC:.2f}%")
+    info(f"  Całkowity czas treningu: {total_training_time:.1f}s")
+    info("=" * 60)
 
 
 def show_infinite_menu():
@@ -356,19 +357,19 @@ def show_infinite_menu():
     global TRAINING_PAUSED, TRAINING_STOP, GLOBAL_EPOCH, GLOBAL_BEST_ACC
     
     while True:
-        print("\n" + "="*60)
-        print("  MENU NIESKOŃCZONEGO TRENINGU")
-        print("="*60)
-        print(f"  Aktualny stan:")
-        print(f"    - Epoka: {GLOBAL_EPOCH}")
-        print(f"    - Najlepsza dokładność: {GLOBAL_BEST_ACC:.2f}%")
-        print("-"*60)
-        print("  1. Kontynuuj trening")
-        print("  2. Zapisz najlepszy model i kontynuuj")
-        print("  3. Zapisz najlepszy model i zakończ")
-        print("  4. Zapisz checkpoint i zakończ")
-        print("  5. Zakończ bez zapisywania")
-        print("="*60)
+        info("\n" + "="*60)
+        info("  MENU NIESKOŃCZONEGO TRENINGU")
+        info("="*60)
+        info(f"  Aktualny stan:")
+        info(f"    - Epoka: {GLOBAL_EPOCH}")
+        info(f"    - Najlepsza dokładność: {GLOBAL_BEST_ACC:.2f}%")
+        info("-"*60)
+        info("  1. Kontynuuj trening")
+        info("  2. Zapisz najlepszy model i kontynuuj")
+        info("  3. Zapisz najlepszy model i zakończ")
+        info("  4. Zapisz checkpoint i zakończ")
+        info("  5. Zakończ bez zapisywania")
+        info("="*60)
         
         try:
             choice = input("\nWybierz opcję (1-5): ").strip()
@@ -376,41 +377,41 @@ def show_infinite_menu():
             choice = "5"
         
         if choice == "1":
-            print("\nWznawianie treningu...")
+            info("\nWznawianie treningu...")
             TRAINING_PAUSED = False
             return True  # kontynuuj
-            
+
         elif choice == "2":
-            print("\nZapisywanie najlepszego modelu...")
+            info("\nZapisywanie najlepszego modelu...")
             save_best_model(MODEL_PATH)
-            print("Wznawianie treningu...")
+            info("Wznawianie treningu...")
             TRAINING_PAUSED = False
             return True  # kontynuuj
-            
+
         elif choice == "3":
-            print("\nZapisywanie najlepszego modelu...")
+            info("\nZapisywanie najlepszego modelu...")
             save_best_model(MODEL_PATH)
-            print("Zakańczanie treningu...")
+            info("Zakańczanie treningu...")
             TRAINING_STOP = True
             TRAINING_PAUSED = False
             return False  # zakończ
-            
+
         elif choice == "4":
-            print("\nZapisywanie checkpointu...")
+            info("\nZapisywanie checkpointu...")
             save_model(CHECKPOINT_PATH)
-            print("Zakańczanie treningu...")
+            info("Zakańczanie treningu...")
             TRAINING_STOP = True
             TRAINING_PAUSED = False
             return False  # zakończ
-            
+
         elif choice == "5":
-            print("\nZakańczanie bez zapisywania...")
+            info("\nZakańczanie bez zapisywania...")
             TRAINING_STOP = True
             TRAINING_PAUSED = False
             return False  # zakończ
-            
+
         else:
-            print("\nNieprawidłowy wybór! Wybierz 1-5.")
+            info("\nNieprawidłowy wybór! Wybierz 1-5.")
 
 
 def infinite_train(batch_size=32, model_path=None, checkpoint_interval=5):
@@ -460,18 +461,18 @@ def infinite_train(batch_size=32, model_path=None, checkpoint_interval=5):
         if GLOBAL_MODEL is None:
             init_or_load_model(len(dataset.classes), model_path)
         
-        print("\n" + "="*60)
-        print("  NIESKOŃCZONY TRENING OCR")
-        print("="*60)
-        print(f"  Urządzenie: {GLOBAL_DEVICE}")
-        print(f"  Batch size: {batch_size}")
-        print(f"  Klasy: {len(dataset.classes)}")
-        print(f"  Próbki treningowe: {len(train_dataset)}")
-        print(f"  Próbki walidacyjne: {len(val_dataset)}")
-        print(f"  Checkpoint co: {checkpoint_interval} epok")
-        print("-"*60)
-        print("  Naciśnij Ctrl+C aby wstrzymać i wyświetlić menu")
-        print("="*60 + "\n")
+        info("\n" + "="*60)
+        info("  NIESKOŃCZONY TRENING OCR")
+        info("="*60)
+        info(f"  Urządzenie: {GLOBAL_DEVICE}")
+        info(f"  Batch size: {batch_size}")
+        info(f"  Klasy: {len(dataset.classes)}")
+        info(f"  Próbki treningowe: {len(train_dataset)}")
+        info(f"  Próbki walidacyjne: {len(val_dataset)}")
+        info(f"  Checkpoint co: {checkpoint_interval} epok")
+        info("-"*60)
+        info("  Naciśnij Ctrl+C aby wstrzymać i wyświetlić menu")
+        info("="*60 + "\n")
         
         total_steps = len(train_loader)
         start_time = datetime.now()
@@ -507,8 +508,8 @@ def infinite_train(batch_size=32, model_path=None, checkpoint_interval=5):
                 # log co 50 kroków
                 if step % 50 == 0 or step == total_steps:
                     elapsed = datetime.now() - start_time
-                    print(f"Epoch [{epoch+1}] Step [{step}/{total_steps}] "
-                          f"Loss: {loss.item():.4f} | Czas: {elapsed}")
+                    info(f"Epoch [{epoch+1}] Step [{step}/{total_steps}] "
+                         f"Loss: {loss.item():.4f} | Czas: {elapsed}")
             
             # Jeśli pauza podczas kroku - wróć do początku pętli
             if TRAINING_PAUSED:
@@ -531,8 +532,8 @@ def infinite_train(batch_size=32, model_path=None, checkpoint_interval=5):
             epoch_time = time.time() - epoch_start
             avg_loss = running_loss / total_steps
             
-            print(f"\n>>> Epoch [{epoch+1}] zakończona")
-            print(f"    Val Acc: {val_acc:.2f}% | Avg Loss: {avg_loss:.4f} | Czas: {epoch_time:.1f}s")
+            info(f"\n>>> Epoch [{epoch+1}] zakończona")
+            info(f"    Val Acc: {val_acc:.2f}% | Avg Loss: {avg_loss:.4f} | Czas: {epoch_time:.1f}s")
             
             GLOBAL_EPOCH = epoch + 1
             epoch = GLOBAL_EPOCH
@@ -542,24 +543,24 @@ def infinite_train(batch_size=32, model_path=None, checkpoint_interval=5):
                 old_best = GLOBAL_BEST_ACC
                 GLOBAL_BEST_ACC = val_acc
                 capture_best_model()
-                print(f"    [NEW BEST] Poprawa: {old_best:.2f}% -> {val_acc:.2f}%")
-            
+                info(f"    [NEW BEST] Poprawa: {old_best:.2f}% -> {val_acc:.2f}%")
+
             # Okresowy checkpoint
             if epoch % checkpoint_interval == 0:
                 save_model(CHECKPOINT_PATH)
-                print(f"    [CHECKPOINT] Zapisano checkpoint (epoka {epoch})")
-            
-            print()
+                info(f"    [CHECKPOINT] Zapisano checkpoint (epoka {epoch})")
+
+            info("")
         
         # Podsumowanie końcowe
         total_time = datetime.now() - start_time
-        print("\n" + "="*60)
-        print("  TRENING ZAKOŃCZONY")
-        print("="*60)
-        print(f"  Całkowity czas: {total_time}")
-        print(f"  Epoki: {GLOBAL_EPOCH}")
-        print(f"  Najlepsza dokładność: {GLOBAL_BEST_ACC:.2f}%")
-        print("="*60)
+        info("\n" + "="*60)
+        info("  TRENING ZAKOŃCZONY")
+        info("="*60)
+        info(f"  Całkowity czas: {total_time}")
+        info(f"  Epoki: {GLOBAL_EPOCH}")
+        info(f"  Najlepsza dokładność: {GLOBAL_BEST_ACC:.2f}%")
+        info("="*60)
         
     finally:
         # Przywróć oryginalny handler

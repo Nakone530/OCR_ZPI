@@ -23,7 +23,7 @@ def visualize_prediction(
     predicted_char: str,
     confidence: float,
     args,
-    info=print,
+    info,
 ) -> None:
     """
     Wizualizuje wynik predykcji - wyświetla obraz z tytułem i zapisuje do pliku.
@@ -62,7 +62,7 @@ def visualize_prediction(
 
 # ── Wyniki w konsoli ───────────────────────────────────────────────────────────
 
-def print_single_result(predicted_char: str, confidence: float, info=print) -> None:
+def print_single_result(predicted_char: str, confidence: float, info) -> None:
     """
     Drukuje sformatowany wynik predykcji pojedynczej litery w konsoli.
     
@@ -88,7 +88,7 @@ def print_single_result(predicted_char: str, confidence: float, info=print) -> N
 
 
 
-def print_top5(probs: torch.Tensor, info=print) -> None:
+def print_top5(probs: torch.Tensor, info) -> None:
     """
     Drukuje 5 najbardziej prawdopodobnych predykcji z prawdopodobieństwami.
     
@@ -123,7 +123,7 @@ def print_word_result(
     word: str,
     avg_word_confidence: float,
     class_confidence: dict[str, float],
-    info=print
+    info,
 ) -> None:
     """
     Drukuje rozpoznany wyraz w konsoli.
@@ -152,7 +152,7 @@ def print_text_result(
     text: str,
     words_with_confidence: list[tuple[str, float]],
     class_confidence: dict[str, float],
-    info=print
+    info,
 ) -> None:
     """
     Drukuje rozpoznany tekst wieloliniowy w konsoli.
@@ -184,7 +184,7 @@ def print_text_result(
             info(f"  '{cls}': {class_confidence[cls]:.1f}%")
 
 
-def print_multi_result(image_path: str, predicted_char: str, confidence: float, info=print) -> None:
+def print_multi_result(image_path: str, predicted_char: str, confidence: float, info) -> None:
     """
     Drukuje wynik dla jednego obrazu w trybie przetwarzania wielu plików.
     

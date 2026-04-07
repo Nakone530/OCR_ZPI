@@ -20,6 +20,7 @@ Przykłady użycia:
 """
 
 import argparse
+import logging
 import os
 import sys
 
@@ -144,9 +145,13 @@ def build_args(state):
 
 # ── Pomocnik walidacji pliku ───────────────────────────────────────────────────
 
-def _require_file(path: str):
+def _require_file(path: str, info=None):
     if not os.path.exists(path):
-        print(f"Błąd: Nie znaleziono pliku {path}")
+        msg = f"Błąd: Nie znaleziono pliku {path}"
+        if info:
+            info(msg)
+        else:
+            logging.info(msg)
         sys.exit(1)
 
 
@@ -172,12 +177,14 @@ def make_info(buffer= None):
     return info, buffer
 
 def main(args=None, info=None, buffor=None) -> None:
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+
     if args is None:
         args = make_args()
 
     if info is None:
         info, buffor = make_info()
-        
+
     if buffor is None:
         buffor = []
     
@@ -204,7 +211,7 @@ def main(args=None, info=None, buffor=None) -> None:
 
     # ── Pojedyncza litera ──
     elif args.image:
-        _require_file(args.image)
+        _require_file(args.image, info)
         info(f"\nRozpoznawanie: {args.image}")
         saved_copy_path = save_image_to_today_folder(args.image)
 
@@ -236,7 +243,7 @@ def main(args=None, info=None, buffor=None) -> None:
 
     # ── Wyraz ──
     elif args.word:
-        _require_file(args.word)
+        _require_file(args.word, info)
 
         info(f"\nRozpoznawanie wyrazu: {args.word}")
         saved_copy_path = save_image_to_today_folder(args.word)
@@ -260,7 +267,7 @@ def main(args=None, info=None, buffor=None) -> None:
 
     # ── Tekst wieloliniowy ──
     elif args.lines:
-        _require_file(args.lines)
+        _require_file(args.lines, info)
         info(f"\nRozpoznawanie tekstu: {args.lines}")
         saved_copy_path = save_image_to_today_folder(args.lines)
 
@@ -349,27 +356,27 @@ def main(args=None, info=None, buffor=None) -> None:
     # ── Brak argumentów → pomoc ──
     else:
         parser.print_help()
-        print("\n" + "=" * 60)
-        print("PRZYKŁADY UŻYCIA:")
-        print("=" * 60)
-        print("  python main.py --prepare")
-        print("  python main.py --train --epochs 15")
-        print("  python main.py --train --epochs 20 --batch-size 64")
-        print("  python main.py --train --resume checkpoint.pth")
-        print("")
-        print("NIESKOŃCZONY TRENING:")
-        print("  python main.py --infinite")
-        print("  python main.py --infinite --batch-size 64")
-        print("  python main.py --infinite --checkpoint-interval 10")
-        print("  python main.py --infinite --resume checkpoint.pth")
-        print("")
-        print("ROZPOZNAWANIE:")
-        print("  python main.py --image litera.png")
-        print("  python main.py --image litera.png --denoise")
-        print("  python main.py --word wyraz.png")
-        print("  python main.py --lines tekst.png")
-        print("  python main.py --multi a.png b.png c.png")
-        print("=" * 60)
+        info("\n" + "=" * 60)
+        info("PRZYKŁADY UŻYCIA:")
+        info("=" * 60)
+        info("  python main.py --prepare")
+        info("  python main.py --train --epochs 15")
+        info("  python main.py --train --epochs 20 --batch-size 64")
+        info("  python main.py --train --resume checkpoint.pth")
+        info("")
+        info("NIESKOŃCZONY TRENING:")
+        info("  python main.py --infinite")
+        info("  python main.py --infinite --batch-size 64")
+        info("  python main.py --infinite --checkpoint-interval 10")
+        info("  python main.py --infinite --resume checkpoint.pth")
+        info("")
+        info("ROZPOZNAWANIE:")
+        info("  python main.py --image litera.png")
+        info("  python main.py --image litera.png --denoise")
+        info("  python main.py --word wyraz.png")
+        info("  python main.py --lines tekst.png")
+        info("  python main.py --multi a.png b.png c.png")
+        info("=" * 60)
         
     all_text = "\n".join(buffor)
     return all_text

@@ -18,6 +18,7 @@ from typing import Optional
 import torch
 
 from .config import CHARS
+from . import info
 
 # Folder na wyniki
 RESULT_DIR = Path("wynik")
@@ -253,7 +254,7 @@ class OutputHandler:
             subdir = self._prepare_result_dir()
             copied_img = self._copy_source_image(subdir)
             if copied_img and self.verbose:
-                print(f"Skopiowano zdjęcie do: {copied_img}")
+                info(f"Skopiowano zdjęcie do: {copied_img}")
         
         if self.output_format == "json":
             return self._output_json(result)
@@ -299,10 +300,10 @@ class OutputHandler:
         output_str = "\n".join(output_lines)
         
         if self.verbose:
-            print(output_str)
-        
+            info(output_str)
+
         return output_str
-    
+
     def _output_txt(self, result: OCRResult) -> str:
         """
         Zapisuje wynik do pliku tekstowego TXT.
@@ -352,11 +353,11 @@ class OutputHandler:
             save_path.parent.mkdir(parents=True, exist_ok=True)
             save_path.write_text(output_str, encoding="utf-8")
             if self.verbose:
-                print(f"Zapisano wynik do: {save_path}")
-                print(output_str)
+                info(f"Zapisano wynik do: {save_path}")
+                info(output_str)
         else:
             # Bez pliku - wypisz na stdout (dla pipe)
-            print(output_str)
+            info(output_str)
         
         return output_str
     
@@ -406,11 +407,11 @@ class OutputHandler:
             save_path.parent.mkdir(parents=True, exist_ok=True)
             save_path.write_text(output_str, encoding="utf-8")
             if self.verbose:
-                print(f"Zapisano wynik JSON do: {save_path}")
-                print(output_str)
+                info(f"Zapisano wynik JSON do: {save_path}")
+                info(output_str)
         else:
             # Bez pliku - wypisz na stdout (dla pipe)
-            print(output_str)
+            info(output_str)
         
         return output_str
 

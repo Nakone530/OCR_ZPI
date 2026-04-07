@@ -15,6 +15,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import List, Dict, Optional
 
+from . import info
+
 
 class ModelArchiver:
     """Klasa do zarządzania archiwizacją modeli OCR."""
@@ -39,7 +41,7 @@ class ModelArchiver:
                 with open(self.manifest_file, 'r', encoding='utf-8') as f:
                     return json.load(f)
             except (json.JSONDecodeError, IOError) as e:
-                print(f"[WARN] Nie udało się wczytać manifestu: {e}")
+                info(f"[WARN] Nie udało się wczytać manifestu: {e}")
                 return {"archives": []}
         return {"archives": []}
     
@@ -50,7 +52,7 @@ class ModelArchiver:
             with open(self.manifest_file, 'w', encoding='utf-8') as f:
                 json.dump(self.manifest, f, indent=2, ensure_ascii=False)
         except IOError as e:
-            print(f"[ERROR] Nie udało się zapisać manifestu: {e}")
+            info(f"[ERROR] Nie udało się zapisać manifestu: {e}")
     
     
     def archive_model(
@@ -75,7 +77,7 @@ class ModelArchiver:
         model_path = Path(model_path)
         
         if not model_path.exists():
-            print(f"[ERROR] Model nie istnieje: {model_path}")
+            info(f"[ERROR] Model nie istnieje: {model_path}")
             return None
         
         # Generuj unikalną nazwę archiwum z datą i czasem
@@ -86,7 +88,7 @@ class ModelArchiver:
         try:
             # Kopiuj model do archiwum
             shutil.copy2(model_path, archived_path)
-            print(f"[ARCHIVE] Model zarchiwizowany: {archived_path}")
+            info(f"[ARCHIVE] Model zarchiwizowany: {archived_path}")
             
             # Aktualizuj manifest
             archive_entry = {
@@ -106,7 +108,7 @@ class ModelArchiver:
             return str(archived_path)
             
         except (IOError, OSError) as e:
-            print(f"[ERROR] Błąd podczas archiwizacji: {e}")
+            info(f"[ERROR] Błąd podczas archiwizacji: {e}")
             return None
     
     
@@ -121,7 +123,7 @@ class ModelArchiver:
             Liczba usuniętych archiwów
         """
         if len(self.manifest["archives"]) <= keep_count:
-            print(f"[INFO] Brak starych archiwów do usunięcia (mamy {len(self.manifest['archives'])}, zachowujemy {keep_count})")
+            info(f"[INFO] Brak starych archiwów do usunięcia (mamy {len(self.manifest['archives'])}, zachowujemy {keep_count})")
             return 0
         
         # Sortuj archiwa po dacie (najnowsze na końcu)
@@ -139,18 +141,18 @@ class ModelArchiver:
             try:
                 if archive_path.exists():
                     archive_path.unlink()
-                    print(f"[CLEANUP] Usunięto: {archive['filename']}")
+                    info(f"[CLEANUP] Usunięto: {archive['filename']}")
                     deleted_count += 1
-                
+
                 # Usuń z manifestu
                 self.manifest["archives"].remove(archive)
-                
+
             except OSError as e:
-                print(f"[ERROR] Nie udało się usunąć {archive_path}: {e}")
-        
+                info(f"[ERROR] Nie udało się usunąć {archive_path}: {e}")
+
         if deleted_count > 0:
             self._save_manifest()
-            print(f"[CLEANUP] Usunięto {deleted_count} starych archiwów")
+            info(f"[CLEANUP] Usunięto {deleted_count} starych archiwów")
         
         return deleted_count
     
@@ -176,25 +178,25 @@ class ModelArchiver:
         archives = self.list_archives()
         
         if not archives:
-            print("[INFO] Brak zarchiwizowanych modeli")
+            info("[INFO] Brak zarchiwizowanych modeli")
             return
-        
-        print("\n" + "="*80)
-        print("  ZARCHIWIZOWANE MODELE")
-        print("="*80)
-        
+
+        info("\n" + "="*80)
+        info("  ZARCHIWIZOWANE MODELE")
+        info("="*80)
+
         for idx, archive in enumerate(archives, 1):
             size_mb = archive["size_bytes"] / (1024 * 1024)
             tags_str = ", ".join(archive.get("tags", [])) or "brak"
-            
-            print(f"\n{idx}. {archive['filename']}")
-            print(f"   Data: {archive['datetime']}")
-            print(f"   Dokładność: {archive['accuracy']:.2f}%")
-            print(f"   Epoka: {archive['epoch']}")
-            print(f"   Tagi: {tags_str}")
-            print(f"   Rozmiar: {size_mb:.2f} MB")
-        
-        print("\n" + "="*80)
+
+            info(f"\n{idx}. {archive['filename']}")
+            info(f"   Data: {archive['datetime']}")
+            info(f"   Dokładność: {archive['accuracy']:.2f}%")
+            info(f"   Epoka: {archive['epoch']}")
+            info(f"   Tagi: {tags_str}")
+            info(f"   Rozmiar: {size_mb:.2f} MB")
+
+        info("\n" + "="*80)
     
     
     def restore_model(self, archive_filename: str, target_path: str) -> bool:
@@ -211,16 +213,16 @@ class ModelArchiver:
         archive_path = self.archive_dir / archive_filename
         
         if not archive_path.exists():
-            print(f"[ERROR] Archiwum nie istnieje: {archive_path}")
+            info(f"[ERROR] Archiwum nie istnieje: {archive_path}")
             return False
         
         try:
             shutil.copy2(archive_path, target_path)
-            print(f"[RESTORE] Model przywrócony z: {archive_filename}")
-            print(f"[RESTORE] Zapisano do: {target_path}")
+            info(f"[RESTORE] Model przywrócony z: {archive_filename}")
+            info(f"[RESTORE] Zapisano do: {target_path}")
             return True
         except (IOError, OSError) as e:
-            print(f"[ERROR] Błąd podczas przywracania: {e}")
+            info(f"[ERROR] Błąd podczas przywracania: {e}")
             return False
     
     

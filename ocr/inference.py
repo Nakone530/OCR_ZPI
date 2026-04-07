@@ -24,6 +24,7 @@ from .config import CHARS, MODEL_PATH, NUM_CLASSES
 from .model import SimpleCNN
 from .utils import get_transform, load_and_optionally_denoise, preprocess_letter, save_image_to_temp_folder
 from .display import visualize_prediction
+from . import info
 
 # ── Ładowanie modelu ───────────────────────────────────────────────────────────
 
@@ -58,7 +59,7 @@ def _set_active_chars(checkpoint: object | None = None) -> None:
         class_names = checkpoint.get("class_names")
         if isinstance(class_names, list) and class_names:
             ACTIVE_CHARS = [_map_chars74k_sample_to_char(str(name)) for name in class_names]
-            print(f"Wczytano mapowanie klas z checkpointa ({len(ACTIVE_CHARS)} klas)")
+            info(f"Wczytano mapowanie klas z checkpointa ({len(ACTIVE_CHARS)} klas)")
             return
 
     ACTIVE_CHARS = list(CHARS)
@@ -108,7 +109,7 @@ def load_model(model_path: str = MODEL_PATH, device: torch.device = None) -> nn.
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     if os.path.exists(model_path):
-        print(f"Wczytywanie modelu z {model_path}...")
+        info(f"Wczytywanie modelu z {model_path}...")
 
         checkpoint = torch.load(model_path, map_location=device)
         _set_active_chars(checkpoint)
@@ -123,19 +124,19 @@ def load_model(model_path: str = MODEL_PATH, device: torch.device = None) -> nn.
 
         # Automatycznie wykryj liczbę klas z zapisanego modelu
         num_classes_from_model = state_dict["classifier.4.weight"].shape[0]
-        print(f"Wykryto {num_classes_from_model} klas w zapisanym modelu")
+        info(f"Wykryto {num_classes_from_model} klas w zapisanym modelu")
 
         model = SimpleCNN(num_classes=num_classes_from_model)
         model.load_state_dict(state_dict)
-        print(f"Wczytano {format_info}")
+        info(f"Wczytano {format_info}")
         if not any(len(ch) == 1 and ch.islower() for ch in ACTIVE_CHARS):
-            print("[UWAGA] Aktualny model nie zawiera małych liter jako klas.")
-            print("        Aby wykrywać a-z, wytrenuj model na datasecie z 52 klasami.")
-        print("Model wczytany!")
+            info("[UWAGA] Aktualny model nie zawiera małych liter jako klas.")
+            info("        Aby wykrywać a-z, wytrenuj model na datasecie z 52 klasami.")
+        info("Model wczytany!")
     else:
-        print(f"UWAGA: Nie znaleziono modelu {model_path}")
-        print("Model nie jest wytrenowany - wyniki będą losowe!")
-        print("Najpierw uruchom: python run_local.py --train")
+        info(f"UWAGA: Nie znaleziono modelu {model_path}")
+        info("Model nie jest wytrenowany - wyniki będą losowe!")
+        info("Najpierw uruchom: python run_local.py --train")
         _set_active_chars(None)
         model = SimpleCNN(num_classes=NUM_CLASSES)
 

@@ -15,13 +15,14 @@ from pathlib import Path
 # Dodaj katalog ocr do ścieżki importu
 sys.path.insert(0, str(Path(__file__).parent))
 
+from ocr import info
 from ocr.model_archive import ModelArchiver
 from ocr.config import MODEL_ARCHIVE_DIR, MODEL_ARCHIVE_KEEP_COUNT
 
 
 def print_usage():
     """Wyświetla instrukcję użycia."""
-    print(__doc__)
+    info(__doc__)
 
 
 def list_archives():
@@ -37,7 +38,7 @@ def cleanup_archives(keep_count: int = None):
     
     archiver = ModelArchiver(MODEL_ARCHIVE_DIR)
     deleted = archiver.cleanup_old_archives(keep_count=keep_count)
-    print(f"\n✓ Operacja zakończona. Usunięto {deleted} archiwów.")
+    info(f"\n✓ Operacja zakończona. Usunięto {deleted} archiwów.")
 
 
 def archive_model(model_path: str, accuracy: float = 0.0, epoch: int = 0):
@@ -46,9 +47,9 @@ def archive_model(model_path: str, accuracy: float = 0.0, epoch: int = 0):
     result = archiver.archive_model(model_path, accuracy=accuracy, epoch=epoch)
     
     if result:
-        print(f"\n✓ Model zarchiwizowany pomyślnie: {result}")
+        info(f"\n✓ Model zarchiwizowany pomyślnie: {result}")
     else:
-        print(f"\n✗ Błąd podczas archiwizacji modelu")
+        info(f"\n✗ Błąd podczas archiwizacji modelu")
         sys.exit(1)
 
 
@@ -58,9 +59,9 @@ def restore_model(archive_filename: str, target_path: str):
     success = archiver.restore_model(archive_filename, target_path)
     
     if success:
-        print(f"\n✓ Model przywrócony pomyślnie")
+        info(f"\n✓ Model przywrócony pomyślnie")
     else:
-        print(f"\n✗ Błąd podczas przywracania modelu")
+        info(f"\n✗ Błąd podczas przywracania modelu")
         sys.exit(1)
 
 
@@ -81,8 +82,8 @@ def main():
     
     elif command == "archive":
         if len(sys.argv) < 3:
-            print("Błąd: podaj ścieżkę do modelu")
-            print("Użycie: python manage_models.py archive <path> [accuracy] [epoch]")
+            info("Błąd: podaj ścieżkę do modelu")
+            info("Użycie: python manage_models.py archive <path> [accuracy] [epoch]")
             sys.exit(1)
         
         model_path = sys.argv[2]
@@ -92,8 +93,8 @@ def main():
     
     elif command == "restore":
         if len(sys.argv) < 4:
-            print("Błąd: podaj archiwum i ścieżkę docelową")
-            print("Użycie: python manage_models.py restore <archive_filename> <target_path>")
+            info("Błąd: podaj archiwum i ścieżkę docelową")
+            info("Użycie: python manage_models.py restore <archive_filename> <target_path>")
             sys.exit(1)
         
         archive_filename = sys.argv[2]
@@ -101,7 +102,7 @@ def main():
         restore_model(archive_filename, target_path)
     
     else:
-        print(f"Nieznana komenda: {command}")
+        info(f"Nieznana komenda: {command}")
         print_usage()
         sys.exit(1)
 

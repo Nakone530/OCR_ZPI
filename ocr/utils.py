@@ -33,6 +33,7 @@ from datetime import date
 from pathlib import Path
 import matplotlib.pyplot as plt
 from .config import IMAGE_SIZE, MEAN, STD
+from . import info
 
 
 # ── Transformacje ──────────────────────────────────────────────────────────────
@@ -308,7 +309,7 @@ def save_image_to_today_folder(image_path: str) -> str:
     ]
     dest = os.path.join(folder, f"{max(existing, default=0) + 1}.png")
     load_image(image_path, mode="L").save(dest, format="PNG")
-    print(f"Zapisano zdjęcie jako: {dest}")
+    info(f"Zapisano zdjęcie jako: {dest}")
     return dest
 
 

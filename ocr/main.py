@@ -144,9 +144,12 @@ def build_args(state):
 
 # ── Pomocnik walidacji pliku ───────────────────────────────────────────────────
 
-def _require_file(path: str):
+def _require_file(path: str, info=None):
+    if info is None:
+        info = print
+    
     if not os.path.exists(path):
-        print(f"Błąd: Nie znaleziono pliku {path}")
+        info(f"Błąd: Nie znaleziono pliku {path}")
         sys.exit(1)
 
 
@@ -205,16 +208,16 @@ def main(args=None, info=None, buffor=None) -> None:
 
     # ── Pojedyncza litera ──
     elif args.image:
-        _require_file(args.image)
+        _require_file(args.image, info)
         info(f"\nRozpoznawanie: {args.image}")
-        saved_copy_path = save_image_to_today_folder(args.image)
+        saved_copy_path = save_image_to_today_folder(args.image, info)
 
         model = load_model(model_path, device, info)
         predicted_char, confidence, probs = predict_image(args.image, model, device, args)
 
         output_handler = create_output_handler(args, source_image=args.image)
         result = OCRResult(predicted_char, confidence, probs, mode="single")
-        output_handler.output(result)
+        output_handler.output(result, info)
 
         if not args.quiet:
             visualize_prediction(args.image, predicted_char, confidence, args, info)
@@ -228,7 +231,7 @@ def main(args=None, info=None, buffor=None) -> None:
                 probs=probs,
                 device=str(device),
             )
-            print(dump_json(payload, pretty=args.json_pretty))
+            info(dump_json(payload, pretty=args.json_pretty))
             out_path = args.json_path
             if out_path is None:
                 out_path = os.path.splitext(saved_copy_path)[0] + ".json"
@@ -237,12 +240,12 @@ def main(args=None, info=None, buffor=None) -> None:
             print_single_result(predicted_char, confidence, info)
             print_top5(probs, info)
 
-     # ── Wyraz ──
+    # ── Wyraz ──
     elif args.word:
-        _require_file(args.word)
+        _require_file(args.word, info)
 
         info(f"\nRozpoznawanie wyrazu: {args.word}")
-        saved_copy_path = save_image_to_today_folder(args.word)
+        saved_copy_path = save_image_to_today_folder(args.word, info)
 
         model = load_model(model_path, device, info)
         word, avg_word_confidence, class_confidence = predict_word(args.word, model, device, args)
@@ -253,7 +256,7 @@ def main(args=None, info=None, buffor=None) -> None:
                 word=word,
                 device=str(device),
             )
-            print(dump_json(payload, pretty=args.json_pretty))
+            info(dump_json(payload, pretty=args.json_pretty))
             out_path = args.json_path
             if out_path is None:
                 out_path = os.path.splitext(saved_copy_path)[0] + ".json"
@@ -261,11 +264,11 @@ def main(args=None, info=None, buffor=None) -> None:
         else:
             print_word_result(word, avg_word_confidence, class_confidence, info)
 
-     # ── Tekst wieloliniowy ──
+    # ── Tekst wieloliniowy ──
     elif args.lines:
-        _require_file(args.lines)
+        _require_file(args.lines, info)
         info(f"\nRozpoznawanie tekstu: {args.lines}")
-        saved_copy_path = save_image_to_today_folder(args.lines)
+        saved_copy_path = save_image_to_today_folder(args.lines, info)
 
         model = load_model(model_path, device, info)
         text, words_with_confidence, class_confidence = predict_segments(args.lines, model, device, args)
@@ -277,7 +280,7 @@ def main(args=None, info=None, buffor=None) -> None:
                 text=text,
                 device=str(device),
             )
-            print(dump_json(payload, pretty=args.json_pretty))
+            info(dump_json(payload, pretty=args.json_pretty))
             out_path = args.json_path
             if out_path is None:
                 out_path = os.path.splitext(saved_copy_path)[0] + ".json"
@@ -285,7 +288,7 @@ def main(args=None, info=None, buffor=None) -> None:
         else:
             print_text_result(text, words_with_confidence, class_confidence, info)
 
-     # ── Wiele zdjęć ──
+    # ── Wiele zdjęć ──
     elif args.multi:
         model = load_model(model_path, device, info)
         info(f"\nRozpoznawanie {len(args.multi)} pliku(-ów):")
@@ -296,7 +299,7 @@ def main(args=None, info=None, buffor=None) -> None:
             if not os.path.exists(img_path):
                 info(f"  Pominięto (nie znaleziono): {img_path}")
                 continue
-            saved_copy_path = save_image_to_today_folder(img_path)
+            saved_copy_path = save_image_to_today_folder(img_path, info)
             predicted_char, confidence, probs = predict_image(img_path, model, device, args)
             results.append({
                 "file": img_path,
@@ -313,14 +316,15 @@ def main(args=None, info=None, buffor=None) -> None:
                 results=results,
                 device=str(device),
             )
-            print(dump_json(payload, pretty=args.json_pretty))
+            info(dump_json(payload, pretty=args.json_pretty))
             out_path = args.json_path
             if out_path is None:
                 # multi: zapisz w bieżącym katalogu jako wynik.json
                 out_path = "results.json"
             write_json(out_path, payload, pretty=args.json_pretty)
-            if args.output_format == "console":
-                info(f"  {img_path}  →  '{predicted_char}' ({confidence:.1f}%)")
+        else:
+            for result in results:
+                info(f"  {result['file']}  →  '{result['char']}' ({result['confidence']:.1f}%)")
 
         # Dla JSON/TXT zapisz wszystkie wyniki
         if args.output_format in ("json", "txt") and args.output:

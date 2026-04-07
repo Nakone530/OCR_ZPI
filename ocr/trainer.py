@@ -85,51 +85,60 @@ def download_dataset(info=None) -> None:
 checkpoint_path = "checkpoint.pth"
 current_state = {}
 
-def handler(signum, frame):
+def handler(signum, frame, info=None):
     """Handler dla zwykłego treningu (nie-nieskończonego)."""
-    print(f"\nOdebrano sygnał: {signum}")
-    checkpoint_path = save_model(CHECKPOINT_PATH)
-    print("Program działa.")
+    if info is None:
+        info = print
+    
+    info(f"\nOdebrano sygnał: {signum}")
+    checkpoint_path = save_model(CHECKPOINT_PATH, info)
+    info("Program działa.")
     paused = True
     while paused:
-        print("\n--- MENU ---")
-        print("1. Wznów")
-        print("2. Zapisz najlepszy")
-        print("3. Wyjście bez zapisu")
+        info("\n--- MENU ---")
+        info("1. Wznów")
+        info("2. Zapisz najlepszy")
+        info("3. Wyjście bez zapisu")
 
         choice = input("Wybierz opcję: ")
 
         if choice == "1":
-            print("Wznawianie")
+            info("Wznawianie")
             train_model(10, 32, CHECKPOINT_PATH)
         elif choice == "2":
-            print("Zapisywanie najlepszego (obecnie nie do końca działa, zapisuje ostatni stan)")
-            save_model(MODEL_PATH)
+            info("Zapisywanie najlepszego (obecnie nie do końca działa, zapisuje ostatni stan)")
+            save_model(MODEL_PATH, info)
         elif choice == "3":
-            print("Zamykanie programu...")
+            info("Zamykanie programu...")
             paused = False
 
         else:
-            print("Nieprawidłowy wybór!")
+            info("Nieprawidłowy wybór!")
     sys.exit(0)
 
 
-def infinite_handler(signum, frame):
+def infinite_handler(signum, frame, info=None):
     """Handler dla nieskończonego treningu - ustawia flagę pauzy."""
+    if info is None:
+        info = print
+    
     global TRAINING_PAUSED
     TRAINING_PAUSED = True
-    print("\n\n" + "="*60)
-    print("  PRZERWANIE TRENINGU (Ctrl+C)")
-    print("  Trening zostanie wstrzymany po aktualnym kroku...")
-    print("="*60 + "\n")
+    info("\n\n" + "="*60)
+    info("  PRZERWANIE TRENINGU (Ctrl+C)")
+    info("  Trening zostanie wstrzymany po aktualnym kroku...")
+    info("="*60 + "\n")
 
 
 # Rejestracja obsługi sygnału SIGINT (Ctrl+C)
 signal.signal(signal.SIGINT, handler)
 
-def save_model(path):
+def save_model(path, info=None):
     """Zapisuje aktualny stan modelu do pliku."""
     global GLOBAL_MODEL, GLOBAL_OPTIMIZER, GLOBAL_EPOCH, GLOBAL_BEST_ACC
+
+    if info is None:
+        info = print
 
     if GLOBAL_MODEL is None:
         raise RuntimeError("Model nie jest zainicjalizowany")
@@ -141,27 +150,33 @@ def save_model(path):
         "best_acc": GLOBAL_BEST_ACC
     }, path)
 
-    print(f"Model zapisany do: {path}")
+    info(f"Model zapisany do: {path}")
 
     return path
 
 
-def save_best_model(path):
+def save_best_model(path, info=None):
     """Zapisuje najlepszy model (jeśli został zachowany) do pliku."""
     global BEST_MODEL_STATE, GLOBAL_BEST_ACC
     
+    if info is None:
+        info = print
+    
     if BEST_MODEL_STATE is None:
-        print("Brak zapisanego najlepszego modelu - zapisuję aktualny stan.")
-        return save_model(path)
+        info("Brak zapisanego najlepszego modelu - zapisuję aktualny stan.")
+        return save_model(path, info)
     
     torch.save(BEST_MODEL_STATE, path)
-    print(f"Najlepszy model (acc: {BEST_MODEL_STATE.get('best_acc', 0):.2f}%) zapisany do: {path}")
+    info(f"Najlepszy model (acc: {BEST_MODEL_STATE.get('best_acc', 0):.2f}%) zapisany do: {path}")
     return path
 
 
-def capture_best_model():
+def capture_best_model(info=None):
     """Przechwytuje aktualny stan modelu jako najlepszy."""
     global BEST_MODEL_STATE, GLOBAL_MODEL, GLOBAL_OPTIMIZER, GLOBAL_EPOCH, GLOBAL_BEST_ACC
+    
+    if info is None:
+        info = print
     
     if GLOBAL_MODEL is None:
         return
@@ -173,12 +188,15 @@ def capture_best_model():
         "best_acc": GLOBAL_BEST_ACC
     }
     # Zapisz też automatycznie do pliku
-    save_best_model(MODEL_PATH)
+    save_best_model(MODEL_PATH, info)
 
 
-def init_or_load_model(num_classes, model_path=None):
+def init_or_load_model(num_classes, model_path=None, info=None):
     global GLOBAL_MODEL, GLOBAL_OPTIMIZER, GLOBAL_CRITERION
     global GLOBAL_DEVICE, GLOBAL_EPOCH, GLOBAL_BEST_ACC
+
+    if info is None:
+        info = print
 
     GLOBAL_DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -187,7 +205,7 @@ def init_or_load_model(num_classes, model_path=None):
     GLOBAL_OPTIMIZER = torch.optim.Adam(GLOBAL_MODEL.parameters(), lr=0.001)
 
     if model_path and os.path.exists(model_path):
-        print(f"Wczytywanie modelu z: {model_path}")
+        info(f"Wczytywanie modelu z: {model_path}")
         checkpoint = torch.load(model_path, map_location=GLOBAL_DEVICE)
 
         if "model_state_dict" in checkpoint:
@@ -229,7 +247,7 @@ def train_model(epochs=10, batch_size=32, model_path=None, info=None):
     info("7. Inicjalizacja lub ładowanie modelu...")
     # init albo load
     if GLOBAL_MODEL is None:
-        init_or_load_model(len(dataset.classes), model_path)
+        init_or_load_model(len(dataset.classes), model_path, info)
     
     info("8. Rozpoczynanie treningu...")
     total_steps = len(train_loader)
@@ -272,27 +290,30 @@ def train_model(epochs=10, batch_size=32, model_path=None, info=None):
 
         if val_acc > GLOBAL_BEST_ACC:
             GLOBAL_BEST_ACC = val_acc
-            save_model(MODEL_PATH)
+            save_model(MODEL_PATH, info)
 
 
-def show_infinite_menu():
+def show_infinite_menu(info=None):
     """Wyświetla interaktywne menu po przerwaniu nieskończonego treningu."""
     global TRAINING_PAUSED, TRAINING_STOP, GLOBAL_EPOCH, GLOBAL_BEST_ACC
     
+    if info is None:
+        info = print
+    
     while True:
-        print("\n" + "="*60)
-        print("  MENU NIESKOŃCZONEGO TRENINGU")
-        print("="*60)
-        print(f"  Aktualny stan:")
-        print(f"    - Epoka: {GLOBAL_EPOCH}")
-        print(f"    - Najlepsza dokładność: {GLOBAL_BEST_ACC:.2f}%")
-        print("-"*60)
-        print("  1. Kontynuuj trening")
-        print("  2. Zapisz najlepszy model i kontynuuj")
-        print("  3. Zapisz najlepszy model i zakończ")
-        print("  4. Zapisz checkpoint i zakończ")
-        print("  5. Zakończ bez zapisywania")
-        print("="*60)
+        info("\n" + "="*60)
+        info("  MENU NIESKOŃCZONEGO TRENINGU")
+        info("="*60)
+        info(f"  Aktualny stan:")
+        info(f"    - Epoka: {GLOBAL_EPOCH}")
+        info(f"    - Najlepsza dokładność: {GLOBAL_BEST_ACC:.2f}%")
+        info("-"*60)
+        info("  1. Kontynuuj trening")
+        info("  2. Zapisz najlepszy model i kontynuuj")
+        info("  3. Zapisz najlepszy model i zakończ")
+        info("  4. Zapisz checkpoint i zakończ")
+        info("  5. Zakończ bez zapisywania")
+        info("="*60)
         
         try:
             choice = input("\nWybierz opcję (1-5): ").strip()
@@ -300,41 +321,41 @@ def show_infinite_menu():
             choice = "5"
         
         if choice == "1":
-            print("\nWznawianie treningu...")
+            info("\nWznawianie treningu...")
             TRAINING_PAUSED = False
             return True  # kontynuuj
             
         elif choice == "2":
-            print("\nZapisywanie najlepszego modelu...")
-            save_best_model(MODEL_PATH)
-            print("Wznawianie treningu...")
+            info("\nZapisywanie najlepszego modelu...")
+            save_best_model(MODEL_PATH, info)
+            info("Wznawianie treningu...")
             TRAINING_PAUSED = False
             return True  # kontynuuj
             
         elif choice == "3":
-            print("\nZapisywanie najlepszego modelu...")
-            save_best_model(MODEL_PATH)
-            print("Zakańczanie treningu...")
+            info("\nZapisywanie najlepszego modelu...")
+            save_best_model(MODEL_PATH, info)
+            info("Zakańczanie treningu...")
             TRAINING_STOP = True
             TRAINING_PAUSED = False
             return False  # zakończ
             
         elif choice == "4":
-            print("\nZapisywanie checkpointu...")
-            save_model(CHECKPOINT_PATH)
-            print("Zakańczanie treningu...")
+            info("\nZapisywanie checkpointu...")
+            save_model(CHECKPOINT_PATH, info)
+            info("Zakańczanie treningu...")
             TRAINING_STOP = True
             TRAINING_PAUSED = False
             return False  # zakończ
             
         elif choice == "5":
-            print("\nZakańczanie bez zapisywania...")
+            info("\nZakańczanie bez zapisywania...")
             TRAINING_STOP = True
             TRAINING_PAUSED = False
             return False  # zakończ
             
         else:
-            print("\nNieprawidłowy wybór! Wybierz 1-5.")
+            info("\nNieprawidłowy wybór! Wybierz 1-5.")
 
 
 def infinite_train(batch_size=32, model_path=None, checkpoint_interval=5, info=None):
@@ -392,7 +413,7 @@ def infinite_train(batch_size=32, model_path=None, checkpoint_interval=5, info=N
         info("7. Inicjalizacja lub ładowanie modelu...")
         # init albo load
         if GLOBAL_MODEL is None:
-            init_or_load_model(len(dataset.classes), model_path)
+            init_or_load_model(len(dataset.classes), model_path, info)
         
         info("8. Rozpoczynanie treningu...")
         info("\n" + "="*60)
@@ -415,7 +436,7 @@ def infinite_train(batch_size=32, model_path=None, checkpoint_interval=5, info=N
         while not TRAINING_STOP:
             # Sprawdź czy pauza
             if TRAINING_PAUSED:
-                should_continue = show_infinite_menu()
+                should_continue = show_infinite_menu(info)
                 if not should_continue:
                     break
                 continue
@@ -476,12 +497,12 @@ def infinite_train(batch_size=32, model_path=None, checkpoint_interval=5, info=N
             if val_acc > GLOBAL_BEST_ACC:
                 old_best = GLOBAL_BEST_ACC
                 GLOBAL_BEST_ACC = val_acc
-                capture_best_model()
+                capture_best_model(info)
                 info(f"    [NEW BEST] Poprawa: {old_best:.2f}% -> {val_acc:.2f}%")
             
             # Okresowy checkpoint
             if epoch % checkpoint_interval == 0:
-                save_model(CHECKPOINT_PATH)
+                save_model(CHECKPOINT_PATH, info)
                 info(f"    [CHECKPOINT] Zapisano checkpoint (epoka {epoch})")
             
             info("")

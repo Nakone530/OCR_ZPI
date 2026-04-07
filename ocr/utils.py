@@ -278,7 +278,7 @@ def get_today_folder() -> str:
     os.makedirs(folder, exist_ok=True)
     return folder
 
-def save_image_to_today_folder(image_path: str) -> str:
+def save_image_to_today_folder(image_path: str, info=None) -> str:
     """
     Kopiuje obraz do folderu z dzisiejszą datą z automatyczną numeracją.
     
@@ -287,6 +287,7 @@ def save_image_to_today_folder(image_path: str) -> str:
     
     Argumenty:
         image_path (str): Ścieżka do obrazu źródłowego do skopiowania.
+        info (callable, opcjonalnie): Funkcja do logowania. Domyślnie print.
     
     Zwraca:
         str: Ścieżka do zapisanego pliku (np. "./2024-01-15/3.png").
@@ -300,6 +301,9 @@ def save_image_to_today_folder(image_path: str) -> str:
         >>> path = save_image_to_today_folder("input/letter.jpg")
         Zapisano zdjęcie jako: ./2024-01-15/1.png
     """
+    if info is None:
+        info = print
+    
     folder = get_today_folder()
     existing = [
         int(os.path.splitext(f)[0])
@@ -308,7 +312,7 @@ def save_image_to_today_folder(image_path: str) -> str:
     ]
     dest = os.path.join(folder, f"{max(existing, default=0) + 1}.png")
     load_image(image_path, mode="L").save(dest, format="PNG")
-    print(f"Zapisano zdjęcie jako: {dest}")
+    info(f"Zapisano zdjęcie jako: {dest}")
     return dest
 
 

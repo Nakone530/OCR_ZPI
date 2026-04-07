@@ -225,7 +225,7 @@ class OutputHandler:
             return self.result_subdir / f"wynik{ext}"
         return Path(f"wynik{ext}")
     
-    def output(self, result: OCRResult) -> str:
+    def output(self, result: OCRResult, info=None) -> str:
         """
         Główna metoda wyjścia - kieruje wynik do odpowiedniego formatu.
         
@@ -234,6 +234,7 @@ class OutputHandler:
         
         Argumenty:
             result (OCRResult): Obiekt z wynikiem rozpoznawania.
+            info (callable, opcjonalnie): Funkcja do logowania. Domyślnie print.
         
         Zwraca:
             str: Sformatowany wynik jako string.
@@ -242,26 +243,30 @@ class OutputHandler:
             - Może tworzyć foldery i pliki
             - Może wypisywać na konsolę (jeśli verbose=True)
         """
+        if info is None:
+            info = print
+        
         # Przygotuj folder wyników jeśli zapisujemy
         if self.save_to_result_dir and self.output_format != "console":
             subdir = self._prepare_result_dir()
             copied_img = self._copy_source_image(subdir)
             if copied_img and self.verbose:
-                print(f"Skopiowano zdjęcie do: {copied_img}")
+                info(f"Skopiowano zdjęcie do: {copied_img}")
         
         if self.output_format == "json":
-            return self._output_json(result)
+            return self._output_json(result, info)
         elif self.output_format == "txt":
-            return self._output_txt(result)
+            return self._output_txt(result, info)
         else:  # console
-            return self._output_console(result)
+            return self._output_console(result, info)
     
-    def _output_console(self, result: OCRResult) -> str:
+    def _output_console(self, result: OCRResult, info=None) -> str:
         """
         Formatuje i wypisuje wynik w konsoli.
         
         Argumenty:
             result (OCRResult): Obiekt z wynikiem rozpoznawania.
+            info (callable, opcjonalnie): Funkcja do logowania. Domyślnie print.
         
         Zwraca:
             str: Sformatowany wynik.
@@ -269,6 +274,9 @@ class OutputHandler:
         Efekty uboczne:
             Wypisuje na stdout (jeśli verbose=True).
         """
+        if info is None:
+            info = print
+        
         output_lines = []
         
         if result.mode == "single":
@@ -293,16 +301,17 @@ class OutputHandler:
         output_str = "\n".join(output_lines)
         
         if self.verbose:
-            print(output_str)
+            info(output_str)
         
         return output_str
     
-    def _output_txt(self, result: OCRResult) -> str:
+    def _output_txt(self, result: OCRResult, info=None) -> str:
         """
         Zapisuje wynik do pliku tekstowego TXT.
         
         Argumenty:
             result (OCRResult): Obiekt z wynikiem rozpoznawania.
+            info (callable, opcjonalnie): Funkcja do logowania. Domyślnie print.
         
         Zwraca:
             str: Zawartość zapisana do pliku.
@@ -311,6 +320,9 @@ class OutputHandler:
             - Tworzy/nadpisuje plik TXT
             - Wypisuje komunikat o zapisie (jeśli verbose=True)
         """
+        if info is None:
+            info = print
+        
         lines = []
         
         if result.mode == "single":
@@ -346,15 +358,15 @@ class OutputHandler:
             save_path.parent.mkdir(parents=True, exist_ok=True)
             save_path.write_text(output_str, encoding="utf-8")
             if self.verbose:
-                print(f"Zapisano wynik do: {save_path}")
-                print(output_str)
+                info(f"Zapisano wynik do: {save_path}")
+                info(output_str)
         else:
             # Bez pliku - wypisz na stdout (dla pipe)
-            print(output_str)
+            info(output_str)
         
         return output_str
     
-    def _output_json(self, result: OCRResult) -> str:
+    def _output_json(self, result: OCRResult, info=None) -> str:
         """
         Zapisuje wynik do pliku JSON.
         
@@ -363,6 +375,7 @@ class OutputHandler:
         
         Argumenty:
             result (OCRResult): Obiekt z wynikiem rozpoznawania.
+            info (callable, opcjonalnie): Funkcja do logowania. Domyślnie print.
         
         Zwraca:
             str: JSON string zapisany do pliku.
@@ -371,6 +384,9 @@ class OutputHandler:
             - Tworzy/nadpisuje plik JSON
             - Wypisuje komunikat o zapisie (jeśli verbose=True)
         """
+        if info is None:
+            info = print
+        
         data = {
             "result": result.text,
             "mode": result.mode,
@@ -400,11 +416,11 @@ class OutputHandler:
             save_path.parent.mkdir(parents=True, exist_ok=True)
             save_path.write_text(output_str, encoding="utf-8")
             if self.verbose:
-                print(f"Zapisano wynik JSON do: {save_path}")
-                print(output_str)
+                info(f"Zapisano wynik JSON do: {save_path}")
+                info(output_str)
         else:
             # Bez pliku - wypisz na stdout (dla pipe)
-            print(output_str)
+            info(output_str)
         
         return output_str
 

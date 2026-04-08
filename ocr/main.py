@@ -100,8 +100,37 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--output-format", "-f", type=str, default="console",
                         choices=["console", "txt", "json"],
                         help="Format wyjścia (domyślnie: console)")
-    parser.add_argument("--quiet", "-q", action="store_true",
-                        help="Cichy tryb - tylko zapis do pliku, bez wypisywania")
+    debug_mode = parser.add_mutually_exclusive_group()
+    debug_mode.add_argument(
+        "--debug",
+        "-d",
+        action="store_true",
+        help=(
+            "Tryb debug dla -i/-w/-l: pokazuje podział liter i szczegóły "
+            "klasyfikacji modelu"
+        ),
+    )
+    parser.add_argument(
+        "--debug-show-crops",
+        action="store_true",
+        help=(
+            "W trybie --debug pokazuje wycinki liter (obrazy 28x28) "
+            "podawane do modelu"
+        ),
+    )
+    parser.add_argument(
+        "--debug-save-crops",
+        nargs="?",
+        const="auto",
+        default=None,
+        metavar="KATALOG",
+        help=(
+            "W trybie --debug zapisuje wycinki liter podawane do modelu; "
+            "bez wartości zapisuje do automatycznego katalogu"
+        ),
+    )
+    # Zachowane wyłącznie dla kompatybilności wstecznej.
+    debug_mode.add_argument("--quiet", "-q", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument(
         "--json",
         action="store_true",
@@ -220,7 +249,7 @@ def main(args=None, info=None, buffor=None) -> None:
         active_labels = get_active_chars()
 
 
-        if not args.quiet:
+        if args.debug:
             visualize_prediction(args.image, predicted_char, confidence, args, info)
 
         if args.json:

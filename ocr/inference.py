@@ -10,6 +10,8 @@ Odpowiedzialności:
 
 import os
 import re
+from datetime import datetime
+from pathlib import Path
 import cv2
 import numpy as np
 import torch
@@ -340,6 +342,75 @@ def _mean_per_class(class_conf_samples: dict[str, list[float]]) -> dict[str, flo
     return class_avg
 
 
+def _is_debug_enabled(args) -> bool:
+    """Sprawdza, czy aktywny jest tryb debug (z fallbackiem do legacy --quiet)."""
+    debug = bool(getattr(args, "debug", False))
+    quiet = bool(getattr(args, "quiet", False))
+    return debug and not quiet
+
+
+def _format_topk_probs(probs: torch.Tensor, k: int = 3) -> str:
+    """Formatuje Top-K predykcji jako krótki tekst do logów debug."""
+    top_probs, top_indices = torch.topk(probs, k)
+    parts = []
+    for idx, prob in zip(top_indices, top_probs):
+        label = _label_for_idx(int(idx.item()))
+        parts.append(f"'{label}': {prob.item() * 100:.1f}%")
+    return ", ".join(parts)
+
+
+def _finalize_debug_crops(
+    debug_crops: list[tuple[np.ndarray, str]],
+    args,
+    source_image_path: str,
+    mode_tag: str,
+) -> None:
+    """Pokazuje i/lub zapisuje wycinki 28x28 podawane do modelu."""
+    if not debug_crops:
+        return
+
+    show_crops = bool(getattr(args, "debug_show_crops", False))
+    save_crops_dir = getattr(args, "debug_save_crops", None)
+    if not show_crops and save_crops_dir is None:
+        return
+
+    source_stem = Path(source_image_path).stem
+
+    if save_crops_dir is not None:
+        if save_crops_dir == "auto":
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            save_dir = Path("outputs") / "debug_crops" / f"{source_stem}_{mode_tag}_{timestamp}"
+        else:
+            save_dir = Path(save_crops_dir)
+
+        save_dir.mkdir(parents=True, exist_ok=True)
+        for idx, (crop_img, caption) in enumerate(debug_crops, start=1):
+            safe_caption = re.sub(r"[^A-Za-z0-9._-]", "_", caption)[:40]
+            file_name = f"{mode_tag}_{idx:03d}_{safe_caption}.png"
+            out_path = save_dir / file_name
+            cv2.imwrite(str(out_path), crop_img)
+        info(f"[DEBUG] Zapisano {len(debug_crops)} wycinków do: {save_dir}")
+
+    if show_crops:
+        n = len(debug_crops)
+        cols = min(8, max(1, n))
+        rows = (n + cols - 1) // cols
+        fig, axes = plt.subplots(rows, cols, figsize=(2.2 * cols, 2.4 * rows))
+        axes = np.array(axes).reshape(-1)
+
+        for ax in axes:
+            ax.axis("off")
+
+        for idx, (crop_img, caption) in enumerate(debug_crops):
+            axes[idx].imshow(crop_img, cmap="gray")
+            axes[idx].set_title(caption, fontsize=8)
+            axes[idx].axis("off")
+
+        fig.suptitle(f"Debug crops: {source_stem} [{mode_tag}]", fontsize=12)
+        fig.tight_layout()
+        plt.show()
+
+
 # ── Predykcja pojedynczej litery ───────────────────────────────────────────────
 
 def predict_image(
@@ -372,14 +443,34 @@ def predict_image(
     """
     image = load_and_optionally_denoise(image_path, args, mode="L")
     img_array = np.array(image)
+    debug = _is_debug_enabled(args)
     
+    debug_crops: list[tuple[np.ndarray, str]] = []
+
     model.eval()
     with torch.no_grad():
+        original_shape = img_array.shape
         img_array = _tight_crop(img_array)
+        cropped_shape = img_array.shape
         
         img_array = preprocess_letter(img_array)
+        preprocessed_shape = img_array.shape
 
         letter = _classify_letter(img_array, model, device, 1)
+
+    if debug:
+        predicted_char, confidence, probs = letter
+        debug_crops.append((img_array.copy(), f"1_{predicted_char}_{confidence:.1f}"))
+        info(
+            "[DEBUG][image] kształty obrazu: "
+            f"oryginał={original_shape}, po_crop={cropped_shape}, "
+            f"po_preprocess={preprocessed_shape}"
+        )
+        info(
+            f"[DEBUG][image] klasyfikacja: '{predicted_char}' ({confidence:.1f}%), "
+            f"top3: {_format_topk_probs(probs, k=3)}"
+        )
+        _finalize_debug_crops(debug_crops, args, image_path, mode_tag="image")
 
     return letter
 
@@ -420,27 +511,46 @@ def predict_word(
     image = load_and_optionally_denoise(image_path, args, mode="L")
     img_array = np.array(image)
     letter_boxes = _segment_letters(img_array, args=args)
+    debug = _is_debug_enabled(args)
+
+    if debug:
+        info(f"[DEBUG][word] wykryto {len(letter_boxes)} segmentów liter")
+        for idx, (x1, y1, x2, y2) in enumerate(letter_boxes, start=1):
+            info(f"[DEBUG][word] segment {idx}: bbox=({x1},{y1})-({x2},{y2})")
 
     word = ""
     letter_confidences: list[float] = []
     class_conf_samples: dict[str, list[float]] = {}
+    debug_crops: list[tuple[np.ndarray, str]] = []
     model.eval()
     with torch.no_grad():
-        for x1, y1, x2, y2 in letter_boxes:
+        for idx, (x1, y1, x2, y2) in enumerate(letter_boxes, start=1):
             letter_img = img_array[y1:y2, x1:x2]
             letter_img = _tight_crop(letter_img)
             if letter_img.size == 0:
+                if debug:
+                    info(f"[DEBUG][word] segment {idx}: pominięty (pusty po przycięciu)")
                 continue
 
             letter_img = preprocess_letter(letter_img)
 
-            predicted_char, confidence, _ = _classify_letter(letter_img, model, device, 1)
+            predicted_char, confidence, probs = _classify_letter(letter_img, model, device, 1)
             word += predicted_char
             letter_confidences.append(confidence)
             class_conf_samples.setdefault(predicted_char, []).append(confidence)
+            if debug:
+                debug_crops.append((letter_img.copy(), f"{idx}_{predicted_char}_{confidence:.1f}"))
+
+            if debug:
+                info(
+                    f"[DEBUG][word] segment {idx}: '{predicted_char}' "
+                    f"({confidence:.1f}%), top3: {_format_topk_probs(probs, k=3)}"
+                )
 
     avg_word_confidence = float(np.mean(letter_confidences)) if letter_confidences else 0.0
     class_confidence = _mean_per_class(class_conf_samples)
+    if debug:
+        _finalize_debug_crops(debug_crops, args, image_path, mode_tag="word")
     return word, avg_word_confidence, class_confidence
 
 
@@ -484,12 +594,16 @@ def predict_segments(
     image = load_and_optionally_denoise(image_path, args, mode="L")
     img_array = np.array(image)
     binary = img_array < 128
+    debug = _is_debug_enabled(args)
 
     rows_bounds = _find_bounds(np.sum(binary, axis=1))
+    if debug:
+        info(f"[DEBUG][lines] wykryto {len(rows_bounds)} linii tekstu")
 
     text = ""
     words_with_confidence: list[tuple[str, float]] = []
     class_conf_samples: dict[str, list[float]] = {}
+    debug_crops: list[tuple[np.ndarray, str]] = []
 
     def _flush_word(word_chars: list[str], word_confs: list[float]) -> None:
         if not word_chars or not word_confs:
@@ -498,9 +612,20 @@ def predict_segments(
 
     model.eval()
     with torch.no_grad():
-        for row_start, row_end in rows_bounds:
+        for line_no, (row_start, row_end) in enumerate(rows_bounds, start=1):
             line_img = img_array[row_start:row_end, :]
             letter_boxes = _segment_letters(line_img, args=args)
+
+            if debug:
+                info(
+                    f"[DEBUG][lines] linia {line_no}: zakres_wierszy=({row_start},{row_end}), "
+                    f"segmenty={len(letter_boxes)}"
+                )
+                for idx, (x1, y1, x2, y2) in enumerate(letter_boxes, start=1):
+                    info(
+                        f"[DEBUG][lines] linia {line_no}, segment {idx}: "
+                        f"bbox=({x1},{y1})-({x2},{y2})"
+                    )
 
             # Heurystyka spacji: przerwa > 1.5× średniej szerokości litery
             widths = [x2 - x1 for x1, _, x2, _ in letter_boxes]
@@ -513,14 +638,30 @@ def predict_segments(
                 letter_img = line_img[y1:y2, x1:x2]
                 letter_img = _tight_crop(letter_img)
                 if letter_img.size == 0:
+                    if debug:
+                        info(
+                            f"[DEBUG][lines] linia {line_no}, segment {idx + 1}: "
+                            "pominięty (pusty po przycięciu)"
+                        )
                     continue
 
                 letter_img = preprocess_letter(letter_img)
-                predicted_char, confidence, _ = _classify_letter(letter_img, model, device, 1)
+                predicted_char, confidence, probs = _classify_letter(letter_img, model, device, 1)
                 line_text += predicted_char
                 current_word_chars.append(predicted_char)
                 current_word_confs.append(confidence)
                 class_conf_samples.setdefault(predicted_char, []).append(confidence)
+                if debug:
+                    debug_crops.append(
+                        (letter_img.copy(), f"L{line_no}_{idx + 1}_{predicted_char}_{confidence:.1f}")
+                    )
+
+                if debug:
+                    info(
+                        f"[DEBUG][lines] linia {line_no}, segment {idx + 1}: "
+                        f"'{predicted_char}' ({confidence:.1f}%), "
+                        f"top3: {_format_topk_probs(probs, k=3)}"
+                    )
 
                 if idx < len(letter_boxes) - 1 and avg_width > 0:
                     next_x1 = letter_boxes[idx + 1][0]
@@ -535,4 +676,6 @@ def predict_segments(
             text += line_text + "\n"
 
     class_confidence = _mean_per_class(class_conf_samples)
+    if debug:
+        _finalize_debug_crops(debug_crops, args, image_path, mode_tag="lines")
     return text, words_with_confidence, class_confidence

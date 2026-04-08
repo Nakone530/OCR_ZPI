@@ -427,7 +427,7 @@ def create_output_handler(args, source_image: Optional[str] = None) -> OutputHan
         args: Obiekt argparse.Namespace z parametrami. Oczekiwane atrybuty:
             - output_format (str, opcjonalnie): Format wyjścia ('console', 'txt', 'json')
             - output (str, opcjonalnie): Ścieżka do pliku wyjściowego
-            - quiet (bool, opcjonalnie): Czy wyłączyć komunikaty (verbose=False)
+            - debug (bool, opcjonalnie): Czy włączyć szczegółowe komunikaty (verbose=True)
         source_image (str, opcjonalnie): Ścieżka do obrazu źródłowego do skopiowania.
     
     Zwraca:
@@ -443,7 +443,7 @@ def create_output_handler(args, source_image: Optional[str] = None) -> OutputHan
     """
     output_format = getattr(args, "output_format", "console")
     output_path = getattr(args, "output", None)
-    quiet = getattr(args, "quiet", False)
+    debug = bool(getattr(args, "debug", False)) and not bool(getattr(args, "quiet", False))
     
     # Jeśli podano ścieżkę bez formatu, wykryj z rozszerzenia
     if output_path and output_format == "console":
@@ -459,7 +459,7 @@ def create_output_handler(args, source_image: Optional[str] = None) -> OutputHan
     return OutputHandler(
         output_path=output_path,
         output_format=output_format,
-        verbose=not quiet,
+        verbose=debug,
         source_image=source_image,
         save_to_result_dir=save_to_result_dir
     )

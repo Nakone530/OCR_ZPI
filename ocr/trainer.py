@@ -106,6 +106,7 @@ current_state = {}
 
 def _robust_torch_save(payload: dict, path: str, retries: int = 3, delay_s: float = 0.4) -> str:
     """Próbuje zapisać plik kilka razy; przy blokadzie używa pliku awaryjnego."""
+    os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
     last_exc: Exception | None = None
     for attempt in range(1, retries + 1):
         try:

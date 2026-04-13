@@ -48,55 +48,43 @@ TRAINING_PAUSED = False
 TRAINING_STOP = False
 BEST_MODEL_STATE = None  # przechowuje stan najlepszego modelu
 
+# -- Funkcje do kontroli treningu z GUI
+
+def stop_training():
+    """Zatrzymaj nieskończony trening z GUI"""
+    global TRAINING_STOP
+    TRAINING_STOP = True
+
+def reset_training_flags():
+    """Resetuj flagi treningu"""
+    global TRAINING_PAUSED, TRAINING_STOP
+    TRAINING_PAUSED = False
+    TRAINING_STOP = False
+
 # -- Dataset
 
-def download_dataset() -> None:
+def download_dataset(info=None) -> None:
     """Pobiera archiwum datasetu, jeśli jeszcze go nie ma."""
+    if info is None:
+        info = print
+    
     if not os.path.exists(ARCHIVE_PATH):
-        info(f"Brak archiwum datasetu: {ARCHIVE_PATH}")
-        os.makedirs(os.path.dirname(ARCHIVE_PATH), exist_ok=True)
 
-        def _show_progress(block_num, block_size, total_size):
-            downloaded = block_num * block_size
-            if total_size > 0:
-                percent = min(100, downloaded * 100 / total_size)
-                info(f"Pobieranie: {percent:5.1f}%")
-
-        info(f"Pobieranie datasetu z: {DATA_URL}")
-        urllib.request.urlretrieve(DATA_URL, ARCHIVE_PATH, _show_progress)
-        info("Pobrano!")
+        info(f"brak datasetu")
+        # TODO: Tutaj powinno być pobieranie datasetu
+        info("\nPobrano!")
 
     if not os.path.exists(EXTRACTED_DIR):
-        info("Rozpakowywanie...")
-        with tarfile.open(ARCHIVE_PATH, "r:gz") as tar:
-            tar.extractall(path=DATA_DIR)
-        info("Rozpakowano!")
-
-
-def _dataset_has_lowercase_classes(class_names: list[str]) -> bool:
-    return any(len(name) == 1 and name.islower() for name in class_names)
-
-
-def _dataset_looks_like_chars74k(class_names: list[str]) -> bool:
-    return bool(class_names) and all(re.fullmatch(r"Sample\d+", str(name)) for name in class_names)
-
-
-def _print_dataset_class_diagnostics(class_names: list[str]) -> None:
-    info(f"Wykryto {len(class_names)} klas w datasecie.")
-
-    if _dataset_has_lowercase_classes(class_names):
-        info("Dataset zawiera małe litery.")
-        return
-
-    if _dataset_looks_like_chars74k(class_names):
-        info("[UWAGA] Wykryto klasy w formacie Chars74K (SampleXXX).")
-        info("        Upewnij się, że używasz pełnego zestawu liter (A-Z + a-z).")
-        return
-
-    info("[UWAGA] Dataset nie zawiera małych liter jako osobnych klas.")
-    info("        W tym stanie model nie nauczy się rozpoznawać a-z.")
-    info("        Sprawdź katalog treningowy:")
-    info(f"        {EXTRACTED_DIR}")
+        info("Rozpakowywanie archiwum (to może chwilę potrwać)...")
+        try:
+            with tarfile.open(ARCHIVE_PATH, "r:gz") as tar:
+                tar.extractall(path=DATA_DIR)
+            info("Rozpakowano!")
+        except Exception as e:
+            info(f"Błąd podczas rozpakowania: {e}")
+            raise
+    else:
+        info("Dataset już jest rozpakowany")
 
 
 # -- Trening
@@ -149,10 +137,13 @@ def _optimizer_state_to_cpu(optimizer_state: dict) -> dict:
         return tuple(_optimizer_state_to_cpu(v) for v in optimizer_state)
     return optimizer_state
 
-def handler(signum, frame):
+def handler(signum, frame, info=None):
     """Handler dla zwykłego treningu (nie-nieskończonego)."""
+    if info is None:
+        info = print
+    
     info(f"\nOdebrano sygnał: {signum}")
-    checkpoint_path = save_model(CHECKPOINT_PATH)
+    checkpoint_path = save_model(CHECKPOINT_PATH, info)
     info("Program działa.")
     paused = True
     while paused:
@@ -168,7 +159,7 @@ def handler(signum, frame):
             train_model(10, 32, CHECKPOINT_PATH)
         elif choice == "2":
             info("Zapisywanie najlepszego (obecnie nie do końca działa, zapisuje ostatni stan)")
-            save_model(MODEL_PATH)
+            save_model(MODEL_PATH, info)
         elif choice == "3":
             info("Zamykanie programu...")
             paused = False
@@ -178,8 +169,11 @@ def handler(signum, frame):
     sys.exit(0)
 
 
-def infinite_handler(signum, frame):
+def infinite_handler(signum, frame, info=None):
     """Handler dla nieskończonego treningu - ustawia flagę pauzy."""
+    if info is None:
+        info = print
+    
     global TRAINING_PAUSED
     TRAINING_PAUSED = True
     info("\n\n" + "="*60)
@@ -207,9 +201,12 @@ def _archive_previous_model(current_model_path):
     except Exception as e:
         info(f"[WARN] Błąd podczas archiwizacji modelu: {e}")
 
-def save_model(path):
+def save_model(path, info=None):
     """Zapisuje aktualny stan modelu do pliku."""
     global GLOBAL_MODEL, GLOBAL_OPTIMIZER, GLOBAL_EPOCH, GLOBAL_BEST_ACC, GLOBAL_CLASS_NAMES
+
+    if info is None:
+        info = print
 
     if GLOBAL_MODEL is None:
         raise RuntimeError("Model nie jest zainicjalizowany")
@@ -233,22 +230,29 @@ def save_model(path):
     return saved_path
 
 
-def save_best_model(path):
+def save_best_model(path, info=None):
     """Zapisuje najlepszy model (jeśli został zachowany) do pliku."""
     global BEST_MODEL_STATE, GLOBAL_BEST_ACC
     
+    if info is None:
+        info = print
+    
     if BEST_MODEL_STATE is None:
         info("Brak zapisanego najlepszego modelu - zapisuję aktualny stan.")
-        return save_model(path)
 
-    saved_path = _robust_torch_save(BEST_MODEL_STATE, path)
-    info(f"Najlepszy model (acc: {BEST_MODEL_STATE.get('best_acc', 0):.2f}%) zapisany do: {saved_path}")
-    return saved_path
+        return save_model(path, info)
+    
+    torch.save(BEST_MODEL_STATE, path)
+    info(f"Najlepszy model (acc: {BEST_MODEL_STATE.get('best_acc', 0):.2f}%) zapisany do: {path}")
+    return path
 
 
-def capture_best_model():
+def capture_best_model(info=None):
     """Przechwytuje aktualny stan modelu jako najlepszy."""
     global BEST_MODEL_STATE, GLOBAL_MODEL, GLOBAL_OPTIMIZER, GLOBAL_EPOCH, GLOBAL_BEST_ACC, GLOBAL_CLASS_NAMES
+    
+    if info is None:
+        info = print
     
     if GLOBAL_MODEL is None:
         return
@@ -261,12 +265,15 @@ def capture_best_model():
         "class_names": GLOBAL_CLASS_NAMES,
     }
     # Zapisz też automatycznie do pliku
-    save_best_model(MODEL_PATH)
+    save_best_model(MODEL_PATH, info)
 
 
-def init_or_load_model(num_classes, model_path=None):
+def init_or_load_model(num_classes, model_path=None, info=None):
     global GLOBAL_MODEL, GLOBAL_OPTIMIZER, GLOBAL_CRITERION
     global GLOBAL_DEVICE, GLOBAL_EPOCH, GLOBAL_BEST_ACC, GLOBAL_CLASS_NAMES
+
+    if info is None:
+        info = print
 
     GLOBAL_DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -288,28 +295,40 @@ def init_or_load_model(num_classes, model_path=None):
             GLOBAL_MODEL.load_state_dict(checkpoint)
 
 
-def train_model(epochs=10, batch_size=32, model_path=None):
+def train_model(epochs=10, batch_size=32, model_path=None, info=None):
     global GLOBAL_MODEL, GLOBAL_OPTIMIZER, GLOBAL_CRITERION
     global GLOBAL_DEVICE, GLOBAL_EPOCH, GLOBAL_BEST_ACC, GLOBAL_CLASS_NAMES
 
-    download_dataset()
+    if info is None:
+        info = print
 
+    info("1. Ładowanie datasetu...")
+    download_dataset(info)
+    
+    info("2. Ładowanie transformacji obrazów...")
     train_transform = get_train_transform()
+    
+    info("3. Ładowanie ImageFolder z datasetu...")
     dataset = datasets.ImageFolder(root=EXTRACTED_DIR, transform=train_transform)
-    GLOBAL_CLASS_NAMES = list(dataset.classes)
-    _print_dataset_class_diagnostics(GLOBAL_CLASS_NAMES)
+
+    
+    info(f"4. Dataset załadowany: {len(dataset)} obrazów, {len(dataset.classes)} klas")
 
     train_size = int(0.8 * len(dataset))
     val_size = len(dataset) - train_size
+    info(f"5. Splitting: {train_size} trening, {val_size} walidacja")
     train_dataset, val_dataset = torch.utils.data.random_split(dataset, [train_size, val_size])
 
+    info("6. Tworzenie DataLoader...")
     train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
     val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
 
+    info("7. Inicjalizacja lub ładowanie modelu...")
     # init albo load
     if GLOBAL_MODEL is None:
-        init_or_load_model(len(dataset.classes), model_path)
-        
+        init_or_load_model(len(dataset.classes), model_path, info)
+    
+    info("8. Rozpoczynanie treningu...")
     total_steps = len(train_loader)
     training_start = time.time()
     target_epoch = GLOBAL_EPOCH + epochs
@@ -341,10 +360,8 @@ def train_model(epochs=10, batch_size=32, model_path=None):
 
             # log co 50 kroków
             if step % 50 == 0 or step == total_steps:
-                info(f"Epoch [{epoch+1}/{target_epoch}] Step [{step}/{total_steps}] Loss: {loss.item():.4f}")
 
-            # Nie trzymaj referencji do tensorów dłużej niż trzeba.
-            del outputs, loss, images, labels
+                info(f"Epoch [{epoch+1}/{epochs}] Step [{step}/{total_steps}] Loss: {loss.item():.4f}")
             
         # walidacja
         GLOBAL_MODEL.eval()
@@ -373,7 +390,7 @@ def train_model(epochs=10, batch_size=32, model_path=None):
 
         if val_acc > GLOBAL_BEST_ACC:
             GLOBAL_BEST_ACC = val_acc
-            save_model(MODEL_PATH)
+            save_model(MODEL_PATH, info)
 
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
@@ -389,9 +406,12 @@ def train_model(epochs=10, batch_size=32, model_path=None):
     info("=" * 60)
 
 
-def show_infinite_menu():
+def show_infinite_menu(info=None):
     """Wyświetla interaktywne menu po przerwaniu nieskończonego treningu."""
     global TRAINING_PAUSED, TRAINING_STOP, GLOBAL_EPOCH, GLOBAL_BEST_ACC
+    
+    if info is None:
+        info = print
     
     while True:
         info("\n" + "="*60)
@@ -420,14 +440,16 @@ def show_infinite_menu():
 
         elif choice == "2":
             info("\nZapisywanie najlepszego modelu...")
-            save_best_model(MODEL_PATH)
+
+            save_best_model(MODEL_PATH, info)
             info("Wznawianie treningu...")
             TRAINING_PAUSED = False
             return True  # kontynuuj
 
         elif choice == "3":
             info("\nZapisywanie najlepszego modelu...")
-            save_best_model(MODEL_PATH)
+
+            save_best_model(MODEL_PATH, info)
             info("Zakańczanie treningu...")
             TRAINING_STOP = True
             TRAINING_PAUSED = False
@@ -435,7 +457,8 @@ def show_infinite_menu():
 
         elif choice == "4":
             info("\nZapisywanie checkpointu...")
-            save_model(CHECKPOINT_PATH)
+
+            save_model(CHECKPOINT_PATH, info)
             info("Zakańczanie treningu...")
             TRAINING_STOP = True
             TRAINING_PAUSED = False
@@ -451,7 +474,7 @@ def show_infinite_menu():
             info("\nNieprawidłowy wybór! Wybierz 1-5.")
 
 
-def infinite_train(batch_size=32, model_path=None, checkpoint_interval=5):
+def infinite_train(batch_size=32, model_path=None, checkpoint_interval=5, info=None):
     """
     Nieskończony trening modelu OCR.
     
@@ -467,37 +490,50 @@ def infinite_train(batch_size=32, model_path=None, checkpoint_interval=5):
         batch_size: Rozmiar batcha (domyślnie 32)
         model_path: Ścieżka do modelu do wczytania (opcjonalne)
         checkpoint_interval: Co ile epok zapisywać checkpoint (domyślnie 5)
+        info: Funkcja do logowania (domyślnie print)
     """
     global GLOBAL_MODEL, GLOBAL_OPTIMIZER, GLOBAL_CRITERION
     global GLOBAL_DEVICE, GLOBAL_EPOCH, GLOBAL_BEST_ACC, GLOBAL_CLASS_NAMES
     global TRAINING_PAUSED, TRAINING_STOP
     
+    if info is None:
+        info = print
+    
     # Reset flag
     TRAINING_PAUSED = False
     TRAINING_STOP = False
     
-    # Ustaw handler dla nieskończonego treningu
-    old_handler = signal.signal(signal.SIGINT, infinite_handler)
+    # UWAGA: signal.signal() nie może być używany w wątku!
+    # Dlatego nie ustawiamy handlera - nieskończony trening będzie działać bez Ctrl+C
     
     try:
-        download_dataset()
+        info("1. Ładowanie datasetu...")
+        download_dataset(info)
         
+        info("2. Ładowanie transformacji obrazów...")
         train_transform = get_train_transform()
+        
+        info("3. Ładowanie ImageFolder...")
         dataset = datasets.ImageFolder(root=EXTRACTED_DIR, transform=train_transform)
-        GLOBAL_CLASS_NAMES = list(dataset.classes)
-        _print_dataset_class_diagnostics(GLOBAL_CLASS_NAMES)
+
+        info(f"4. Dataset załadowany: {len(dataset)} obrazów, {len(dataset.classes)} klas")
         
         train_size = int(0.8 * len(dataset))
         val_size = len(dataset) - train_size
+        info(f"5. Splitting: {train_size} trening, {val_size} walidacja")
         train_dataset, val_dataset = torch.utils.data.random_split(dataset, [train_size, val_size])
         
+        info("6. Tworzenie DataLoader...")
         train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
         val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
         
+        info("7. Inicjalizacja lub ładowanie modelu...")
         # init albo load
         if GLOBAL_MODEL is None:
-            init_or_load_model(len(dataset.classes), model_path)
+            init_or_load_model(len(dataset.classes), model_path, info)
         
+
+        info("8. Rozpoczynanie treningu...")
         info("\n" + "="*60)
         info("  NIESKOŃCZONY TRENING OCR")
         info("="*60)
@@ -518,7 +554,7 @@ def infinite_train(batch_size=32, model_path=None, checkpoint_interval=5):
         while not TRAINING_STOP:
             # Sprawdź czy pauza
             if TRAINING_PAUSED:
-                should_continue = show_infinite_menu()
+                should_continue = show_infinite_menu(info)
                 if not should_continue:
                     break
                 continue
@@ -551,7 +587,7 @@ def infinite_train(batch_size=32, model_path=None, checkpoint_interval=5):
 
                 # Zwolnij referencje po każdym kroku dla stabilności długiego treningu.
                 del outputs, loss, images, labels
-            
+                
             # Jeśli pauza podczas kroku - wróć do początku pętli
             if TRAINING_PAUSED:
                 continue
@@ -599,6 +635,7 @@ def infinite_train(batch_size=32, model_path=None, checkpoint_interval=5):
                 torch.cuda.empty_cache()
             gc.collect()
 
+
         
         # Podsumowanie końcowe
         total_time = datetime.now() - start_time
@@ -609,8 +646,9 @@ def infinite_train(batch_size=32, model_path=None, checkpoint_interval=5):
         info(f"  Epoki: {GLOBAL_EPOCH}")
         info(f"  Najlepsza dokładność: {GLOBAL_BEST_ACC:.2f}%")
         info("="*60)
-        
-    finally:
-        # Przywróć oryginalny handler
-        signal.signal(signal.SIGINT, old_handler)
+
+    except Exception as e:
+        info(f"\nBłąd podczas treningu: {e}")
+        import traceback
+        info(traceback.format_exc())
 

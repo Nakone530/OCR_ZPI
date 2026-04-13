@@ -193,6 +193,80 @@ def _tight_crop(gray: np.ndarray) -> np.ndarray:
     return gray[rows[0]:rows[-1] + 1, cols[0]:cols[-1] + 1]
 
 
+def _merge_fragmented_boxes(
+    boxes: list[tuple[int, int, int, int]],
+    max_gap: int = 4,
+    max_height_ratio: float = 1.8,
+    max_vertical_distance: int = 4,
+) -> list[tuple[int, int, int, int]]:
+    """
+    Scala fragmenty litery, które są obok siebie.
+    
+    Poprzez analizę boksów uważa za fragmenty tego samego znaku boxy które:
+    - Są poziomo sąsiadujące (przerwa <= max_gap)
+    - Są pionowo wyrównane (zakresy Y się nachodzą lub są blisko)
+    - Mają podobne wysokości (ratio <= max_height_ratio)
+    
+    Argumenty:
+        boxes: Lista boksów (x1, y1, x2, y2)
+        max_gap: Maksymalna przerwa pozioma między fragmentami (px)
+        max_height_ratio: Maksymalny stosunek wysokości między fragmentami
+        max_vertical_distance: Maksymalna odległość pionowa do scalenia (px)
+    """
+    if len(boxes) <= 1:
+        return boxes
+    
+    merged = []
+    current_group = [boxes[0]]
+    
+    for i in range(1, len(boxes)):
+        prev_x1, prev_y1, prev_x2, prev_y2 = current_group[-1]
+        curr_x1, curr_y1, curr_x2, curr_y2 = boxes[i]
+        
+        prev_h = prev_y2 - prev_y1
+        curr_h = curr_y2 - curr_y1
+        
+        # Sprawdź czy boxy są sąsiadujące poziomo
+        horizontal_gap = curr_x1 - prev_x2
+        
+        # Sprawdź czy boxy są wyrównane pionowo
+        y_overlap = max(0, min(prev_y2, curr_y2) - max(prev_y1, curr_y1))
+        vertical_distance = max(0, max(prev_y1, curr_y1) - min(prev_y2, curr_y2))
+        
+        # Sprawdzenie czy boxy mają podobną wysokość
+        height_ratio = max(prev_h, curr_h) / min(prev_h, curr_h) if min(prev_h, curr_h) > 0 else 1.0
+        
+        # Warunki scalenia - bardziej liberalne
+        # Scalaj jeśli: przerwa jest mała LUB boxy się nachodzą pionowo
+        should_merge = (
+            horizontal_gap <= max_gap and
+            (y_overlap > 0 or vertical_distance <= max_vertical_distance) and
+            height_ratio <= max_height_ratio
+        )
+        
+        if should_merge:
+            current_group.append(boxes[i])
+        else:
+            # Scal grupę i dodaj do wyników
+            if current_group:
+                x1 = min(b[0] for b in current_group)
+                y1 = min(b[1] for b in current_group)
+                x2 = max(b[2] for b in current_group)
+                y2 = max(b[3] for b in current_group)
+                merged.append((x1, y1, x2, y2))
+            current_group = [boxes[i]]
+    
+    # Dodaj ostatnią grupę
+    if current_group:
+        x1 = min(b[0] for b in current_group)
+        y1 = min(b[1] for b in current_group)
+        x2 = max(b[2] for b in current_group)
+        y2 = max(b[3] for b in current_group)
+        merged.append((x1, y1, x2, y2))
+    
+    return merged
+
+
 def _watershed_split_component(
     gray_roi: np.ndarray,
     component_mask: np.ndarray,
@@ -200,6 +274,7 @@ def _watershed_split_component(
     min_box_w: int,
     min_box_h: int,
     min_box_area: int,
+    args=None,
 ) -> list[tuple[int, int, int, int]]:
     """Dzieli pojedynczy zlepiony komponent na litery metodą watershed."""
     dist = cv2.distanceTransform(component_mask, cv2.DIST_L2, 5)
@@ -243,6 +318,18 @@ def _watershed_split_component(
         boxes.append((x1, y1, x2, y2))
 
     boxes.sort(key=lambda b: b[0])
+    
+    # Scal fragmenty litery które znajdują się obok siebie
+    ws_merge_gap = int(getattr(args, "ws_merge_gap", 4)) if args else 4
+    ws_merge_height_ratio = float(getattr(args, "ws_merge_height_ratio", 1.8)) if args else 1.8
+    ws_merge_vert_dist = int(getattr(args, "ws_merge_vert_dist", 4)) if args else 4
+    boxes = _merge_fragmented_boxes(
+        boxes,
+        max_gap=ws_merge_gap,
+        max_height_ratio=ws_merge_height_ratio,
+        max_vertical_distance=ws_merge_vert_dist
+    )
+    
     return boxes
 
 
@@ -288,6 +375,7 @@ def _segment_letters(gray: np.ndarray, args=None) -> list[tuple[int, int, int, i
                 min_box_w=ws_min_box_w,
                 min_box_h=ws_min_box_h,
                 min_box_area=ws_min_box_area,
+                args=args,
             )
             if split_boxes:
                 for sx1, sy1, sx2, sy2 in split_boxes:

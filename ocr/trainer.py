@@ -16,6 +16,7 @@ import re
 import signal
 import threading
 import time
+import gc
 from datetime import datetime
 
 import torch
@@ -124,6 +125,30 @@ def _robust_torch_save(payload: dict, path: str, retries: int = 3, delay_s: floa
     torch.save(payload, fallback)
     return fallback
 
+
+def _state_dict_to_cpu(state_dict: dict) -> dict:
+    """Kopiuje state_dict na CPU, aby nie trzymać snapshotów w VRAM."""
+    cpu_state = {}
+    for key, value in state_dict.items():
+        if torch.is_tensor(value):
+            cpu_state[key] = value.detach().cpu().clone()
+        else:
+            cpu_state[key] = value
+    return cpu_state
+
+
+def _optimizer_state_to_cpu(optimizer_state: dict) -> dict:
+    """Przenosi stany optymalizatora na CPU (rekurencyjnie)."""
+    if torch.is_tensor(optimizer_state):
+        return optimizer_state.detach().cpu().clone()
+    if isinstance(optimizer_state, dict):
+        return {k: _optimizer_state_to_cpu(v) for k, v in optimizer_state.items()}
+    if isinstance(optimizer_state, list):
+        return [_optimizer_state_to_cpu(v) for v in optimizer_state]
+    if isinstance(optimizer_state, tuple):
+        return tuple(_optimizer_state_to_cpu(v) for v in optimizer_state)
+    return optimizer_state
+
 def handler(signum, frame):
     """Handler dla zwykłego treningu (nie-nieskończonego)."""
     info(f"\nOdebrano sygnał: {signum}")
@@ -189,13 +214,15 @@ def save_model(path):
     if GLOBAL_MODEL is None:
         raise RuntimeError("Model nie jest zainicjalizowany")
 
-    saved_path = _robust_torch_save({
+    payload = {
         "epoch": GLOBAL_EPOCH,
-        "model_state_dict": GLOBAL_MODEL.state_dict(),
-        "optimizer_state_dict": GLOBAL_OPTIMIZER.state_dict(),
+        "model_state_dict": _state_dict_to_cpu(GLOBAL_MODEL.state_dict()),
+        "optimizer_state_dict": _optimizer_state_to_cpu(GLOBAL_OPTIMIZER.state_dict()),
         "best_acc": GLOBAL_BEST_ACC,
         "class_names": GLOBAL_CLASS_NAMES,
-    }, path)
+    }
+
+    saved_path = _robust_torch_save(payload, path)
 
     info(f"Model zapisany do: {saved_path}")
     
@@ -228,8 +255,8 @@ def capture_best_model():
     
     BEST_MODEL_STATE = {
         "epoch": GLOBAL_EPOCH,
-        "model_state_dict": GLOBAL_MODEL.state_dict().copy(),
-        "optimizer_state_dict": GLOBAL_OPTIMIZER.state_dict().copy(),
+        "model_state_dict": _state_dict_to_cpu(GLOBAL_MODEL.state_dict()),
+        "optimizer_state_dict": _optimizer_state_to_cpu(GLOBAL_OPTIMIZER.state_dict()),
         "best_acc": GLOBAL_BEST_ACC,
         "class_names": GLOBAL_CLASS_NAMES,
     }
@@ -304,7 +331,7 @@ def train_model(epochs=10, batch_size=32, model_path=None):
         for step, (images, labels) in enumerate(train_loader, start=1):
             images, labels = images.to(GLOBAL_DEVICE), labels.to(GLOBAL_DEVICE)
 
-            GLOBAL_OPTIMIZER.zero_grad()
+            GLOBAL_OPTIMIZER.zero_grad(set_to_none=True)
             outputs = GLOBAL_MODEL(images)
             loss = GLOBAL_CRITERION(outputs, labels)
             loss.backward()
@@ -315,12 +342,15 @@ def train_model(epochs=10, batch_size=32, model_path=None):
             # log co 50 kroków
             if step % 50 == 0 or step == total_steps:
                 info(f"Epoch [{epoch+1}/{target_epoch}] Step [{step}/{total_steps}] Loss: {loss.item():.4f}")
+
+            # Nie trzymaj referencji do tensorów dłużej niż trzeba.
+            del outputs, loss, images, labels
             
         # walidacja
         GLOBAL_MODEL.eval()
         correct, total = 0, 0
 
-        with torch.no_grad():
+        with torch.inference_mode():
             for images, labels in val_loader:
                 images, labels = images.to(GLOBAL_DEVICE), labels.to(GLOBAL_DEVICE)
                 outputs = GLOBAL_MODEL(images)
@@ -328,6 +358,8 @@ def train_model(epochs=10, batch_size=32, model_path=None):
 
                 total += labels.size(0)
                 correct += (predicted == labels).sum().item()
+
+            del outputs, predicted, images, labels
 
         val_acc = 100 * correct / total
         epoch_time = time.time() - epoch_start
@@ -342,6 +374,10 @@ def train_model(epochs=10, batch_size=32, model_path=None):
         if val_acc > GLOBAL_BEST_ACC:
             GLOBAL_BEST_ACC = val_acc
             save_model(MODEL_PATH)
+
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+        gc.collect()
 
     total_training_time = time.time() - training_start
     info("\n" + "=" * 60)
@@ -498,7 +534,7 @@ def infinite_train(batch_size=32, model_path=None, checkpoint_interval=5):
                     
                 images, labels = images.to(GLOBAL_DEVICE), labels.to(GLOBAL_DEVICE)
                 
-                GLOBAL_OPTIMIZER.zero_grad()
+                GLOBAL_OPTIMIZER.zero_grad(set_to_none=True)
                 outputs = GLOBAL_MODEL(images)
                 loss = GLOBAL_CRITERION(outputs, labels)
                 loss.backward()
@@ -509,8 +545,12 @@ def infinite_train(batch_size=32, model_path=None, checkpoint_interval=5):
                 # log co 50 kroków
                 if step % 50 == 0 or step == total_steps:
                     elapsed = datetime.now() - start_time
+
                     info(f"Epoch [{epoch+1}] Step [{step}/{total_steps}] "
                          f"Loss: {loss.item():.4f} | Czas: {elapsed}")
+
+                # Zwolnij referencje po każdym kroku dla stabilności długiego treningu.
+                del outputs, loss, images, labels
             
             # Jeśli pauza podczas kroku - wróć do początku pętli
             if TRAINING_PAUSED:
@@ -520,7 +560,7 @@ def infinite_train(batch_size=32, model_path=None, checkpoint_interval=5):
             GLOBAL_MODEL.eval()
             correct, total = 0, 0
             
-            with torch.no_grad():
+            with torch.inference_mode():
                 for images, labels in val_loader:
                     images, labels = images.to(GLOBAL_DEVICE), labels.to(GLOBAL_DEVICE)
                     outputs = GLOBAL_MODEL(images)
@@ -528,6 +568,8 @@ def infinite_train(batch_size=32, model_path=None, checkpoint_interval=5):
                     
                     total += labels.size(0)
                     correct += (predicted == labels).sum().item()
+
+                    del outputs, predicted, images, labels
             
             val_acc = 100 * correct / total
             epoch_time = time.time() - epoch_start
@@ -552,6 +594,11 @@ def infinite_train(batch_size=32, model_path=None, checkpoint_interval=5):
                 info(f"    [CHECKPOINT] Zapisano checkpoint (epoka {epoch})")
 
             info("")
+
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+            gc.collect()
+
         
         # Podsumowanie końcowe
         total_time = datetime.now() - start_time

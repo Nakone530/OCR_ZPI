@@ -1,0 +1,100 @@
+{
+  "archives": [
+    {
+      "filename": "model_20260330_124247.pth",
+      "original_path": "model_ocr.pth",
+      "timestamp": "20260330_124247",
+      "datetime": "2026-03-30T12:42:47.833999",
+      "accuracy": 2.7027027027027026,
+      "epoch": 1,
+      "tags": [
+        "auto-archived"
+      ],
+      "size_bytes": 20799627
+    },
+    {
+      "filename": "model_20260330_124249.pth",
+      "original_path": "model_ocr.pth",
+      "timestamp": "20260330_124249",
+      "datetime": "2026-03-30T12:42:49.903830",
+      "accuracy": 13.513513513513514,
+      "epoch": 4,
+      "tags": [
+        "auto-archived"
+      ],
+      "size_bytes": 20799627
+    },
+    {
+      "filename": "model_20260330_124250.pth",
+      "original_path": "model_ocr.pth",
+      "timestamp": "20260330_124250",
+      "datetime": "2026-03-30T12:42:50.654569",
+      "accuracy": 39.189189189189186,
+      "epoch": 5,
+      "tags": [
+        "auto-archived"
+      ],
+      "size_bytes": 20799627
+    },
+    {
+      "filename": "model_20260330_124251.pth",
+      "original_path": "model_ocr.pth",
+      "timestamp": "20260330_124251",
+      "datetime": "2026-03-30T12:42:51.365257",
+      "accuracy": 44.5945945945946,
+      "epoch": 6,
+      "tags": [
+        "auto-archived"
+      ],
+      "size_bytes": 20799627
+    },
+    {
+      "filename": "model_20260330_124252.pth",
+      "original_path": "model_ocr.pth",
+      "timestamp": "20260330_124252",
+      "datetime": "2026-03-30T12:42:52.679290",
+      "accuracy": 47.2972972972973,
+      "epoch": 8,
+      "tags": [
+        "auto-archived"
+      ],
+      "size_bytes": 20799627
+    },
+    {
+      "filename": "model_20260330_124253.pth",
+      "original_path": "model_ocr.pth",
+      "timestamp": "20260330_124253",
+      "datetime": "2026-03-30T12:42:53.339530",
+      "accuracy": 72.97297297297297,
+      "epoch": 9,
+      "tags": [
+        "auto-archived"
+      ],
+      "size_bytes": 20799627
+    },
+    {
+      "filename": "model_20260405_020015.pth",
+      "original_path": "models/model_ocr.pth",
+      "timestamp": "20260405_020015",
+      "datetime": "2026-04-05T02:00:15.046778",
+      "accuracy": 0.0,
+      "epoch": 0,
+      "tags": [
+        "auto-archived"
+      ],
+      "size_bytes": 20924171
+    },
+    {
+      "filename": "model_20260414_172606.pth",
+      "original_path": "models\\model_ocr.pth",
+      "timestamp": "20260414_172606",
+      "datetime": "2026-04-14T17:26:06.948441",
+      "accuracy": 13.513513513513514,
+      "epoch": 3,
+      "tags": [
+        "auto-archived"
+      ],
+      "size_bytes": 20798347
+    }
+  ]
+}

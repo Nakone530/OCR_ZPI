@@ -130,8 +130,9 @@ def infinite_handler(signum, frame, info=None):
     info("="*60 + "\n")
 
 
-# Rejestracja obsługi sygnału SIGINT (Ctrl+C)
-signal.signal(signal.SIGINT, handler)
+# Rejestracja obsługi sygnału SIGINT (Ctrl+C) - tylko dla zwykłego treningu
+# Dla nieskończonego treningu handler jest rejestrowany w TUI
+# signal.signal(signal.SIGINT, handler)
 
 def save_model(path, info=None):
     """Zapisuje aktualny stan modelu do pliku."""
@@ -387,8 +388,8 @@ def infinite_train(batch_size=32, model_path=None, checkpoint_interval=5, info=N
     TRAINING_PAUSED = False
     TRAINING_STOP = False
     
-    # UWAGA: signal.signal() nie może być używany w wątku!
-    # Dlatego nie ustawiamy handlera - nieskończony trening będzie działać bez Ctrl+C
+    # UWAGA: Handler SIGINT musi być zarejestrowany w GŁÓWNYM wątku!
+    # W TUI jest to robione w _run_training() przed uruchomieniem wątku treningu.
     
     try:
         info("1. Ładowanie datasetu...")
@@ -411,7 +412,6 @@ def infinite_train(batch_size=32, model_path=None, checkpoint_interval=5, info=N
         val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
         
         info("7. Inicjalizacja lub ładowanie modelu...")
-        # init albo load
         if GLOBAL_MODEL is None:
             init_or_load_model(len(dataset.classes), model_path, info)
         
@@ -465,7 +465,11 @@ def infinite_train(batch_size=32, model_path=None, checkpoint_interval=5, info=N
                     elapsed = datetime.now() - start_time
                     info(f"Epoch [{epoch+1}] Step [{step}/{total_steps}] "
                          f"Loss: {loss.item():.4f} | Czas: {elapsed}")
+<<<<<<< Updated upstream
             
+=======
+                
+>>>>>>> Stashed changes
             # Jeśli pauza podczas kroku - wróć do początku pętli
             if TRAINING_PAUSED:
                 continue
@@ -506,6 +510,14 @@ def infinite_train(batch_size=32, model_path=None, checkpoint_interval=5, info=N
                 info(f"    [CHECKPOINT] Zapisano checkpoint (epoka {epoch})")
             
             info("")
+<<<<<<< Updated upstream
+=======
+
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+            gc.collect()
+
+>>>>>>> Stashed changes
         
         # Podsumowanie końcowe
         total_time = datetime.now() - start_time

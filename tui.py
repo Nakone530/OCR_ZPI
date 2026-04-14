@@ -229,6 +229,7 @@ class TrainScreen(Screen):
     BINDINGS = [
         Binding("escape", "back", "Powrót do menu"),
         Binding("enter", "run_training", "Uruchom"),
+        Binding("ctrl+c", "stop_training_key", "Zatrzymaj (Ctrl+C)"),
     ]
     
     def compose(self) -> ComposeResult:
@@ -295,6 +296,10 @@ class TrainScreen(Screen):
     def action_back(self):
         """Action dla Escape key"""
         self.app.pop_screen()
+    
+    def action_stop_training_key(self):
+        """Action dla Ctrl+C"""
+        self._stop_training()
     
     def _stop_training(self):
         """Zatrzymaj nieskończony trening"""
@@ -369,7 +374,8 @@ class TrainScreen(Screen):
                 self.app.call_from_thread(log.write_line, traceback.format_exc())
         
         # Start thread
-        thread = threading.Thread(target=run_training_thread, daemon=True)
+        # WAŻNE: daemon=False aby móc obsługiwać przerwanie
+        thread = threading.Thread(target=run_training_thread, daemon=False)
         thread.start()
 
 # ═══════════════════════════════════════════════════════════════════════════════

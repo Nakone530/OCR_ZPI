@@ -43,15 +43,21 @@ class SimpleCNN(nn.Module):
             nn.ReLU(inplace=True),
         )
         
-        self.classifier = nn.Sequential(
-            nn.Flatten(),
-            nn.Linear(256 * 3 * 3, 512),
-            nn.ReLU(inplace=True),
-            nn.Dropout(0.5),
-            nn.Linear(512, num_classes)
+
+        self.rnn = nn.LSTM(
+            input_size=256,
+            hidden_size=256,
+            bidirectional=True,
+            num_layers=2
         )
+        
+        self.fc = nn.Linear(512, num_classes)  # + blank
 
     def forward(self, x):
-        x = self.features(x)
-        x = self.classifier(x)
+        x = self.features(x)          # (B, C, H, W)
+        x = x.mean(2)                # (B, C, W)  ← redukcja wysokości
+        x = x.permute(2, 0, 1)       # (W, B, C)
+
+        x, _ = self.rnn(x)           # (W, B, 512)
+        x = self.fc(x)               # (W, B, num_classes)
         return x

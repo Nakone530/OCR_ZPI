@@ -21,11 +21,12 @@ from datetime import datetime
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from torchvision import datasets
 
 from .config import (
     DATA_URL, DATA_DIR, ARCHIVE_PATH, EXTRACTED_DIR, MODEL_PATH, CHECKPOINT_PATH,
-    MODEL_ARCHIVE_DIR, MODEL_ARCHIVE_KEEP_COUNT
+    MODEL_ARCHIVE_DIR, MODEL_ARCHIVE_KEEP_COUNT, CHARS, char2idx, idx2char
 )
 from .model import SimpleCNN
 from .utils import get_train_transform
@@ -39,6 +40,7 @@ GLOBAL_OPTIMIZER = None
 GLOBAL_CRITERION = None
 GLOBAL_DEVICE = None
 GLOBAL_CLASS_NAMES = None
+GLOBAL_IDX_TO_CLASS = None
 
 GLOBAL_EPOCH = 0
 GLOBAL_BEST_ACC = 0.0
@@ -86,7 +88,72 @@ def download_dataset(info=None) -> None:
     else:
         info("Dataset już jest rozpakowany")
 
+def pad_images(images):
+    max_w = max(img.shape[-1] for img in images)
 
+    padded = []
+    for img in images:
+        pad_w = max_w - img.shape[-1]
+        img = F.pad(img, (0, pad_w, 0, 0))  # (left, right, top, bottom)
+        padded.append(img)
+
+    return torch.stack(padded)
+
+##def collate_fn(batch):
+##    images, texts = zip(*batch)
+##    
+##    images = torch.stack(images)
+##
+##    images = pad_images(images)
+##    
+##    targets = []
+##    target_lengths = []
+##
+##    for t in texts:
+##        encoded = [char2idx[c] for c in t]
+##        targets.extend(encoded)
+##        target_lengths.append(len(encoded))
+##
+##    targets = torch.tensor(targets, dtype=torch.long)
+##    target_lengths = torch.tensor(target_lengths, dtype=torch.long)
+##
+##    # długość sekwencji z modelu (po CNN)
+##    input_lengths = torch.full(
+##        size=(images.size(0),),
+##        fill_value=images.size(-1) // 4,  # zależy od poolingów!
+##        dtype=torch.long
+##    )
+##
+##    return images, targets, input_lengths, target_lengths
+def collate_fn(batch):
+    images, labels = zip(*batch)
+
+    images = list(images)
+    images = pad_images(images)
+
+    # DEBUG: label int → znak
+    texts = [GLOBAL_IDX_TO_CLASS[label] for label in labels]
+
+    targets = []
+    target_lengths = []
+
+    for t in texts:
+        encoded = [char2idx[c] for c in t]  # teraz t = "a"
+        targets.extend(encoded)
+        target_lengths.append(len(encoded))
+
+    targets = torch.tensor(targets, dtype=torch.long)
+    target_lengths = torch.tensor(target_lengths, dtype=torch.long)
+
+    # długość sekwencji z modelu
+    input_lengths = torch.full(
+        size=(len(images),),
+        fill_value=images[0].shape[-1] // 8,
+        dtype=torch.long
+    )
+
+
+    return images, targets, input_lengths, target_lengths
 # -- Trening
 
 checkpoint_path = "checkpoint.pth"
@@ -216,7 +283,8 @@ def save_model(path, info=None):
         "model_state_dict": _state_dict_to_cpu(GLOBAL_MODEL.state_dict()),
         "optimizer_state_dict": _optimizer_state_to_cpu(GLOBAL_OPTIMIZER.state_dict()),
         "best_acc": GLOBAL_BEST_ACC,
-        "class_names": GLOBAL_CLASS_NAMES,
+        "char2idx": char2idx,
+        "idx2char": idx2char,
     }
 
     saved_path = _robust_torch_save(payload, path)
@@ -278,7 +346,7 @@ def init_or_load_model(num_classes, model_path=None, info=None):
     GLOBAL_DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     GLOBAL_MODEL = SimpleCNN(num_classes=num_classes).to(GLOBAL_DEVICE)
-    GLOBAL_CRITERION = nn.CrossEntropyLoss()
+    GLOBAL_CRITERION = nn.CTCLoss(blank=0, zero_infinity=True)
     GLOBAL_OPTIMIZER = torch.optim.Adam(GLOBAL_MODEL.parameters(), lr=0.001)
 
     if model_path and os.path.exists(model_path):
@@ -297,7 +365,7 @@ def init_or_load_model(num_classes, model_path=None, info=None):
 
 def train_model(epochs=10, batch_size=32, model_path=None, info=None):
     global GLOBAL_MODEL, GLOBAL_OPTIMIZER, GLOBAL_CRITERION
-    global GLOBAL_DEVICE, GLOBAL_EPOCH, GLOBAL_BEST_ACC, GLOBAL_CLASS_NAMES
+    global GLOBAL_DEVICE, GLOBAL_EPOCH, GLOBAL_BEST_ACC, GLOBAL_CLASS_NAMES, GLOBAL_IDX_TO_CLASS
 
     if info is None:
         info = print
@@ -310,8 +378,9 @@ def train_model(epochs=10, batch_size=32, model_path=None, info=None):
     
     info("3. Ładowanie ImageFolder z datasetu...")
     dataset = datasets.ImageFolder(root=EXTRACTED_DIR, transform=train_transform)
+    GLOBAL_IDX_TO_CLASS = dataset.classes
+# to muszę zmienić jak będzie dataset    
 
-    
     info(f"4. Dataset załadowany: {len(dataset)} obrazów, {len(dataset.classes)} klas")
 
     train_size = int(0.8 * len(dataset))
@@ -320,13 +389,13 @@ def train_model(epochs=10, batch_size=32, model_path=None, info=None):
     train_dataset, val_dataset = torch.utils.data.random_split(dataset, [train_size, val_size])
 
     info("6. Tworzenie DataLoader...")
-    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-    val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
+    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True, collate_fn=collate_fn)
+    val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=batch_size, shuffle=False, collate_fn=collate_fn)
 
     info("7. Inicjalizacja lub ładowanie modelu...")
     # init albo load
     if GLOBAL_MODEL is None:
-        init_or_load_model(len(dataset.classes), model_path, info)
+        init_or_load_model(len(CHARS) + 1, model_path, info)
     
     info("8. Rozpoczynanie treningu...")
     total_steps = len(train_loader)
@@ -347,15 +416,71 @@ def train_model(epochs=10, batch_size=32, model_path=None, info=None):
         GLOBAL_MODEL.train()
         running_loss = 0.0
 
-        for step, (images, labels) in enumerate(train_loader, start=1):
-            images, labels = images.to(GLOBAL_DEVICE), labels.to(GLOBAL_DEVICE)
+        for step, (images, targets, input_lengths, target_lengths) in enumerate(train_loader, start=1):
+
+            images = images.to(GLOBAL_DEVICE)
+            targets = targets.to(GLOBAL_DEVICE)
+            input_lengths = input_lengths.to(GLOBAL_DEVICE)
+            target_lengths = target_lengths.to(GLOBAL_DEVICE)
+
+            outputs = GLOBAL_MODEL(images)  # (T, B, C)
+            log_probs = outputs.log_softmax(2)
 
             GLOBAL_OPTIMIZER.zero_grad(set_to_none=True)
-            outputs = GLOBAL_MODEL(images)
-            loss = GLOBAL_CRITERION(outputs, labels)
+
+            loss = GLOBAL_CRITERION(
+                log_probs,
+                targets,
+                input_lengths,
+                target_lengths
+            )
+
             loss.backward()
             GLOBAL_OPTIMIZER.step()
 
+            running_loss += loss.item()
+
+            if step % 50 == 0:
+                info(f"Epoch [{epoch+1}] Step [{step}] Loss: {loss.item():.4f}")
+##        for step, (images, labels) in enumerate(train_loader, start=1):
+##            images = images.to(GLOBAL_DEVICE)
+##            labels = labels.to(GLOBAL_DEVICE)
+##
+##            # DEBUG: label → tekst (1 znak)
+##            texts = [CHARS[label] for label in labels]
+##
+##            targets = []
+##            target_lengths = []
+##
+##            for t in texts:
+##                encoded = [char2idx[c] for c in t]
+##                targets.extend(encoded)
+##                target_lengths.append(len(encoded))
+##
+##            targets = torch.tensor(targets, dtype=torch.long).to(GLOBAL_DEVICE)
+##            target_lengths = torch.tensor(target_lengths, dtype=torch.long).to(GLOBAL_DEVICE)
+##
+##            outputs = GLOBAL_MODEL(images)  # (T, B, C)
+##            log_probs = outputs.log_softmax(2)
+##
+##            T = outputs.size(0)
+##            input_lengths = torch.full(
+##                size=(images.size(0),),
+##                fill_value=T,
+##                dtype=torch.long
+##            ).to(GLOBAL_DEVICE)
+##
+##            GLOBAL_OPTIMIZER.zero_grad(set_to_none=True)
+##
+##            loss = GLOBAL_CRITERION(
+##                log_probs,
+##                targets,
+##                input_lengths,
+##                target_lengths
+##            )
+##
+##            loss.backward()
+##            GLOBAL_OPTIMIZER.step()
             running_loss += loss.item()
 
             # log co 50 kroków
@@ -364,33 +489,30 @@ def train_model(epochs=10, batch_size=32, model_path=None, info=None):
                 info(f"Epoch [{epoch+1}/{epochs}] Step [{step}/{total_steps}] Loss: {loss.item():.4f}")
             
         # walidacja
-        GLOBAL_MODEL.eval()
-        correct, total = 0, 0
-
+        val_loss = 0.0
         with torch.inference_mode():
-            for images, labels in val_loader:
-                images, labels = images.to(GLOBAL_DEVICE), labels.to(GLOBAL_DEVICE)
+            for images, targets, input_lengths, target_lengths in val_loader:
+                images = images.to(GLOBAL_DEVICE)
+                targets = targets.to(GLOBAL_DEVICE)
+                input_lengths = input_lengths.to(GLOBAL_DEVICE)
+                target_lengths = target_lengths.to(GLOBAL_DEVICE)                
+
                 outputs = GLOBAL_MODEL(images)
-                _, predicted = torch.max(outputs, 1)
+                log_probs = outputs.log_softmax(2)
 
-                total += labels.size(0)
-                correct += (predicted == labels).sum().item()
+                loss = GLOBAL_CRITERION(
+                    log_probs,
+                    targets,
+                    input_lengths,
+                    target_lengths
+                )
 
-            del outputs, predicted, images, labels
-
-        val_acc = 100 * correct / total
+                val_loss += loss.item()
+        val_loss /= len(val_loader)
         epoch_time = time.time() - epoch_start
-        avg_loss = running_loss / total_steps
-        info(
-            f"Epoch [{epoch+1}/{target_epoch}] - Val Acc: {val_acc:.2f}% "
-            f"| Avg Loss: {avg_loss:.4f} | Czas epoki: {epoch_time:.1f}s"
-        )
+        info(f"Epoch {epoch+1} | train_loss={running_loss:.4f} | val_loss={val_loss:.4f} | time={epoch_time:.1f}s")
 
         GLOBAL_EPOCH = epoch + 1
-
-        if val_acc > GLOBAL_BEST_ACC:
-            GLOBAL_BEST_ACC = val_acc
-            save_model(MODEL_PATH, info)
 
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
@@ -401,7 +523,6 @@ def train_model(epochs=10, batch_size=32, model_path=None, info=None):
     info("  PODSUMOWANIE TRENINGU")
     info("=" * 60)
     info(f"  Zakończona epoka: {GLOBAL_EPOCH}")
-    info(f"  Najlepsza dokładność: {GLOBAL_BEST_ACC:.2f}%")
     info(f"  Całkowity czas treningu: {total_training_time:.1f}s")
     info("=" * 60)
 
@@ -514,7 +635,7 @@ def infinite_train(batch_size=32, model_path=None, checkpoint_interval=5, info=N
         train_transform = get_train_transform()
         
         info("3. Ładowanie ImageFolder...")
-        dataset = datasets.ImageFolder(root=EXTRACTED_DIR, transform=train_transform)
+        dataset = datasets.ImageFolder(root=EXTRACTED_DIR, transform=train_transform) # to muszę zmienić jak będzie dataset
 
         info(f"4. Dataset załadowany: {len(dataset)} obrazów, {len(dataset.classes)} klas")
         

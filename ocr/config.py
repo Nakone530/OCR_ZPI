@@ -37,6 +37,7 @@ ARCHIVE_PATH = os.path.join(DATA_DIR, "EnglishFnt.tgz")
 # Ścieżka do rozpakowanych obrazów datasetu
 EXTRACTED_DIR = os.path.join(DATA_DIR, "English", "Fnt")
 
+IMAGES_DIR = "./ttData"
 # ── Model ─────────────────────────────────────────────────────────────────────
 # Ścieżka do zapisanego wytrenowanego modelu
 MODEL_PATH = "./models/model_ocr.pth"
@@ -62,7 +63,7 @@ STD  = [0.5, 0.5, 0.5]
 
 # ── Klasy (46: A-z - alfabet bez znaków polskich) ──────────────────────────────────────
 # Zestaw znaków obsługiwanych przez model OCR (wielkie litery A-z)
-CHARS = "ABCDEFGHIJKLMNOPRSTUWYZabcdefghijklmnoprstuwyz"
+CHARS = "ABCDEFGHIJKLMNOPRSTUWYZabcdefghijklmnoprstuwyząćęłńóśźż"
 NUM_CLASSES = len(CHARS)
 char2idx = {c: i + 1 for i, c in enumerate(CHARS)}  # 0 = blank!
 idx2char = {i + 1: c for i, c in enumerate(CHARS)}

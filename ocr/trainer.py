@@ -18,7 +18,7 @@ import threading
 import time
 import gc
 from datetime import datetime
-
+import json
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -26,11 +26,12 @@ from torchvision import datasets
 
 from .config import (
     DATA_URL, DATA_DIR, ARCHIVE_PATH, EXTRACTED_DIR, MODEL_PATH, CHECKPOINT_PATH,
-    MODEL_ARCHIVE_DIR, MODEL_ARCHIVE_KEEP_COUNT, CHARS, char2idx, idx2char
+    MODEL_ARCHIVE_DIR, MODEL_ARCHIVE_KEEP_COUNT, IMAGES_DIR, CHARS, char2idx, idx2char
 )
 from .model import SimpleCNN
 from .utils import get_train_transform
 from .model_archive import ModelArchiver
+from .OCRDataset import OCRDataset
 from . import info
 
 
@@ -40,7 +41,6 @@ GLOBAL_OPTIMIZER = None
 GLOBAL_CRITERION = None
 GLOBAL_DEVICE = None
 GLOBAL_CLASS_NAMES = None
-GLOBAL_IDX_TO_CLASS = None
 
 GLOBAL_EPOCH = 0
 GLOBAL_BEST_ACC = 0.0
@@ -87,71 +87,48 @@ def download_dataset(info=None) -> None:
             raise
     else:
         info("Dataset już jest rozpakowany")
-
+        
 def pad_images(images):
+    """
+    Padding obrazów do tej samej szerokości (OCR/CRNN).
+    Zakłada: obrazy mają ten sam height, różny width.
+    """
     max_w = max(img.shape[-1] for img in images)
 
     padded = []
     for img in images:
-        pad_w = max_w - img.shape[-1]
-        img = F.pad(img, (0, pad_w, 0, 0))  # (left, right, top, bottom)
+        _, h, w = img.shape
+        pad_w = max_w - w
+
+        # (left, right, top, bottom)
+        img = F.pad(img, (0, pad_w, 0, 0), value=0)
         padded.append(img)
 
     return torch.stack(padded)
 
-##def collate_fn(batch):
-##    images, texts = zip(*batch)
-##    
-##    images = torch.stack(images)
-##
-##    images = pad_images(images)
-##    
-##    targets = []
-##    target_lengths = []
-##
-##    for t in texts:
-##        encoded = [char2idx[c] for c in t]
-##        targets.extend(encoded)
-##        target_lengths.append(len(encoded))
-##
-##    targets = torch.tensor(targets, dtype=torch.long)
-##    target_lengths = torch.tensor(target_lengths, dtype=torch.long)
-##
-##    # długość sekwencji z modelu (po CNN)
-##    input_lengths = torch.full(
-##        size=(images.size(0),),
-##        fill_value=images.size(-1) // 4,  # zależy od poolingów!
-##        dtype=torch.long
-##    )
-##
-##    return images, targets, input_lengths, target_lengths
 def collate_fn(batch):
-    images, labels = zip(*batch)
+    images, texts = zip(*batch)
 
     images = list(images)
-    images = pad_images(images)
-
-    # DEBUG: label int → znak
-    texts = [GLOBAL_IDX_TO_CLASS[label] for label in labels]
+    images = pad_images(images)  # padding szerokości
 
     targets = []
     target_lengths = []
 
     for t in texts:
-        encoded = [char2idx[c] for c in t]  # teraz t = "a"
+        t = t.lower()  # ważne!
+        encoded = [char2idx[c] for c in t if c in char2idx]
         targets.extend(encoded)
         target_lengths.append(len(encoded))
 
     targets = torch.tensor(targets, dtype=torch.long)
     target_lengths = torch.tensor(target_lengths, dtype=torch.long)
 
-    # długość sekwencji z modelu
     input_lengths = torch.full(
-        size=(len(images),),
-        fill_value=images[0].shape[-1] // 8,
+        size=(images.size(0),),
+        fill_value=images.size(-1) // 8,
         dtype=torch.long
     )
-
 
     return images, targets, input_lengths, target_lengths
 # -- Trening
@@ -283,8 +260,7 @@ def save_model(path, info=None):
         "model_state_dict": _state_dict_to_cpu(GLOBAL_MODEL.state_dict()),
         "optimizer_state_dict": _optimizer_state_to_cpu(GLOBAL_OPTIMIZER.state_dict()),
         "best_acc": GLOBAL_BEST_ACC,
-        "char2idx": char2idx,
-        "idx2char": idx2char,
+        "class_names": GLOBAL_CLASS_NAMES,
     }
 
     saved_path = _robust_torch_save(payload, path)
@@ -346,7 +322,7 @@ def init_or_load_model(num_classes, model_path=None, info=None):
     GLOBAL_DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     GLOBAL_MODEL = SimpleCNN(num_classes=num_classes).to(GLOBAL_DEVICE)
-    GLOBAL_CRITERION = nn.CTCLoss(blank=0, zero_infinity=True)
+    GLOBAL_CRITERION = nn.CTCLoss()
     GLOBAL_OPTIMIZER = torch.optim.Adam(GLOBAL_MODEL.parameters(), lr=0.001)
 
     if model_path and os.path.exists(model_path):
@@ -365,23 +341,27 @@ def init_or_load_model(num_classes, model_path=None, info=None):
 
 def train_model(epochs=10, batch_size=32, model_path=None, info=None):
     global GLOBAL_MODEL, GLOBAL_OPTIMIZER, GLOBAL_CRITERION
-    global GLOBAL_DEVICE, GLOBAL_EPOCH, GLOBAL_BEST_ACC, GLOBAL_CLASS_NAMES, GLOBAL_IDX_TO_CLASS
+    global GLOBAL_DEVICE, GLOBAL_EPOCH, GLOBAL_BEST_ACC, GLOBAL_CLASS_NAMES
 
     if info is None:
         info = print
 
-    info("1. Ładowanie datasetu...")
-    download_dataset(info)
-    
     info("2. Ładowanie transformacji obrazów...")
     train_transform = get_train_transform()
-    
-    info("3. Ładowanie ImageFolder z datasetu...")
-    dataset = datasets.ImageFolder(root=EXTRACTED_DIR, transform=train_transform)
-    GLOBAL_IDX_TO_CLASS = dataset.classes
-# to muszę zmienić jak będzie dataset    
 
-    info(f"4. Dataset załadowany: {len(dataset)} obrazów, {len(dataset.classes)} klas")
+    DATA_JSON_PATH = os.path.join(IMAGES_DIR, "boxes.jsonl")
+    
+    info("3. Ładowanie datasetu OCR...")
+    with open(DATA_JSON_PATH, "r", encoding="utf-8") as f:
+        data = [json.loads(line) for line in f]
+
+        dataset = OCRDataset(
+            json_data=data,
+            images_dir=IMAGES_DIR,
+            transform=train_transform
+        )
+    
+    info(f"4. Dataset załadowany: {len(dataset)} obrazów")
 
     train_size = int(0.8 * len(dataset))
     val_size = len(dataset) - train_size
@@ -417,16 +397,15 @@ def train_model(epochs=10, batch_size=32, model_path=None, info=None):
         running_loss = 0.0
 
         for step, (images, targets, input_lengths, target_lengths) in enumerate(train_loader, start=1):
-
             images = images.to(GLOBAL_DEVICE)
             targets = targets.to(GLOBAL_DEVICE)
             input_lengths = input_lengths.to(GLOBAL_DEVICE)
             target_lengths = target_lengths.to(GLOBAL_DEVICE)
 
+            GLOBAL_OPTIMIZER.zero_grad(set_to_none=True)
+
             outputs = GLOBAL_MODEL(images)  # (T, B, C)
             log_probs = outputs.log_softmax(2)
-
-            GLOBAL_OPTIMIZER.zero_grad(set_to_none=True)
 
             loss = GLOBAL_CRITERION(
                 log_probs,
@@ -441,61 +420,18 @@ def train_model(epochs=10, batch_size=32, model_path=None, info=None):
             running_loss += loss.item()
 
             if step % 50 == 0:
-                info(f"Epoch [{epoch+1}] Step [{step}] Loss: {loss.item():.4f}")
-##        for step, (images, labels) in enumerate(train_loader, start=1):
-##            images = images.to(GLOBAL_DEVICE)
-##            labels = labels.to(GLOBAL_DEVICE)
-##
-##            # DEBUG: label → tekst (1 znak)
-##            texts = [CHARS[label] for label in labels]
-##
-##            targets = []
-##            target_lengths = []
-##
-##            for t in texts:
-##                encoded = [char2idx[c] for c in t]
-##                targets.extend(encoded)
-##                target_lengths.append(len(encoded))
-##
-##            targets = torch.tensor(targets, dtype=torch.long).to(GLOBAL_DEVICE)
-##            target_lengths = torch.tensor(target_lengths, dtype=torch.long).to(GLOBAL_DEVICE)
-##
-##            outputs = GLOBAL_MODEL(images)  # (T, B, C)
-##            log_probs = outputs.log_softmax(2)
-##
-##            T = outputs.size(0)
-##            input_lengths = torch.full(
-##                size=(images.size(0),),
-##                fill_value=T,
-##                dtype=torch.long
-##            ).to(GLOBAL_DEVICE)
-##
-##            GLOBAL_OPTIMIZER.zero_grad(set_to_none=True)
-##
-##            loss = GLOBAL_CRITERION(
-##                log_probs,
-##                targets,
-##                input_lengths,
-##                target_lengths
-##            )
-##
-##            loss.backward()
-##            GLOBAL_OPTIMIZER.step()
-            running_loss += loss.item()
+                info(f"Epoch {epoch+1} Step {step} Loss: {loss.item():.4f}")
 
-            # log co 50 kroków
-            if step % 50 == 0 or step == total_steps:
-
-                info(f"Epoch [{epoch+1}/{epochs}] Step [{step}/{total_steps}] Loss: {loss.item():.4f}")
-            
-        # walidacja
+        # WALIDACJA
+        GLOBAL_MODEL.eval()
         val_loss = 0.0
+
         with torch.inference_mode():
             for images, targets, input_lengths, target_lengths in val_loader:
                 images = images.to(GLOBAL_DEVICE)
                 targets = targets.to(GLOBAL_DEVICE)
                 input_lengths = input_lengths.to(GLOBAL_DEVICE)
-                target_lengths = target_lengths.to(GLOBAL_DEVICE)                
+                target_lengths = target_lengths.to(GLOBAL_DEVICE)
 
                 outputs = GLOBAL_MODEL(images)
                 log_probs = outputs.log_softmax(2)
@@ -508,15 +444,13 @@ def train_model(epochs=10, batch_size=32, model_path=None, info=None):
                 )
 
                 val_loss += loss.item()
+
         val_loss /= len(val_loader)
+
         epoch_time = time.time() - epoch_start
         info(f"Epoch {epoch+1} | train_loss={running_loss:.4f} | val_loss={val_loss:.4f} | time={epoch_time:.1f}s")
 
         GLOBAL_EPOCH = epoch + 1
-
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
-        gc.collect()
 
     total_training_time = time.time() - training_start
     info("\n" + "=" * 60)
@@ -634,8 +568,8 @@ def infinite_train(batch_size=32, model_path=None, checkpoint_interval=5, info=N
         info("2. Ładowanie transformacji obrazów...")
         train_transform = get_train_transform()
         
-        info("3. Ładowanie ImageFolder...")
-        dataset = datasets.ImageFolder(root=EXTRACTED_DIR, transform=train_transform) # to muszę zmienić jak będzie dataset
+        info("3. Wczytywanie Datasetu")
+
 
         info(f"4. Dataset załadowany: {len(dataset)} obrazów, {len(dataset.classes)} klas")
         
@@ -645,8 +579,8 @@ def infinite_train(batch_size=32, model_path=None, checkpoint_interval=5, info=N
         train_dataset, val_dataset = torch.utils.data.random_split(dataset, [train_size, val_size])
         
         info("6. Tworzenie DataLoader...")
-        train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-        val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
+        train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True, collate_fn=collate_fn)
+        val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=batch_size, shuffle=False, collate_fn=collate_fn)
         
         info("7. Inicjalizacja lub ładowanie modelu...")
         # init albo load

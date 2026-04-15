@@ -22,7 +22,7 @@ import matplotlib.pyplot as plt
 
 
 from PIL import Image
-from .config import CHARS, MODEL_PATH, NUM_CLASSES
+from .config import CHARS, MODEL_PATH, NUM_CLASSES, char2idx, idx2char
 from .model import SimpleCNN
 from .utils import get_transform, load_and_optionally_denoise, preprocess_letter, save_image_to_temp_folder
 from .display import visualize_prediction
@@ -75,42 +75,9 @@ def _label_for_idx(idx: int) -> str:
 #print(matplotlib.get_backend())
 
 def load_model(model_path: str = MODEL_PATH, device: torch.device = None, info=None) -> nn.Module:
-    """
-    Wczytuje wytrenowany model SimpleCNN z pliku.
-    
-    Funkcja obsługuje dwa formaty zapisu:
-      - Czysty state_dict (stary format)
-      - Checkpoint z metadanymi (nowy format)
-    
-    Automatycznie wykrywa liczbę klas z zapisanego modelu.
-    
-    Argumenty:
-        model_path (str, opcjonalnie): Ścieżka do pliku modelu (.pth).
-                                    Domyślnie MODEL_PATH z config.
-        device (torch.device, opcjonalnie): Urządzenie do załadowania modelu.
-                                         Domyślnie auto-wykrywane (CUDA/CPU).
-        info (callable, opcjonalnie): Funkcja do logowania. Domyślnie print.
-    
-    Zwraca:
-        nn.Module: Załadowany model SimpleCNN w trybie ewaluacji (eval mode).
-    
-    Efekty uboczne:
-        - Wyświetla komunikaty o ładowaniu na konsolę
-        - Ostrzeżenie jeśli model nie istnieje
-    
-    Przykład:
-        >>> model = load_model("./model_ocr.pth")
-        Wczytywanie modelu z ./model_ocr.pth...
-        Wykryto 26 klas w zapisanym modelu
-        Model wczytany!
-    
-    Uwaga:
-        Jeśli plik modelu nie istnieje, zwraca niezainicjowany model
-        z losowymi wagami (wyniki będą losowe).
-    """
     if info is None:
         info = print
-    
+
     if device is None:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -118,32 +85,30 @@ def load_model(model_path: str = MODEL_PATH, device: torch.device = None, info=N
         info(f"Wczytywanie modelu z {model_path}...")
 
         checkpoint = torch.load(model_path, map_location=device)
+
+        # ustaw alfabet (ważne!)
         _set_active_chars(checkpoint)
 
-        # Pobierz state_dict
         if isinstance(checkpoint, dict) and "model_state_dict" in checkpoint:
             state_dict = checkpoint["model_state_dict"]
-            format_info = "checkpoint (nowy format)"
+            info("Wczytano checkpoint")
         else:
             state_dict = checkpoint
-            format_info = "state_dict (stary format)"
+            info("Wczytano state_dict")
 
-        # Automatycznie wykryj liczbę klas z zapisanego modelu
-        num_classes_from_model = state_dict["classifier.4.weight"].shape[0]
-        info(f"Wykryto {num_classes_from_model} klas w zapisanym modelu")
+        # CRNN zamiast CNN
+        model = SimpleCNN(num_classes=len(CHARS) + 1)
 
-        model = SimpleCNN(num_classes=num_classes_from_model)
         model.load_state_dict(state_dict)
-        info(f"Wczytano {format_info}")
         info("Model wczytany!")
+
     else:
         info(f"UWAGA: Nie znaleziono modelu {model_path}")
-        info("Model nie jest wytrenowany - wyniki będą losowe!")
-        info("Najpierw uruchom: python run_local.py --train")
-        model = SimpleCNN(num_classes=NUM_CLASSES)
+        model = SimpleCNN(num_classes=len(CHARS) + 1)
 
     model.to(device)
     model.eval()
+
     return model
 
 
@@ -507,6 +472,7 @@ def predict_image(
     device: torch.device,
     args,
 ) -> tuple[str, float, torch.Tensor]:
+
     """
     Rozpoznaje pojedynczy znak na zdjęciu.
     
@@ -529,38 +495,64 @@ def predict_image(
         >>> char, conf, probs = predict_image("letter.png", model, device, args)
         >>> print(f"Rozpoznano: {char} z pewnością {conf:.1f}%")
     """
+
     image = load_and_optionally_denoise(image_path, args, mode="L")
     img_array = np.array(image)
     debug = _is_debug_enabled(args)
-    
+
     debug_crops: list[tuple[np.ndarray, str]] = []
 
     model.eval()
     with torch.no_grad():
         original_shape = img_array.shape
+
+        # crop (zostawiamy)
         img_array = _tight_crop(img_array)
         cropped_shape = img_array.shape
-        
-        img_array = preprocess_letter(img_array)
-        preprocessed_shape = img_array.shape
 
-        letter = _classify_letter(img_array, model, device, 1)
+        # UWAGA: zmień preprocess (nie letter!)
+        pil = Image.fromarray(img_array).convert("L")
+        tensor = get_transform()(pil).unsqueeze(0).to(device)
+
+        preprocessed_shape = tensor.shape
+
+        outputs = model(tensor)  # (T, B, C)
+        log_probs = outputs.log_softmax(2)
+        probs = log_probs.exp()
+
+        # greedy decode
+        preds = log_probs.argmax(2)[:, 0].cpu().numpy()
+
+        result = []
+        confidences = []
+        prev = -1
+
+        for t, p in enumerate(preds):
+            if p != prev and p != 0:
+                result.append(idx2char[p])
+                confidences.append(probs[t, 0, p].item())
+            prev = p
+
+        text = "".join(result)
+        confidence = float(np.mean(confidences) * 100) if confidences else 0.0
+
+        # dla kompatybilności: zwracamy probs z pierwszego kroku
+        probs_out = probs[0, 0]
 
     if debug:
-        predicted_char, confidence, probs = letter
-        debug_crops.append((img_array.copy(), f"1_{predicted_char}_{confidence:.1f}"))
         info(
             "[DEBUG][image] kształty obrazu: "
             f"oryginał={original_shape}, po_crop={cropped_shape}, "
             f"po_preprocess={preprocessed_shape}"
         )
         info(
-            f"[DEBUG][image] klasyfikacja: '{predicted_char}' ({confidence:.1f}%), "
-            f"top3: {_format_topk_probs(probs, k=3)}"
+            f"[DEBUG][image] predykcja: '{text}' ({confidence:.1f}%)"
         )
+
+        debug_crops.append((img_array.copy(), f"{text}_{confidence:.1f}"))
         _finalize_debug_crops(debug_crops, args, image_path, mode_tag="image")
 
-    return letter
+    return text, confidence, probs_out
 
 
 

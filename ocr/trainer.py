@@ -26,7 +26,7 @@ from torchvision import datasets
 
 from .config import (
     DATA_URL, DATA_DIR, ARCHIVE_PATH, EXTRACTED_DIR, MODEL_PATH, CHECKPOINT_PATH,
-    MODEL_ARCHIVE_DIR, MODEL_ARCHIVE_KEEP_COUNT, IMAGES_DIR, CHARS, char2idx, idx2char
+    MODEL_ARCHIVE_DIR, MODEL_ARCHIVE_KEEP_COUNT, IMAGES_DIR, CHARS, char2idx, idx2char, DATA_ROOT_DIR
 )
 from .model import SimpleCNN
 from .utils import get_train_transform
@@ -124,13 +124,34 @@ def collate_fn(batch):
     targets = torch.tensor(targets, dtype=torch.long)
     target_lengths = torch.tensor(target_lengths, dtype=torch.long)
 
-    input_lengths = torch.full(
-        size=(images.size(0),),
-        fill_value=images.size(-1) // 8,
-        dtype=torch.long
-    )
 
-    return images, targets, input_lengths, target_lengths
+    return images, targets, target_lengths
+
+def load_all_datasets(root_dir):
+    all_data = []
+
+    for author in os.listdir(root_dir):
+        author_path = os.path.join(root_dir, author)
+
+        if not os.path.isdir(author_path):
+            continue
+
+        json_path = os.path.join(author_path, "boxes.jsonl")
+
+        if not os.path.exists(json_path):
+            continue
+
+        with open(json_path, "r", encoding="utf-8") as f:
+            for line in f:
+                item = json.loads(line)
+
+                # KLUCZOWE: dodaj pełną ścieżkę do obrazu
+                item["image_path"] = os.path.join(author_path, item["crop_file"])
+
+                all_data.append(item)
+
+    return all_data
+
 # -- Trening
 
 checkpoint_path = "checkpoint.pth"
@@ -322,7 +343,7 @@ def init_or_load_model(num_classes, model_path=None, info=None):
     GLOBAL_DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     GLOBAL_MODEL = SimpleCNN(num_classes=num_classes).to(GLOBAL_DEVICE)
-    GLOBAL_CRITERION = nn.CTCLoss()
+    GLOBAL_CRITERION = nn.CTCLoss(zero_infinity=True)
     GLOBAL_OPTIMIZER = torch.optim.Adam(GLOBAL_MODEL.parameters(), lr=0.001)
 
     if model_path and os.path.exists(model_path):
@@ -346,20 +367,15 @@ def train_model(epochs=10, batch_size=32, model_path=None, info=None):
     if info is None:
         info = print
 
-    info("2. Ładowanie transformacji obrazów...")
-    train_transform = get_train_transform()
 
-    DATA_JSON_PATH = os.path.join(IMAGES_DIR, "boxes.jsonl")
-    
     info("3. Ładowanie datasetu OCR...")
-    with open(DATA_JSON_PATH, "r", encoding="utf-8") as f:
-        data = [json.loads(line) for line in f]
+    data = load_all_datasets(DATA_ROOT_DIR)
 
-        dataset = OCRDataset(
-            json_data=data,
-            images_dir=IMAGES_DIR,
-            transform=train_transform
-        )
+    dataset = OCRDataset(
+        json_data=data,
+        images_dir=None,  # już niepotrzebne
+        transform=get_train_transform()
+    )
     
     info(f"4. Dataset załadowany: {len(dataset)} obrazów")
 
@@ -396,16 +412,21 @@ def train_model(epochs=10, batch_size=32, model_path=None, info=None):
         GLOBAL_MODEL.train()
         running_loss = 0.0
 
-        for step, (images, targets, input_lengths, target_lengths) in enumerate(train_loader, start=1):
+        for step, (images, targets, target_lengths) in enumerate(train_loader, start=1):
             images = images.to(GLOBAL_DEVICE)
             targets = targets.to(GLOBAL_DEVICE)
-            input_lengths = input_lengths.to(GLOBAL_DEVICE)
             target_lengths = target_lengths.to(GLOBAL_DEVICE)
 
             GLOBAL_OPTIMIZER.zero_grad(set_to_none=True)
 
             outputs = GLOBAL_MODEL(images)  # (T, B, C)
             log_probs = outputs.log_softmax(2)
+
+            input_lengths = torch.full(
+                size=(images.size(0),),
+                fill_value=outputs.size(0),
+                dtype=torch.long
+            )
 
             loss = GLOBAL_CRITERION(
                 log_probs,
@@ -427,15 +448,20 @@ def train_model(epochs=10, batch_size=32, model_path=None, info=None):
         val_loss = 0.0
 
         with torch.inference_mode():
-            for images, targets, input_lengths, target_lengths in val_loader:
+            for images, targets, target_lengths in val_loader:
                 images = images.to(GLOBAL_DEVICE)
                 targets = targets.to(GLOBAL_DEVICE)
-                input_lengths = input_lengths.to(GLOBAL_DEVICE)
                 target_lengths = target_lengths.to(GLOBAL_DEVICE)
 
                 outputs = GLOBAL_MODEL(images)
                 log_probs = outputs.log_softmax(2)
 
+                input_lengths = torch.full(
+                    size=(images.size(0),),
+                    fill_value=outputs.size(0),
+                    dtype=torch.long
+                )
+                
                 loss = GLOBAL_CRITERION(
                     log_probs,
                     targets,
@@ -446,10 +472,17 @@ def train_model(epochs=10, batch_size=32, model_path=None, info=None):
                 val_loss += loss.item()
 
         val_loss /= len(val_loader)
-
+        
+        capture_best_model()
+        
         epoch_time = time.time() - epoch_start
         info(f"Epoch {epoch+1} | train_loss={running_loss:.4f} | val_loss={val_loss:.4f} | time={epoch_time:.1f}s")
-
+        if torch.isnan(loss):
+            print("NaN detected!")
+            print("targets:", target_lengths)
+            print("input:", input_lengths)
+            print("outputs shape:", outputs.shape)
+            continue
         GLOBAL_EPOCH = epoch + 1
 
     total_training_time = time.time() - training_start

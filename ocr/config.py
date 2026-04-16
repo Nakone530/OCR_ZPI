@@ -30,6 +30,7 @@ DATA_URL = "http://www.ee.surrey.ac.uk/CVSSP/demos/chars74k/EnglishFnt.tgz"
 
 # Katalog lokalny na przechowywanie danych
 DATA_DIR = "./data"
+DATA_ROOT_DIR = "./ttData"
 
 # Ścieżka do pobranego archiwum
 ARCHIVE_PATH = os.path.join(DATA_DIR, "EnglishFnt.tgz")
@@ -63,7 +64,7 @@ STD  = [0.5, 0.5, 0.5]
 
 # ── Klasy (46: A-z - alfabet bez znaków polskich) ──────────────────────────────────────
 # Zestaw znaków obsługiwanych przez model OCR (wielkie litery A-z)
-CHARS = "ABCDEFGHIJKLMNOPRSTUWYZabcdefghijklmnoprstuwyząćęłńóśźż"
+CHARS = "ABCDEFGHIJKLMNOPRSTUWYZĄĆĘŁŃÓŚŹŻabcdefghijklmnoprstuwyząćęłńóśźż"
 NUM_CLASSES = len(CHARS)
 char2idx = {c: i + 1 for i, c in enumerate(CHARS)}  # 0 = blank!
 idx2char = {i + 1: c for i, c in enumerate(CHARS)}

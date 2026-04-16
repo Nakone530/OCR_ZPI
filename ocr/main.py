@@ -264,37 +264,52 @@ def main(args=None, info=None, buffor=None) -> None:
     elif args.image:
         _require_file(args.image, info)
         info(f"\nRozpoznawanie: {args.image}")
+
         saved_copy_path = save_image_to_today_folder(args.image, info)
 
         model = load_model(model_path, device, info)
-        predicted_char, confidence, probs = predict_image(args.image, model, device, args)
+
+        result = predict_image(args.image, model, device, args)
+
+        text = result["text"]
+        confidence = result["confidence"]
+        probs = result["probs"]
+
         active_labels = get_active_chars()
 
-
         output_handler = create_output_handler(args, source_image=args.image)
-        result = OCRResult(predicted_char, confidence, probs, mode="single")
-        output_handler.output(result, info)
+
+        ocr_result = OCRResult(
+            text=text,
+            confidence=confidence,
+            probs=probs,
+            mode="word",
+            class_labels=active_labels
+        )
+
+        output_handler.output(ocr_result, info)
 
         if args.debug:
-            visualize_prediction(args.image, predicted_char, confidence, args, info)
+            visualize_prediction(args.image, text, confidence, args, info)
 
         if args.json:
             payload = build_image_result_json(
                 image_path=args.image,
                 saved_copy_path=saved_copy_path,
-                predicted_char=predicted_char,
+                predicted_char=text,
                 confidence=confidence,
                 probs=probs,
                 device=str(device),
             )
+
             info(dump_json(payload, pretty=args.json_pretty))
-            out_path = args.json_path
-            if out_path is None:
-                out_path = os.path.splitext(saved_copy_path)[0] + ".json"
+
+            out_path = args.json_path or os.path.splitext(saved_copy_path)[0] + ".json"
             write_json(out_path, payload, pretty=args.json_pretty)
+
         else:
-            print_single_result(predicted_char, confidence, info)
-            print_top5(probs, info)
+            print(f"TEXT: {text}")
+            print(f"CONFIDENCE: {confidence:.2f}%")
 
     # ── Wyraz ──
     elif args.word:

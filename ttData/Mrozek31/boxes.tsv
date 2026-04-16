@@ -1,0 +1,88 @@
+id	crop_file	xmin	ymin	xmax	ymax	text	suggested_text	prediction_score	prob	source_image
+0	word_000.png	112	69	204	123	Do	o	0.000000	0.652449	C:\Users\Ivan\Desktop\OCR_ZPI\Listy\Mrozek\Mrozek3.jpg
+1	word_001.png	211	68	435	124	Postępowej	Poatspouei	0.000000	0.397711	C:\Users\Ivan\Desktop\OCR_ZPI\Listy\Mrozek\Mrozek3.jpg
+2	word_002.png	444	55	637	116	Ludzkości	dudhosai .	0.000000	0.220896	C:\Users\Ivan\Desktop\OCR_ZPI\Listy\Mrozek\Mrozek3.jpg
+3	word_003.png	323	124	559	173	Niniejszym	Mlinieiyur	0.000000	0.296469	C:\Users\Ivan\Desktop\OCR_ZPI\Listy\Mrozek\Mrozek3.jpg
+4	word_004.png	567	113	693	169	oświad	usuad_	0.000000	0.261147	C:\Users\Ivan\Desktop\OCR_ZPI\Listy\Mrozek\Mrozek3.jpg
+5	word_005.png	120	168	241	203	czam	(yWm	0.000000	0.030963	C:\Users\Ivan\Desktop\OCR_ZPI\Listy\Mrozek\Mrozek3.jpg
+6	word_006.png	247	172	301	208	że	ie	0.000000	0.123082	C:\Users\Ivan\Desktop\OCR_ZPI\Listy\Mrozek\Mrozek3.jpg
+7	word_007.png	309	165	432	209	jestem	jtem	0.000000	0.606822	C:\Users\Ivan\Desktop\OCR_ZPI\Listy\Mrozek\Mrozek3.jpg
+8	word_008.png	432	161	545	204	ostro	Ccsero	0.000000	0.098906	C:\Users\Ivan\Desktop\OCR_ZPI\Listy\Mrozek\Mrozek3.jpg
+9	word_009.png	559	165	699	209	przeciw	pixciu	0.000000	0.224274	C:\Users\Ivan\Desktop\OCR_ZPI\Listy\Mrozek\Mrozek3.jpg
+10	word_010.png	132	204	195	248	A	(A .	0.000000	0.328291	C:\Users\Ivan\Desktop\OCR_ZPI\Listy\Mrozek\Mrozek3.jpg
+11	word_011.png	201	197	396	249	Hitlerowi	Hitlgroui'	0.000000	0.460829	C:\Users\Ivan\Desktop\OCR_ZPI\Listy\Mrozek\Mrozek3.jpg
+12	word_012.png	391	195	429	240	i	[manual]	0.000000	1.000000	C:\Users\Ivan\Desktop\OCR_ZPI\Listy\Mrozek\Mrozek3.jpg
+13	word_013.png	424	201	515	255	jego	8ao	0.000000	0.244020	C:\Users\Ivan\Desktop\OCR_ZPI\Listy\Mrozek\Mrozek3.jpg
+14	word_014.png	512	191	632	241	klice	KcsJice.	0.000000	0.164615	C:\Users\Ivan\Desktop\OCR_ZPI\Listy\Mrozek\Mrozek3.jpg
+15	word_015.png	312	241	511	292	Uważam	Aloam	0.000000	0.844571	C:\Users\Ivan\Desktop\OCR_ZPI\Listy\Mrozek\Mrozek3.jpg
+16	word_016.png	527	244	577	291	że	Ke	0.000000	0.116032	C:\Users\Ivan\Desktop\OCR_ZPI\Listy\Mrozek\Mrozek3.jpg
+17	word_017.png	576	240	631	287	A	cA	0.000000	0.666151	C:\Users\Ivan\Desktop\OCR_ZPI\Listy\Mrozek\Mrozek3.jpg
+18	word_018.png	632	241	691	284	Hi	Hi_	0.000000	0.365002	C:\Users\Ivan\Desktop\OCR_ZPI\Listy\Mrozek\Mrozek3.jpg
+19	word_019.png	137	283	216	336	tler	Łler	0.000000	0.784086	C:\Users\Ivan\Desktop\OCR_ZPI\Listy\Mrozek\Mrozek3.jpg
+20	word_020.png	219	284	301	331	był	ht	0.000000	0.395671	C:\Users\Ivan\Desktop\OCR_ZPI\Listy\Mrozek\Mrozek3.jpg
+21	word_021.png	307	288	373	348	zły	4y	0.000000	0.118669	C:\Users\Ivan\Desktop\OCR_ZPI\Listy\Mrozek\Mrozek3.jpg
+22	word_022.png	380	285	411	329	i	[manual]	0.000000	1.000000	C:\Users\Ivan\Desktop\OCR_ZPI\Listy\Mrozek\Mrozek3.jpg
+23	word_023.png	409	279	595	339	potępiam	pal;piam	0.000000	0.119648	C:\Users\Ivan\Desktop\OCR_ZPI\Listy\Mrozek\Mrozek3.jpg
+24	word_024.png	596	280	691	327	kate	kal _	0.000000	0.248070	C:\Users\Ivan\Desktop\OCR_ZPI\Listy\Mrozek\Mrozek3.jpg
+25	word_025.png	136	321	332	389	gorycznie	Yprcunie	0.000000	0.396265	C:\Users\Ivan\Desktop\OCR_ZPI\Listy\Mrozek\Mrozek3.jpg
+26	word_026.png	312	368	488	416	Również	Boumniet	0.000000	0.211998	C:\Users\Ivan\Desktop\OCR_ZPI\Listy\Mrozek\Mrozek3.jpg
+27	word_027.png	480	363	612	419	jestem	jeoIm	0.000000	0.634895	C:\Users\Ivan\Desktop\OCR_ZPI\Listy\Mrozek\Mrozek3.jpg
+28	word_028.png	612	361	685	411	prze	@ixe	0.000000	0.314447	C:\Users\Ivan\Desktop\OCR_ZPI\Listy\Mrozek\Mrozek3.jpg
+29	word_029.png	129	408	263	460	ciwko	Auko	0.000000	0.185461	C:\Users\Ivan\Desktop\OCR_ZPI\Listy\Mrozek\Mrozek3.jpg
+30	word_030.png	256	412	448	455	cesarzowi	cejantcwi	0.000000	0.289438	C:\Users\Ivan\Desktop\OCR_ZPI\Listy\Mrozek\Mrozek3.jpg
+31	word_031.png	443	405	635	451	Neronowi	Ueronout;	0.000000	0.197092	C:\Users\Ivan\Desktop\OCR_ZPI\Listy\Mrozek\Mrozek3.jpg
+32	word_032.png	635	409	701	448	prze	pie -	0.000000	0.296049	C:\Users\Ivan\Desktop\OCR_ZPI\Listy\Mrozek\Mrozek3.jpg
+33	word_033.png	140	456	263	495	ciwko	ciusko	0.000000	0.442323	C:\Users\Ivan\Desktop\OCR_ZPI\Listy\Mrozek\Mrozek3.jpg
+34	word_034.png	267	451	500	491	chińskiemu	chialiemu	0.000000	0.442666	C:\Users\Ivan\Desktop\OCR_ZPI\Listy\Mrozek\Mrozek3.jpg
+35	word_035.png	504	440	689	479	cesarzowi	Cetaneld'	0.000000	0.093399	C:\Users\Ivan\Desktop\OCR_ZPI\Listy\Mrozek\Mrozek3.jpg
+36	word_036.png	139	489	276	533	Ming	Wlima	0.000000	0.518375	C:\Users\Ivan\Desktop\OCR_ZPI\Listy\Mrozek\Mrozek3.jpg
+37	word_037.png	293	489	391	528	oraz	ovax	0.000000	0.803829	C:\Users\Ivan\Desktop\OCR_ZPI\Listy\Mrozek\Mrozek3.jpg
+38	word_038.png	399	484	568	525	przeciwko	ptteciutco	0.000000	0.147819	C:\Users\Ivan\Desktop\OCR_ZPI\Listy\Mrozek\Mrozek3.jpg
+39	word_039.png	576	480	679	521	ucis	Jcis =	0.000000	0.420708	C:\Users\Ivan\Desktop\OCR_ZPI\Listy\Mrozek\Mrozek3.jpg
+40	word_040.png	135	527	245	561	kowi	kcoui	0.000000	0.400717	C:\Users\Ivan\Desktop\OCR_ZPI\Listy\Mrozek\Mrozek3.jpg
+41	word_041.png	252	520	417	564	warstwy	iarstui	0.000000	0.585831	C:\Users\Ivan\Desktop\OCR_ZPI\Listy\Mrozek\Mrozek3.jpg
+42	word_042.png	424	511	656	556	chłopskiej	chtopehei	0.000000	0.272887	C:\Users\Ivan\Desktop\OCR_ZPI\Listy\Mrozek\Mrozek3.jpg
+43	word_043.png	655	517	732	556	w	W	0.000000	0.342133	C:\Users\Ivan\Desktop\OCR_ZPI\Listy\Mrozek\Mrozek3.jpg
+44	word_044.png	137	564	408	599	starożytnym	sTarvujnymm	0.000000	0.213391	C:\Users\Ivan\Desktop\OCR_ZPI\Listy\Mrozek\Mrozek3.jpg
+45	word_045.png	413	548	549	600	Egipcie	Caipac	0.000000	0.580201	C:\Users\Ivan\Desktop\OCR_ZPI\Listy\Mrozek\Mrozek3.jpg
+46	word_046.png	555	555	685	601	przez	pmns<	0.000000	0.200353	C:\Users\Ivan\Desktop\OCR_ZPI\Listy\Mrozek\Mrozek3.jpg
+47	word_047.png	137	599	320	637	Faraona	Faramns	0.000000	0.407908	C:\Users\Ivan\Desktop\OCR_ZPI\Listy\Mrozek\Mrozek3.jpg
+48	word_048.png	296	631	544	680	Podkreślam	@odbrecLvn	0.000000	0.054161	C:\Users\Ivan\Desktop\OCR_ZPI\Listy\Mrozek\Mrozek3.jpg
+49	word_049.png	548	643	585	677	z	[manual]	0.000000	1.000000	C:\Users\Ivan\Desktop\OCR_ZPI\Listy\Mrozek\Mrozek3.jpg
+50	word_050.png	587	640	696	688	nacis	muci{ _	0.000000	0.164736	C:\Users\Ivan\Desktop\OCR_ZPI\Listy\Mrozek\Mrozek3.jpg
+51	word_051.png	136	677	247	727	kiem	iem	0.000000	0.705264	C:\Users\Ivan\Desktop\OCR_ZPI\Listy\Mrozek\Mrozek3.jpg
+52	word_052.png	256	681	315	724	że	{e	0.000000	0.220605	C:\Users\Ivan\Desktop\OCR_ZPI\Listy\Mrozek\Mrozek3.jpg
+53	word_053.png	313	672	364	719	to	te	0.000000	0.964078	C:\Users\Ivan\Desktop\OCR_ZPI\Listy\Mrozek\Mrozek3.jpg
+54	word_054.png	365	683	467	723	moje	mde	0.000000	0.490181	C:\Users\Ivan\Desktop\OCR_ZPI\Listy\Mrozek\Mrozek3.jpg
+55	word_055.png	464	675	640	716	poglądy	poylodu	0.000000	0.234424	C:\Users\Ivan\Desktop\OCR_ZPI\Listy\Mrozek\Mrozek3.jpg
+56	word_056.png	137	719	269	764	głoszę	otovis	0.000000	0.575559	C:\Users\Ivan\Desktop\OCR_ZPI\Listy\Mrozek\Mrozek3.jpg
+57	word_057.png	273	719	313	760	z	2	0.000000	0.900734	C:\Users\Ivan\Desktop\OCR_ZPI\Listy\Mrozek\Mrozek3.jpg
+58	word_058.png	320	711	532	760	podniesioną	podniSsiond	0.000000	0.283839	C:\Users\Ivan\Desktop\OCR_ZPI\Listy\Mrozek\Mrozek3.jpg
+59	word_059.png	531	712	704	764	przyłbicą	pi SArcr	0.000000	0.260221	C:\Users\Ivan\Desktop\OCR_ZPI\Listy\Mrozek\Mrozek3.jpg
+60	word_060.png	147	756	191	796	i	[manual]	0.000000	1.000000	C:\Users\Ivan\Desktop\OCR_ZPI\Listy\Mrozek\Mrozek3.jpg
+61	word_061.png	188	751	295	800	wcale	Atile	0.000000	0.113460	C:\Users\Ivan\Desktop\OCR_ZPI\Listy\Mrozek\Mrozek3.jpg
+62	word_062.png	299	760	361	795	się	[manual]	0.000000	1.000000	C:\Users\Ivan\Desktop\OCR_ZPI\Listy\Mrozek\Mrozek3.jpg
+63	word_063.png	372	756	437	799	nie	mc	0.000000	0.909354	C:\Users\Ivan\Desktop\OCR_ZPI\Listy\Mrozek\Mrozek3.jpg
+64	word_064.png	439	747	529	807	boję	hvjg	0.000000	0.075672	C:\Users\Ivan\Desktop\OCR_ZPI\Listy\Mrozek\Mrozek3.jpg
+65	word_065.png	529	745	672	804	reakcyj	reakec~	0.000000	0.284228	C:\Users\Ivan\Desktop\OCR_ZPI\Listy\Mrozek\Mrozek3.jpg
+66	word_066.png	152	788	269	849	nych	Imxh	0.000000	0.604584	C:\Users\Ivan\Desktop\OCR_ZPI\Listy\Mrozek\Mrozek3.jpg
+67	word_067.png	284	784	411	839	głosów	tosou;	0.000000	0.228629	C:\Users\Ivan\Desktop\OCR_ZPI\Listy\Mrozek\Mrozek3.jpg
+68	word_068.png	315	837	385	876	Za	[manual]	0.000000	1.000000	C:\Users\Ivan\Desktop\OCR_ZPI\Listy\Mrozek\Mrozek3.jpg
+69	word_069.png	392	829	452	881	to	to	0.000000	0.790114	C:\Users\Ivan\Desktop\OCR_ZPI\Listy\Mrozek\Mrozek3.jpg
+70	word_070.png	457	837	581	877	proszę	ptrosxs	0.000000	0.257801	C:\Users\Ivan\Desktop\OCR_ZPI\Listy\Mrozek\Mrozek3.jpg
+71	word_071.png	581	831	640	871	Sz	[manual]	0.000000	1.000000	C:\Users\Ivan\Desktop\OCR_ZPI\Listy\Mrozek\Mrozek3.jpg
+72	word_072.png	649	827	703	873	Po	%.	0.000000	0.735101	C:\Users\Ivan\Desktop\OCR_ZPI\Listy\Mrozek\Mrozek3.jpg
+73	word_073.png	144	879	324	923	stępową	At pourq	0.000000	0.669426	C:\Users\Ivan\Desktop\OCR_ZPI\Listy\Mrozek\Mrozek3.jpg
+74	word_074.png	313	869	493	920	Ludzkość	uciikok	0.000000	0.253590	C:\Users\Ivan\Desktop\OCR_ZPI\Listy\Mrozek\Mrozek3.jpg
+75	word_075.png	503	883	537	911	o	[manual]	0.000000	1.000000	C:\Users\Ivan\Desktop\OCR_ZPI\Listy\Mrozek\Mrozek3.jpg
+76	word_076.png	545	872	695	919	przyzna	prayvna	0.000000	0.134558	C:\Users\Ivan\Desktop\OCR_ZPI\Listy\Mrozek\Mrozek3.jpg
+77	word_077.png	153	923	228	959	nie	me	0.000000	0.303816	C:\Users\Ivan\Desktop\OCR_ZPI\Listy\Mrozek\Mrozek3.jpg
+78	word_078.png	229	923	307	961	mi	Mn	0.000000	0.493852	C:\Users\Ivan\Desktop\OCR_ZPI\Listy\Mrozek\Mrozek3.jpg
+79	word_079.png	309	912	489	968	Nagrody	Waqrody	0.000000	0.364509	C:\Users\Ivan\Desktop\OCR_ZPI\Listy\Mrozek\Mrozek3.jpg
+80	word_080.png	488	903	625	961	Pokoju	Pokoil	0.000000	0.121480	C:\Users\Ivan\Desktop\OCR_ZPI\Listy\Mrozek\Mrozek3.jpg
+81	word_081.png	631	907	701	951	im	V	0.000000	0.146919	C:\Users\Ivan\Desktop\OCR_ZPI\Listy\Mrozek\Mrozek3.jpg
+82	word_082.png	153	951	293	1005	Nobla	Uaha	0.000000	0.174806	C:\Users\Ivan\Desktop\OCR_ZPI\Listy\Mrozek\Mrozek3.jpg
+83	word_083.png	323	988	404	1060	Jak	Jak	0.000000	0.695024	C:\Users\Ivan\Desktop\OCR_ZPI\Listy\Mrozek\Mrozek3.jpg
+84	word_084.png	407	996	485	1055	nie	mie	0.000000	0.907002	C:\Users\Ivan\Desktop\OCR_ZPI\Listy\Mrozek\Mrozek3.jpg
+85	word_085.png	487	991	589	1057	może	moxc	0.000000	0.234613	C:\Users\Ivan\Desktop\OCR_ZPI\Listy\Mrozek\Mrozek3.jpg
+86	word_086.png	591	991	683	1051	być	ba	0.000000	0.087260	C:\Users\Ivan\Desktop\OCR_ZPI\Listy\Mrozek\Mrozek3.jpg

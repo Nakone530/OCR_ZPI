@@ -22,7 +22,7 @@ class OCRDataset(torch.utils.data.Dataset):
     def __getitem__(self, idx):
         item = self.data[idx]
 
-        img_path = os.path.join(self.images_dir, item["crop_file"])
+        img_path = item["image_path"]
         image = Image.open(img_path).convert("L")
 
         text = item["text"]

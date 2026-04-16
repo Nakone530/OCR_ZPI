@@ -86,7 +86,6 @@ def load_model(model_path: str = MODEL_PATH, device: torch.device = None, info=N
 
         checkpoint = torch.load(model_path, map_location=device)
 
-        # ustaw alfabet (ważne!)
         _set_active_chars(checkpoint)
 
         if isinstance(checkpoint, dict) and "model_state_dict" in checkpoint:
@@ -520,20 +519,24 @@ def predict_image(
         log_probs = outputs.log_softmax(2)
         probs = log_probs.exp()
 
-        # greedy decode
         preds = log_probs.argmax(2)[:, 0].cpu().numpy()
 
-        result = []
+        chars = []
         confidences = []
-        prev = -1
 
-        for t, p in enumerate(preds):
+        prev = 0  # blank
+
+        for t in range(len(preds)):
+            p = preds[t]
+
             if p != prev and p != 0:
-                result.append(idx2char[p])
+                chars.append(idx2char[p])
+
                 confidences.append(probs[t, 0, p].item())
+
             prev = p
 
-        text = "".join(result)
+        text = "".join(chars)
         confidence = float(np.mean(confidences) * 100) if confidences else 0.0
 
         # dla kompatybilności: zwracamy probs z pierwszego kroku
@@ -552,7 +555,7 @@ def predict_image(
         debug_crops.append((img_array.copy(), f"{text}_{confidence:.1f}"))
         _finalize_debug_crops(debug_crops, args, image_path, mode_tag="image")
 
-    return text, confidence, probs_out
+    return {"text": text, "confidence": confidence, "per_char_confidences": confidences, "probs": probs_out}
 
 
 
@@ -606,7 +609,6 @@ def predict_word(
     with torch.no_grad():
         for idx, (x1, y1, x2, y2) in enumerate(letter_boxes, start=1):
             letter_img = img_array[y1:y2, x1:x2]
-            letter_img = _tight_crop(letter_img)
             if letter_img.size == 0:
                 if debug:
                     info(f"[DEBUG][word] segment {idx}: pominięty (pusty po przycięciu)")

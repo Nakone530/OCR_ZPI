@@ -20,7 +20,7 @@ import torch
 
 from typing import Optional, List
 from ocr.config import MODEL_PATH
-from ocr.inference import get_active_chars, load_model, predict_image, predict_segments, predict_word
+from ocr.inference import get_active_chars, load_model, predict_image, predict_letter, predict_segments, predict_word
 from ocr.output import OCRResult, create_output_handler
 from ocr.trainer import download_dataset, train_model, infinite_train
 from ocr.utils import save_image_to_today_folder
@@ -53,7 +53,9 @@ def build_parser() -> argparse.ArgumentParser:
     mode.add_argument("--infinite", action="store_true",
                       help="Nieskończony trening do przerwania (Ctrl+C)")
     mode.add_argument("--image", "-i", type=str, metavar="PLIK",
-                      help="Rozpoznaj pojedynczą literę")
+                      help="Rozpoznaj pojedynczą literę (model CNN)")
+    mode.add_argument("--crnn", type=str, metavar="PLIK",
+                      help="Rozpoznaj tekst modelem CRNN")
     mode.add_argument("--word", "-w", type=str, metavar="PLIK",
                       help="Rozpoznaj wyraz (jedna linia)")
     mode.add_argument("--lines", "-l", type=str, metavar="PLIK",
@@ -184,6 +186,9 @@ def build_args(state):
     elif state["mode"] == "image":
         args += ["--image", state["input_path"]]
 
+    elif state["mode"] == "crnn":
+        args += ["--crnn", state["input_path"]]
+
     if state["json"]:
         args.append("--json")
 
@@ -267,7 +272,7 @@ def main(args=None, info=None, buffor=None) -> None:
         saved_copy_path = save_image_to_today_folder(args.image, info)
 
         model = load_model(model_path, device, info)
-        predicted_char, confidence, probs = predict_image(args.image, model, device, args)
+        predicted_char, confidence, probs = predict_letter(args.image, model, device, args)
         active_labels = get_active_chars()
 
 
@@ -295,6 +300,22 @@ def main(args=None, info=None, buffor=None) -> None:
         else:
             print_single_result(predicted_char, confidence, info)
             print_top5(probs, info)
+
+    # ── CRNN ──
+    elif args.crnn:
+        _require_file(args.crnn, info)
+        info(f"\nRozpoznawanie CRNN: {args.crnn}")
+        save_image_to_today_folder(args.crnn, info)
+
+        model = load_model(model_path, device, info)
+        result = predict_image(args.crnn, model, device, args)
+        text = result["text"]
+        confidence = result["confidence"]
+
+        info(f"Rozpoznany tekst: '{text}' ({confidence:.1f}%)")
+        if args.json:
+            payload = {"file": args.crnn, "text": text, "confidence": confidence}
+            info(dump_json(payload, pretty=args.json_pretty))
 
     # ── Wyraz ──
     elif args.word:
@@ -385,7 +406,7 @@ def main(args=None, info=None, buffor=None) -> None:
                 continue
 
             saved_copy_path = save_image_to_today_folder(img_path, info)
-            predicted_char, confidence, probs = predict_image(img_path, model, device, args)
+            predicted_char, confidence, probs = predict_letter(img_path, model, device, args)
             results.append({
                 "file": img_path,
                 "char": predicted_char,

@@ -64,3 +64,7 @@ STD  = [0.5, 0.5, 0.5]
 # Zestaw znaków obsługiwanych przez model OCR (wielkie litery A-z)
 CHARS = "ABCDEFGHIJKLMNOPRSTUWYZabcderghijklmnoprstuwyz"
 NUM_CLASSES = len(CHARS)
+
+# Mapowania indeks <-> znak dla CTC (0 = blank)
+char2idx = {c: i + 1 for i, c in enumerate(CHARS)}
+idx2char  = {i + 1: c for i, c in enumerate(CHARS)}

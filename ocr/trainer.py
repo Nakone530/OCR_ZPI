@@ -29,7 +29,7 @@ from .config import (
     MODEL_ARCHIVE_DIR, MODEL_ARCHIVE_KEEP_COUNT, IMAGES_DIR, CHARS, char2idx, idx2char, DATA_ROOT_DIR
 )
 from .model import SimpleCNN
-from .utils import get_train_transform
+from .utils import get_train_transform, load_all_datasets
 from .model_archive import ModelArchiver
 from .OCRDataset import OCRDataset
 from . import info
@@ -127,30 +127,7 @@ def collate_fn(batch):
 
     return images, targets, target_lengths
 
-def load_all_datasets(root_dir):
-    all_data = []
 
-    for author in os.listdir(root_dir):
-        author_path = os.path.join(root_dir, author)
-
-        if not os.path.isdir(author_path):
-            continue
-
-        json_path = os.path.join(author_path, "boxes.jsonl")
-
-        if not os.path.exists(json_path):
-            continue
-
-        with open(json_path, "r", encoding="utf-8") as f:
-            for line in f:
-                item = json.loads(line)
-
-                # KLUCZOWE: dodaj pełną ścieżkę do obrazu
-                item["image_path"] = os.path.join(author_path, item["crop_file"])
-
-                all_data.append(item)
-
-    return all_data
 
 # -- Trening
 

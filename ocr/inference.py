@@ -25,7 +25,7 @@ from PIL import Image
 from .config import CHARS, MODEL_PATH, NUM_CLASSES, char2idx, idx2char
 from .model import SimpleCNN
 from .utils import get_transform, load_and_optionally_denoise, preprocess_letter, save_image_to_temp_folder
-from .display import visualize_prediction
+from .display import visualize_prediction, show_image
 from . import info
 
 # ── Ładowanie modelu ───────────────────────────────────────────────────────────
@@ -473,46 +473,33 @@ def predict_image(
 ) -> tuple[str, float, torch.Tensor]:
 
     """
-    Rozpoznaje pojedynczy znak na zdjęciu.
-    
-    Funkcja ładuje obraz, przycina do bounding boxa znaku,
-    przetwarza i klasyfikuje przy użyciu modelu CNN.
-    
-    Argumenty:
-        image_path (str): Ścieżka do obrazu ze znakiem.
-        model (nn.Module): Wytrenowany model CNN.
-        device (torch.device): Urządzenie (CPU/CUDA) do obliczeń.
-        args: Obiekt argparse.Namespace z parametrami odszumiania.
-    
-    Zwraca:
-        tuple[str, float, torch.Tensor]: Krotka zawierająca:
-            - predicted_char (str): Rozpoznany znak (np. "A")
-            - confidence (float): Pewność predykcji w procentach (0-100)
-            - probs (torch.Tensor): Tensor prawdopodobieństw dla wszystkich klas
-    
-    Przykład:
-        >>> char, conf, probs = predict_image("letter.png", model, device, args)
-        >>> print(f"Rozpoznano: {char} z pewnością {conf:.1f}%")
+        funkcja rozpoznaje wyraz słowa
     """
 
     image = load_and_optionally_denoise(image_path, args, mode="L")
+    
     img_array = np.array(image)
     debug = _is_debug_enabled(args)
-
+    if(debug):
+        show_image(image, "przed crop")
+    
     debug_crops: list[tuple[np.ndarray, str]] = []
 
     model.eval()
     with torch.no_grad():
         original_shape = img_array.shape
-
-        # crop (zostawiamy)
-        img_array = _tight_crop(img_array)
+        
+        # crop
+        #img_array = _tight_crop(img_array)
         cropped_shape = img_array.shape
-
-        # UWAGA: zmień preprocess (nie letter!)
+        
+        # UWAGA: zmień preprocess
         pil = Image.fromarray(img_array).convert("L")
+        if(debug):
+            show_image(pil, "po crop", True)
+            
         tensor = get_transform()(pil).unsqueeze(0).to(device)
-
+        
         preprocessed_shape = tensor.shape
 
         outputs = model(tensor)  # (T, B, C)

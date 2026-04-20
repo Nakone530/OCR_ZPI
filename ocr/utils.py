@@ -10,6 +10,7 @@ import os
 from datetime import date
 from pathlib import Path
 
+import json
 try:
     import cv2  # type: ignore
 except ModuleNotFoundError:  # pragma: no cover
@@ -61,7 +62,7 @@ def get_transform() -> transforms.Compose:
     """
     return transforms.Compose([
         transforms.Grayscale(num_output_channels=1),
-        transforms.Resize((IMAGE_SIZE, IMAGE_SIZE)),
+        transforms.Resize((32, 128)),
         transforms.ToTensor(),
         transforms.Normalize((0.5,), (0.5,)),
     ])
@@ -91,11 +92,8 @@ def get_train_transform() -> transforms.Compose:
     """
     return transforms.Compose([
         transforms.Grayscale(num_output_channels=1),
-
         transforms.Resize((32, 128)),
-
         transforms.RandomRotation(5),
-
         transforms.ToTensor(),
         transforms.Normalize((0.5,), (0.5,))
     ])
@@ -257,6 +255,32 @@ def load_and_optionally_denoise(image_path: str, args, mode: str = "L") -> Image
 
     return img.convert(mode)
 
+# ── ładowanie datasetu ────────────────────────────────────────────────────
+
+def load_all_datasets(root_dir):
+    all_data = []
+
+    for author in os.listdir(root_dir):
+        author_path = os.path.join(root_dir, author)
+
+        if not os.path.isdir(author_path):
+            continue
+
+        json_path = os.path.join(author_path, "boxes.jsonl")
+
+        if not os.path.exists(json_path):
+            continue
+
+        with open(json_path, "r", encoding="utf-8") as f:
+            for line in f:
+                item = json.loads(line)
+
+                # KLUCZOWE: dodaj pełną ścieżkę do obrazu
+                item["image_path"] = os.path.join(author_path, item["crop_file"])
+
+                all_data.append(item)
+
+    return all_data
 
 # ── Zapis do folderu z datą ────────────────────────────────────────────────────
 

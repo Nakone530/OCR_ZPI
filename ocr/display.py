@@ -9,6 +9,7 @@ Odpowiedzialności:
 
 import torch
 import matplotlib.pyplot as plt
+import numpy as np
 
 from .config import CHARS
 from .utils import load_and_optionally_denoise
@@ -202,3 +203,27 @@ def print_multi_result(image_path: str, predicted_char: str, confidence: float, 
           letter1.png  →  'A' (98.2%)
     """
     info(f"  {image_path}  ->  '{predicted_char}' ({confidence:.1f}%)")
+
+def show_image(img, title=None, blk=False):
+    """
+    Wyświetla obraz (PIL.Image lub numpy array) przy użyciu matplotlib.
+
+    :param img: obraz (PIL.Image.Image lub np.ndarray)
+    :param title: opcjonalny tytuł
+    """
+    if not isinstance(img, np.ndarray):
+        img = np.array(img)
+
+    plt.figure()
+    
+    # jeśli obraz jest grayscale
+    if img.ndim == 2:
+        plt.imshow(img, cmap="gray")
+    else:
+        plt.imshow(img)
+
+    if title:
+        plt.title(title)
+
+    plt.axis("off")
+    plt.show(block=blk)

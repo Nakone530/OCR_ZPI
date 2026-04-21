@@ -24,7 +24,7 @@ import matplotlib.pyplot as plt
 from PIL import Image
 from .config import CHARS, MODEL_PATH, NUM_CLASSES, char2idx, idx2char
 from .model import SimpleCNN
-from .utils import get_transform, load_and_optionally_denoise, preprocess_letter, save_image_to_temp_folder
+from .utils import get_inf_transform, load_and_optionally_denoise, preprocess_letter, save_image_to_temp_folder
 from .display import visualize_prediction, show_image
 from . import info
 
@@ -376,7 +376,7 @@ def _classify_letter(letter_gray: np.ndarray, model: nn.Module, device: torch.de
         >>> char, conf, probs = _classify_letter(letter_img, model, device, True)
     """
     pil = Image.fromarray(letter_gray).resize((28, 28)).convert("L")
-    tensor = get_transform()(pil).unsqueeze(0).to(device)
+    tensor = get_inf_transform()(pil).unsqueeze(0).to(device)
     probs = torch.softmax(model(tensor), dim=1)
     confidence, predicted = torch.max(probs, 1)
     if(more):
@@ -498,7 +498,7 @@ def predict_image(
         if(debug):
             show_image(pil, "po crop", True)
             
-        tensor = get_transform()(pil).unsqueeze(0).to(device)
+        tensor = get_inf_transform()(pil).unsqueeze(0).to(device)
         
         preprocessed_shape = tensor.shape
 

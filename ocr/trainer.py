@@ -93,15 +93,16 @@ def pad_images(images):
     Padding obrazów do tej samej szerokości (OCR/CRNN).
     Zakłada: obrazy mają ten sam height, różny width.
     """
-    max_w = max(img.shape[-1] for img in images)
+    max_w = 128
 
     padded = []
     for img in images:
         _, h, w = img.shape
         pad_w = max_w - w
+        if(pad_w >= 0):
 
-        # (left, right, top, bottom)
-        img = F.pad(img, (0, pad_w, 0, 0), value=0)
+            # (left, right, top, bottom)
+            img = F.pad(img, (0, pad_w, 0, 0), value=255)
         padded.append(img)
 
     return torch.stack(padded)
@@ -110,8 +111,8 @@ def collate_fn(batch):
     images, texts = zip(*batch)
 
     images = list(images)
-    images = pad_images(images)  # padding szerokości
-
+    images = pad_images(images)
+    
     targets = []
     target_lengths = []
 

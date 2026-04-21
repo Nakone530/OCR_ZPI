@@ -26,6 +26,7 @@ try:
 except ModuleNotFoundError:  # pragma: no cover
     fitz = None
 from torchvision import transforms
+import torchvision.transforms.functional as TF
 
 from datetime import datetime
 from typing import Any
@@ -39,7 +40,50 @@ from . import info
 
 # ── Transformacje ──────────────────────────────────────────────────────────────
 
-def get_transform() -> transforms.Compose:
+
+def ResizeKeepAspect(img):
+    w, h = img.size
+    scale = 32 / h
+    new_w = int(w * scale)
+    return transforms.functional.resize(img, (32, new_w))
+
+def pad_to_width(max_width, fill=255):
+    """
+    Zwraca funkcję paddingu obrazu PIL do stałej szerokości.
+    """
+
+    def padding(img: Image.Image):
+        w, h = img.size
+
+        if w >= max_width:
+            return img
+
+        pad_w = max_width - w
+
+        # (left, top, right, bottom)
+        return TF.pad(img, (0, 0, pad_w, 0), fill=fill)
+
+    return padding
+
+def base_transform():
+    """
+    pipeline transformacji obrazu do inferencji (bez augmentacji danych).
+    
+    Pipeline zawiera:
+      - Konwersja do skali szarości (1 kanał)
+      - Zmiana rozmiaru do IMAGE_SIZE x IMAGE_SIZE
+      - Konwersja do tensora PyTorch
+      - Normalizacja wartości pikseli (mean=0.5, std=0.5)
+    """
+    return [
+        transforms.Grayscale(num_output_channels=1),
+        ResizeKeepAspect,
+        transforms.ToTensor(),
+        transforms.Normalize((0.5,), (0.5,)),
+    ]
+
+
+def get_inf_transform() -> transforms.Compose:
     """
     Zwraca pipeline transformacji obrazu do inferencji (bez augmentacji danych).
     
@@ -48,9 +92,6 @@ def get_transform() -> transforms.Compose:
       - Zmiana rozmiaru do IMAGE_SIZE x IMAGE_SIZE
       - Konwersja do tensora PyTorch
       - Normalizacja wartości pikseli (mean=0.5, std=0.5)
-    
-    Argumenty:
-        Brak argumentów.
     
     Zwraca:
         transforms.Compose: Złożona transformacja gotowa do użycia
@@ -61,10 +102,8 @@ def get_transform() -> transforms.Compose:
         >>> tensor = transform(pil_image)
     """
     return transforms.Compose([
-        transforms.Grayscale(num_output_channels=1),
-        transforms.Resize((32, 128)),
-        transforms.ToTensor(),
-        transforms.Normalize((0.5,), (0.5,)),
+        pad_to_width(128, fill=255),
+        *base_transform()
     ])
 
 
@@ -73,14 +112,11 @@ def get_train_transform() -> transforms.Compose:
     Zwraca pipeline transformacji obrazu do trenowania modelu (z augmentacją danych).
     
     Pipeline zawiera:
+      - Losowa rotacja obrazu o maksymalnie 10 stopni (augmentacja)
       - Konwersja do skali szarości (1 kanał)
       - Zmiana rozmiaru do IMAGE_SIZE x IMAGE_SIZE
-      - Losowa rotacja obrazu o maksymalnie 10 stopni (augmentacja)
       - Konwersja do tensora PyTorch
       - Normalizacja wartości pikseli (mean=0.5, std=0.5)
-    
-    Argumenty:
-        Brak argumentów.
     
     Zwraca:
         transforms.Compose: Złożona transformacja z augmentacją
@@ -91,11 +127,8 @@ def get_train_transform() -> transforms.Compose:
         >>> tensor = train_transform(pil_image)
     """
     return transforms.Compose([
-        transforms.Grayscale(num_output_channels=1),
-        transforms.Resize((32, 128)),
         transforms.RandomRotation(5),
-        transforms.ToTensor(),
-        transforms.Normalize((0.5,), (0.5,))
+        *base_transform()
     ])
 
 
@@ -142,10 +175,7 @@ def preprocess_letter(img: np.ndarray) -> np.ndarray:
 def denoise_pil(img_pil: Image.Image) -> Image.Image:
     """
     Odszumia obraz PIL filtrem bilateralnym.
-    
-    Filtr bilateralny wygładza obraz zachowując krawędzie, co jest idealne
-    dla OCR - redukuje szum bez rozmywania krawędzi liter.
-    
+
     Argumenty:
         img_pil (Image.Image): Obraz wejściowy w formacie PIL.
     

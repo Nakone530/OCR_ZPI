@@ -39,7 +39,24 @@ from . import info
 
 # ── Transformacje ──────────────────────────────────────────────────────────────
 
-def get_transform() -> transforms.Compose:
+def base_transform():
+    """
+    pipeline transformacji obrazu do inferencji (bez augmentacji danych).
+    
+    Pipeline zawiera:
+      - Konwersja do skali szarości (1 kanał)
+      - Zmiana rozmiaru do IMAGE_SIZE x IMAGE_SIZE
+      - Konwersja do tensora PyTorch
+      - Normalizacja wartości pikseli (mean=0.5, std=0.5)
+    """
+    return [
+        transforms.Grayscale(num_output_channels=1),
+        transforms.Resize((32, 128)),
+        transforms.ToTensor(),
+        transforms.Normalize((0.5,), (0.5,)),
+    ]
+
+def get_inf_transform() -> transforms.Compose:
     """
     Zwraca pipeline transformacji obrazu do inferencji (bez augmentacji danych).
     
@@ -48,9 +65,6 @@ def get_transform() -> transforms.Compose:
       - Zmiana rozmiaru do IMAGE_SIZE x IMAGE_SIZE
       - Konwersja do tensora PyTorch
       - Normalizacja wartości pikseli (mean=0.5, std=0.5)
-    
-    Argumenty:
-        Brak argumentów.
     
     Zwraca:
         transforms.Compose: Złożona transformacja gotowa do użycia
@@ -61,10 +75,7 @@ def get_transform() -> transforms.Compose:
         >>> tensor = transform(pil_image)
     """
     return transforms.Compose([
-        transforms.Grayscale(num_output_channels=1),
-        transforms.Resize((32, 128)),
-        transforms.ToTensor(),
-        transforms.Normalize((0.5,), (0.5,)),
+        *base_transform()
     ])
 
 
@@ -73,14 +84,11 @@ def get_train_transform() -> transforms.Compose:
     Zwraca pipeline transformacji obrazu do trenowania modelu (z augmentacją danych).
     
     Pipeline zawiera:
+      - Losowa rotacja obrazu o maksymalnie 10 stopni (augmentacja)
       - Konwersja do skali szarości (1 kanał)
       - Zmiana rozmiaru do IMAGE_SIZE x IMAGE_SIZE
-      - Losowa rotacja obrazu o maksymalnie 10 stopni (augmentacja)
       - Konwersja do tensora PyTorch
       - Normalizacja wartości pikseli (mean=0.5, std=0.5)
-    
-    Argumenty:
-        Brak argumentów.
     
     Zwraca:
         transforms.Compose: Złożona transformacja z augmentacją
@@ -91,11 +99,8 @@ def get_train_transform() -> transforms.Compose:
         >>> tensor = train_transform(pil_image)
     """
     return transforms.Compose([
-        transforms.Grayscale(num_output_channels=1),
-        transforms.Resize((32, 128)),
         transforms.RandomRotation(5),
-        transforms.ToTensor(),
-        transforms.Normalize((0.5,), (0.5,))
+        *base_transform()
     ])
 
 
@@ -142,10 +147,7 @@ def preprocess_letter(img: np.ndarray) -> np.ndarray:
 def denoise_pil(img_pil: Image.Image) -> Image.Image:
     """
     Odszumia obraz PIL filtrem bilateralnym.
-    
-    Filtr bilateralny wygładza obraz zachowując krawędzie, co jest idealne
-    dla OCR - redukuje szum bez rozmywania krawędzi liter.
-    
+
     Argumenty:
         img_pil (Image.Image): Obraz wejściowy w formacie PIL.
     

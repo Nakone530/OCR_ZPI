@@ -101,7 +101,7 @@ def pad_images(images):
         pad_w = max_w - w
 
         # (left, right, top, bottom)
-        img = F.pad(img, (0, pad_w, 0, 0), value=0)
+        img = F.pad(img, (0, pad_w, 0, 0), value=255)
         padded.append(img)
 
     return torch.stack(padded)
@@ -110,8 +110,9 @@ def collate_fn(batch):
     images, texts = zip(*batch)
 
     images = list(images)
-    images = pad_images(images)  # padding szerokości
-
+    #images = pad_images(images)
+    images = torch.stack(images)
+    
     targets = []
     target_lengths = []
 

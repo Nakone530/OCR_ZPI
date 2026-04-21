@@ -247,7 +247,7 @@ def main(args=None, info=None, buffor=None) -> None:
 
     # ── Trening ──
     if args.train:
-        train_model(epochs=args.epochs, batch_size=args.batch_size, model_path=args.resume, info=info)
+        train_model(epochs=args.epochs, batch_size=args.batch_size, model_path=args.resume, info=info, args=args)
 
     # ── Nieskończony trening ──
     elif args.infinite:

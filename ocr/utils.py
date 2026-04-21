@@ -56,7 +56,7 @@ def base_transform():
         transforms.Normalize((0.5,), (0.5,)),
     ]
 
-def get_inf_transform() -> transforms.Compose:
+def get_inf_transform(args) -> transforms.Compose:
     """
     Zwraca pipeline transformacji obrazu do inferencji (bez augmentacji danych).
     
@@ -74,12 +74,15 @@ def get_inf_transform() -> transforms.Compose:
         >>> transform = get_transform()
         >>> tensor = transform(pil_image)
     """
-    return transforms.Compose([
-        *base_transform()
-    ])
+    pack = []
+    if getattr(args, "denoise", False):
+        pack.append(trans_denoise_bil())
+
+    pack.extend(base_transform())
+    return transforms.Compose(pack)
 
 
-def get_train_transform() -> transforms.Compose:
+def get_train_transform(args) -> transforms.Compose:
     """
     Zwraca pipeline transformacji obrazu do trenowania modelu (z augmentacją danych).
     
@@ -98,10 +101,14 @@ def get_train_transform() -> transforms.Compose:
         >>> train_transform = get_train_transform()
         >>> tensor = train_transform(pil_image)
     """
-    return transforms.Compose([
-        transforms.RandomRotation(5),
-        *base_transform()
-    ])
+    pack = [
+        transforms.RandomRotation(5)
+    ]
+    if getattr(args, "denoise", False):
+        pack.append(trans_denoise_bil())
+        
+    pack.extend(base_transform())
+    return transforms.Compose(pack)
 
 
 def preprocess_letter(img: np.ndarray) -> np.ndarray:
@@ -167,7 +174,21 @@ def denoise_pil(img_pil: Image.Image) -> Image.Image:
     out = cv2.bilateralFilter(bgr, 9, 75, 75)
     return Image.fromarray(cv2.cvtColor(out, cv2.COLOR_BGR2RGB))
 
+class trans_denoise_bil:
+    def __init__(self, d=9, sigma_color=75, sigma_space=75):
+        self.d = d
+        self.sigma_color = sigma_color
+        self.sigma_space = sigma_space
 
+    def __call__(self, img: Image.Image):
+        rgb = img.convert("RGB")
+        arr = np.array(rgb)
+
+        bgr = cv2.cvtColor(arr, cv2.COLOR_RGB2BGR)
+        out = cv2.bilateralFilter(bgr, self.d, self.sigma_color, self.sigma_space)
+        out = cv2.cvtColor(out, cv2.COLOR_BGR2RGB)
+
+        return Image.fromarray(out)
 # ── Ładowanie obrazu ───────────────────────────────────────────────────────────
 
 def load_image(image_path: str, mode: str = "L") -> Image.Image:

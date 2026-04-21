@@ -338,7 +338,7 @@ def init_or_load_model(num_classes, model_path=None, info=None):
             GLOBAL_MODEL.load_state_dict(checkpoint)
 
 
-def train_model(epochs=10, batch_size=32, model_path=None, info=None):
+def train_model(epochs=10, batch_size=32, model_path=None, info=None, args=None):
     global GLOBAL_MODEL, GLOBAL_OPTIMIZER, GLOBAL_CRITERION
     global GLOBAL_DEVICE, GLOBAL_EPOCH, GLOBAL_BEST_ACC, GLOBAL_CLASS_NAMES
 
@@ -352,7 +352,7 @@ def train_model(epochs=10, batch_size=32, model_path=None, info=None):
     dataset = OCRDataset(
         json_data=data,
         images_dir=None,  # już niepotrzebne
-        transform=get_train_transform()
+        transform=get_train_transform(args)
     )
     
     info(f"4. Dataset załadowany: {len(dataset)} obrazów")

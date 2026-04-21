@@ -480,8 +480,8 @@ def predict_image(
     
     img_array = np.array(image)
     debug = _is_debug_enabled(args)
-    if(debug):
-        show_image(image, "przed crop")
+    #if(debug):
+        #show_image(image, "przed crop")
     
     debug_crops: list[tuple[np.ndarray, str]] = []
 
@@ -495,11 +495,16 @@ def predict_image(
         
         # UWAGA: zmień preprocess
         pil = Image.fromarray(img_array).convert("L")
-        if(debug):
-            show_image(pil, "po crop", True)
-            
-        tensor = get_inf_transform()(pil).unsqueeze(0).to(device)
         
+        if(debug):
+            #show_image(pil, "po crop", True)
+            img_before = pil
+            
+        tensor = get_inf_transform(args)(pil).unsqueeze(0).to(device)
+        
+        if(debug):
+            show_before_after(img_before, tensor)
+            
         preprocessed_shape = tensor.shape
 
         outputs = model(tensor)  # (T, B, C)
@@ -748,3 +753,36 @@ def predict_segments(
     if debug:
         _finalize_debug_crops(debug_crops, args, image_path, mode_tag="lines")
     return text, words_with_confidence, class_confidence
+
+
+
+#Debug
+
+def show_before_after(pil_img, tensor_img):
+    before = np.array(pil_img)
+
+    after = tensor_img.squeeze(0).detach().cpu()
+
+    after = after * 0.5 + 0.5
+    after = after.numpy()
+
+    if after.shape[0] == 1:
+        after = after[0]
+        cmap = "gray"
+    else:
+        after = np.transpose(after, (1, 2, 0))
+        cmap = None
+
+    plt.figure(figsize=(8, 4))
+
+    plt.subplot(1, 2, 1)
+    plt.title("Before")
+    plt.imshow(before, cmap="gray" if before.ndim == 2 else None)
+    plt.axis("off")
+
+    plt.subplot(1, 2, 2)
+    plt.title("After")
+    plt.imshow(after, cmap=cmap)
+    plt.axis("off")
+
+    plt.show()

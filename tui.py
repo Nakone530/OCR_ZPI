@@ -150,7 +150,19 @@ class RecognizeScreen(Screen):
         log.clear()
         
         # Pobierz wartości
-        mode = self.query_one(RadioSet).pressed_button.id
+        radio_set = self.query_one(RadioSet)
+        pressed = radio_set.pressed_button
+        if pressed is None:
+            # Użyj domyślnego trybu jeśli nic nie wybrane
+            mode = "image"
+            # Ustaw domyślny przycisk
+            for button in radio_set.query(RadioButton):
+                if button.id == "image":
+                    button.value = True
+                    break
+        else:
+            mode = pressed.id
+        
         path_input = self.query_one("#input_path", Input).value.strip()
         denoise = self.query_one("#denoise", Checkbox).value
         json_output = self.query_one("#json_output", Checkbox).value
@@ -308,7 +320,18 @@ class TrainScreen(Screen):
         log = self.query_one("#output_log", Log)
         log.clear()
         
-        train_mode = self.query_one(RadioSet).pressed_button.id
+        radio_set = self.query_one(RadioSet)
+        pressed = radio_set.pressed_button
+        if pressed is None:
+            # Użyj domyślnego trybu jeśli nic nie wybrane
+            train_mode = "train"
+            # Ustaw domyślny przycisk
+            for button in radio_set.query(RadioButton):
+                if button.id == "train":
+                    button.value = True
+                    break
+        else:
+            train_mode = pressed.id
         
         try:
             epochs = int(self.query_one("#epochs_input", Input).value)
@@ -459,7 +482,19 @@ class SettingsScreen(Screen):
                 model_path = MODEL_PATH
         
         # Pobierz inne ustawienia
-        output_format = self.query_one(RadioSet).pressed_button.id
+        radio_set = self.query_one(RadioSet)
+        pressed = radio_set.pressed_button
+        if pressed is None:
+            # Użyj domyślnego formatu jeśli nic nie wybrane
+            output_format = "console"
+            # Ustaw domyślny przycisk
+            for button in radio_set.query(RadioButton):
+                if button.id == "console":
+                    button.value = True
+                    break
+        else:
+            output_format = pressed.id
+        
         quiet_mode = self.query_one("#quiet_mode", Checkbox).value
         
         # Zapisz w app.state

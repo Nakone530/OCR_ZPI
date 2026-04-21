@@ -24,6 +24,14 @@ from ocr.inference import get_active_chars, load_model, predict_image, predict_s
 from ocr.output import OCRResult, create_output_handler
 from ocr.trainer import download_dataset, train_model, infinite_train
 from ocr.utils import save_image_to_today_folder
+from ocr.json_output import (
+    build_image_result_json,
+    build_word_result_json,
+    build_lines_result_json,
+    build_multi_result_json,
+    dump_json,
+    write_json,
+)
 from ocr.display import (
     print_multi_result,
     print_single_result,
@@ -328,29 +336,6 @@ def main(args=None, info=None, buffor=None) -> None:
                 device=str(device),
             )
             info(dump_json(payload, pretty=args.json_pretty))
-            out_path = args.json_path
-            if out_path is None:
-                out_path = os.path.splitext(saved_copy_path)[0] + ".json"
-            write_json(out_path, payload, pretty=args.json_pretty)
-        else:
-            print_word_result(word, avg_word_confidence, class_confidence, info)
-    # ── Wyraz ──
-    elif args.word:
-        _require_file(args.word)
-        info(f"\nRozpoznawanie wyrazu: {args.word}")
-        save_image_to_today_folder(args.word)
-
-        model = load_model(model_path, device)
-        word, avg_word_confidence, class_confidence = predict_word(args.word, model, device, args)
-
-        if args.json:
-            payload = build_word_result_json(
-                image_path=args.word,
-                saved_copy_path=saved_copy_path,
-                word=word,
-                device=str(device),
-            )
-            print(dump_json(payload, pretty=args.json_pretty))
             out_path = args.json_path
             if out_path is None:
                 out_path = os.path.splitext(saved_copy_path)[0] + ".json"

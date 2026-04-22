@@ -48,7 +48,7 @@ def build_parser() -> argparse.ArgumentParser:
     mode.add_argument("--word", "-w", type=str, metavar="PLIK", help="Rozpoznaj wyraz (jedna linia)")
     mode.add_argument("--lines", "-l", type=str, metavar="PLIK", help="Rozpoznaj tekst wieloliniowy")
     mode.add_argument("--multi", "-m", type=str, nargs="+", metavar="PLIK", help="Rozpoznaj wiele zdjec pojedynczych liter")
-    mode.add_argument("--annotate", type=str, metavar="PLIK", help="EasyOCR: wykryj slowa, popraw bboxy i zapisz wycinki + adnotacje")
+    mode.add_argument("--annotate", type=str, metavar="PLIK", help="Wycinki: popraw bboxy i zapisz wycinki + adnotacje")
 
     parser.add_argument("--epochs", "-e", type=int, default=10, help="Liczba epok (domyslnie: 10)")
     parser.add_argument("--batch-size", "-b", type=int, default=32, help="Rozmiar batcha (domyslnie: 32)")
@@ -83,7 +83,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--ws-merge-vert-dist", type=int, default=4)
 
     parser.add_argument("--model-path", type=str, default=None, metavar="PLIK", help="Sciezka do wytrenowanego modelu")
-    parser.add_argument("--annotation-dir", type=str, default="ttdata", metavar="KATALOG", help="Katalog wyjsciowy dla trybu --annotate")
+    parser.add_argument("--annotation-dir", type=str, default="inference", metavar="KATALOG", help="Katalog wyjsciowy dla trybu --annotate")
     parser.add_argument("--no-edit", action="store_true", help="W trybie --annotate wylacz interaktywna edycje bboxow")
     parser.add_argument("--non-interactive", action="store_true", help="W trybie --annotate pomin pytania input() i zapisz automatycznie")
 
@@ -196,7 +196,7 @@ def main(args=None, info=None, buffor=None):
     elif args.annotate:
         _require_file(args.annotate, info)
         info(f"\nUruchamianie adnotacji EasyOCR: {args.annotate}")
-        from ocr.easyocr_annotator import process_letter
+        from ocr.bbox_annotator import process_letter
 
         output_dir = process_letter(
             image_path=args.annotate,

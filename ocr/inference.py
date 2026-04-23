@@ -24,7 +24,7 @@ import matplotlib.pyplot as plt
 from PIL import Image
 from .config import CHARS, MODEL_PATH, NUM_CLASSES, char2idx, idx2char
 from .model import SimpleCNN
-from .utils import get_inf_transform, load_and_optionally_denoise, preprocess_letter, save_image_to_temp_folder
+from .utils import get_inf_transform, load_and_optionally_denoise, preprocess_letter, save_image_to_temp_folder, save_image_to_today_folder
 from .display import visualize_prediction, show_image
 from . import info
 
@@ -471,9 +471,9 @@ def process_folder(folder_path, args, model_path, device, info):
         raise ValueError(f"To nie jest katalog: {folder_path}")
 
     model = load_model(model_path, device, info)
-
+    results = []
     for filename in os.listdir(folder_path):
-        if not filename.lower().endswith(".jpg"):
+        if not filename.lower().endswith(".png"):
             continue
 
         file_path = os.path.join(folder_path, filename)
@@ -482,34 +482,26 @@ def process_folder(folder_path, args, model_path, device, info):
             continue
 
         try:
-            _require_file(file_path, info)
-            info(f"\nRozpoznawanie: {file_path}")
 
-            saved_copy_path = save_image_to_today_folder(file_path, info)
+
+            info(f"\nRozpoznawanie: {file_path}")
 
             result = predict_image(file_path, model, device, args)
 
-            text = result["text"]
-            confidence = result["confidence"]
-            probs = result["probs"]
-
-            active_labels = get_active_chars()
-
-            output_handler = create_output_handler(args, source_image=file_path)
-
-            ocr_result = OCRResult(
-                text=text,
-                confidence=confidence,
-                probs=probs,
-                mode="word",
-                class_labels=active_labels
-            )
-
-            output_handler.output(ocr_result, info)
-
+            results.append({
+                "file": file_path,
+                "text": result["text"],
+                "confidence": result["confidence"],
+                "probs": result["probs"]
+            })
         except Exception as e:
-            info(f"Błąd dla pliku {file_path}: {e}")
+            info(f"Błąd dla {file_path}: {e}")
+            results.append({
+                "file": file_path,
+                "error": str(e)
+            })
 
+    return results
 # ── Predykcja pojedynczej litery ───────────────────────────────────────────────
             
 def predict_image(

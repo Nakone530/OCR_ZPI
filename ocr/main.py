@@ -19,7 +19,7 @@ import torch
 
 from ocr.config import MODEL_PATH
 from ocr.display import print_multi_result, print_text_result, print_top5, print_word_result, visualize_prediction
-from ocr.inference import get_active_chars, load_model, predict_image, predict_segments, predict_word
+from ocr.inference import get_active_chars, load_model, predict_image, predict_segments, predict_word, process_folder
 from ocr.json_output import (
     build_image_result_json,
     build_lines_result_json,
@@ -49,6 +49,8 @@ def build_parser() -> argparse.ArgumentParser:
     mode.add_argument("--lines", "-l", type=str, metavar="PLIK", help="Rozpoznaj tekst wieloliniowy")
     mode.add_argument("--multi", "-m", type=str, nargs="+", metavar="PLIK", help="Rozpoznaj wiele zdjec pojedynczych liter")
     mode.add_argument("--annotate", type=str, metavar="PLIK", help="Wycinki: popraw bboxy i zapisz wycinki + adnotacje")
+    mode.add_argument("--folder", type=str, metavar="PLIK", help="Rozpoznaj zdjęcia w folderze")
+    mode.add_argument("--page", type=str, metavar="PLIK", help="Separacja zdjęcia na wyrazy oraz ich rozpoznanie")
 
     parser.add_argument("--epochs", "-e", type=int, default=10, help="Liczba epok (domyslnie: 10)")
     parser.add_argument("--batch-size", "-b", type=int, default=32, help="Rozmiar batcha (domyslnie: 32)")
@@ -196,7 +198,7 @@ def main(args=None, info=None, buffor=None):
 
     elif args.annotate:
         _require_file(args.annotate, info)
-        info(f"\nUruchamianie adnotacji EasyOCR: {args.annotate}")
+        info(f"\nUruchamianie adnotacji : {args.annotate}")
         from ocr.bbox_annotator import process_letter
 
         output_dir = process_letter(
@@ -208,6 +210,85 @@ def main(args=None, info=None, buffor=None):
         if output_dir:
             info(f"Adnotacje zapisane w: {output_dir}")
 
+    elif args.page:
+        _require_file(args.page, info)
+        info(f"\nUruchamianie adnotacji : {args.annotate}")
+        from ocr.bbox_annotator import process_letter
+
+        output_dir = process_letter(
+            image_path=args.page,
+            base_dir=args.annotation_dir,
+            enable_box_edit=not args.no_edit,
+            non_interactive=args.non_interactive,
+        )
+        if output_dir:
+            info(f"Adnotacje zapisane w: {output_dir}")
+
+        results = process_folder(output_dir, args, model_path, device, info)
+        rows = []
+        for r in results:
+            if "error" in r:
+                rows.append({
+                    "key": None,
+                    "file": r["file"],
+                    "text": f"ERROR: {r['error']}",
+                    "confidence": None
+                })
+                continue
+
+            filename = os.path.basename(r["file"])      # word_061.png
+            name, _ = os.path.splitext(filename)        # word_061
+
+            rows.append({
+                "key": name,                            # klucz sortowania
+                "file": r["file"],
+                "text": r["text"],
+                "confidence": r["confidence"]
+            })
+            rows.sort(key=lambda r: r["key"])
+        info(f"\n{'NAME':<12} {'TEXT':<20} {'CONF':<10}")
+        info("-" * 45)
+
+        for r in rows:
+            if r["confidence"] is None:
+                info(f"{r['key']:<12} {r['text']:<20} {'-':<10}")
+            else:
+                info(f"{r['key']:<12} {r['text']:<20} {r['confidence']:.2f}%")
+        
+
+
+    elif args.folder:
+        results = process_folder(args.folder, args, model_path, device, info)
+        rows = []
+        for r in results:
+            if "error" in r:
+                rows.append({
+                    "key": None,
+                    "file": r["file"],
+                    "text": f"ERROR: {r['error']}",
+                    "confidence": None
+                })
+                continue
+
+            filename = os.path.basename(r["file"])      # word_061.png
+            name, _ = os.path.splitext(filename)        # word_061
+
+            rows.append({
+                "key": name,                            # klucz sortowania
+                "file": r["file"],
+                "text": r["text"],
+                "confidence": r["confidence"]
+            })
+            rows.sort(key=lambda r: r["key"])
+        info(f"\n{'NAME':<12} {'TEXT':<20} {'CONF':<10}")
+        info("-" * 45)
+
+        for r in rows:
+            if r["confidence"] is None:
+                info(f"{r['key']:<12} {r['text']:<20} {'-':<10}")
+            else:
+                info(f"{r['key']:<12} {r['text']:<20} {r['confidence']:.2f}%")
+        
     elif args.image:
         _require_file(args.image, info)
         info(f"\nRozpoznawanie: {args.image}")
@@ -242,7 +323,8 @@ def main(args=None, info=None, buffor=None):
             out_path = args.json_path or (os.path.splitext(saved_copy_path)[0] + ".json")
             write_json(out_path, payload, pretty=args.json_pretty)
         else:
-            print_top5(probs, info)
+            info(f"TEXT: {text}")
+            info(f"CONFIDENCE: {confidence:.2f}%")
 
     elif args.word:
         _require_file(args.word, info)

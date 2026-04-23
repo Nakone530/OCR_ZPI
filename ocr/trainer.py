@@ -19,6 +19,7 @@ import time
 import gc
 from datetime import datetime
 import json
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -106,12 +107,33 @@ def pad_images(images):
 
     return torch.stack(padded)
 
+def _tight_crop(gray: np.ndarray) -> np.ndarray:
+    """Przycina obraz do obszaru zawierającego piksele znaku."""
+    rows = np.where(np.sum(gray < 128, axis=1) > 0)[0]
+    cols = np.where(np.sum(gray < 128, axis=0) > 0)[0]
+    if len(rows) == 0 or len(cols) == 0:
+        return gray
+    return gray[rows[0]:rows[-1] + 1, cols[0]:cols[-1] + 1]
+
+
 def collate_fn(batch):
     images, texts = zip(*batch)
 
     images = list(images)
     #images = pad_images(images)
-    images = torch.stack(images)
+    processed_images = []
+
+    for img in images:
+        # jeśli to PIL → numpy
+        if hasattr(img, "convert"):
+            img = np.array(img.convert("L"))
+        elif img.ndim == 3:
+            img = np.array(img)
+
+        img = _tight_crop(img)
+        processed_images.append(torch.tensor(img, dtype=torch.float32))
+
+    images = torch.stack(processed_images)
     
     targets = []
     target_lengths = []

@@ -22,6 +22,7 @@ import matplotlib.pyplot as plt
 
 
 from PIL import Image
+
 from .config import CHARS, MODEL_PATH, NUM_CLASSES, char2idx, idx2char
 from .model import SimpleCNN
 from .utils import get_transform, load_and_optionally_denoise, preprocess_letter, save_image_to_temp_folder
@@ -463,14 +464,15 @@ def _finalize_debug_crops(
         plt.show()
 
 
-# ── Predykcja pojedynczej litery ───────────────────────────────────────────────
+# ── Predykcja pojedynczej litery (CNN) ────────────────────────────────────────
 
-def predict_image(
+def predict_letter(
     image_path: str,
     model: nn.Module,
     device: torch.device,
     args,
 ) -> tuple[str, float, torch.Tensor]:
+
 
     """
     Rozpoznaje pojedynczy znak na zdjęciu.
@@ -494,7 +496,6 @@ def predict_image(
         >>> char, conf, probs = predict_image("letter.png", model, device, args)
         >>> print(f"Rozpoznano: {char} z pewnością {conf:.1f}%")
     """
-
     image = load_and_optionally_denoise(image_path, args, mode="L")
     img_array = np.array(image)
     debug = _is_debug_enabled(args)
@@ -552,6 +553,63 @@ def predict_image(
             f"[DEBUG][image] predykcja: '{text}' ({confidence:.1f}%)"
         )
 
+        debug_crops.append((img_array.copy(), f"{text}_{confidence:.1f}"))
+        _finalize_debug_crops(debug_crops, args, image_path, mode_tag="image")
+
+    return {"text": text, "confidence": confidence, "per_char_confidences": confidences, "probs": probs_out}
+
+
+# ── Predykcja tekstu modelem CRNN ─────────────────────────────────────────────
+
+def predict_image(
+    image_path: str,
+    model: nn.Module,
+    device: torch.device,
+    args,
+) -> dict:
+    """Rozpoznaje tekst modelem CRNN+CTC. Zwraca dict {text, confidence, per_char_confidences, probs}."""
+    image = load_and_optionally_denoise(image_path, args, mode="L")
+    img_array = np.array(image)
+    debug = _is_debug_enabled(args)
+
+    debug_crops: list[tuple[np.ndarray, str]] = []
+
+    model.eval()
+    with torch.no_grad():
+        original_shape = img_array.shape
+        img_array = _tight_crop(img_array)
+        cropped_shape = img_array.shape
+
+        pil = Image.fromarray(img_array).convert("L")
+        tensor = get_transform()(pil).unsqueeze(0).to(device)
+        preprocessed_shape = tensor.shape
+
+        outputs = model(tensor)  # (T, B, C)
+        log_probs = outputs.log_softmax(2)
+        probs = log_probs.exp()
+        preds = log_probs.argmax(2)[:, 0].cpu().numpy()
+
+        chars = []
+        confidences = []
+        prev = 0  # blank
+        for t in range(len(preds)):
+            p = preds[t]
+            if p != prev and p != 0:
+                chars.append(idx2char[p])
+                confidences.append(probs[t, 0, p].item())
+            prev = p
+
+        text = "".join(chars)
+        confidence = float(np.mean(confidences) * 100) if confidences else 0.0
+        probs_out = probs[0, 0]
+
+    if debug:
+        info(
+            "[DEBUG][image] kształty obrazu: "
+            f"oryginał={original_shape}, po_crop={cropped_shape}, "
+            f"po_preprocess={preprocessed_shape}"
+        )
+        info(f"[DEBUG][image] predykcja CRNN: '{text}' ({confidence:.1f}%)")
         debug_crops.append((img_array.copy(), f"{text}_{confidence:.1f}"))
         _finalize_debug_crops(debug_crops, args, image_path, mode_tag="image")
 

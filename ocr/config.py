@@ -66,6 +66,7 @@ STD  = [0.5, 0.5, 0.5]
 # Zestaw znaków obsługiwanych przez model OCR (wielkie litery A-z)
 CHARS = "ABCDEFGHIJKLMNOPRSTUWYZĄĆĘŁŃÓŚŹŻabcdefghijklmnoprstuwyząćęłńóśźż"
 NUM_CLASSES = len(CHARS)
+
 char2idx = {c: i + 1 for i, c in enumerate(CHARS)}  # 0 = blank!
 idx2char = {i + 1: c for i, c in enumerate(CHARS)}
 

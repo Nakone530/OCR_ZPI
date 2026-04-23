@@ -1,0 +1,34 @@
+id	crop_file	xmin	ymin	xmax	ymax	text	suggested_text	prediction_score	prob	source_image
+0	word_000.png	111	297	573	625	Zbyczek	'764u4	0.000000	0.069453	C:\Users\Adi\Desktop\Listy\Osiecka\Osiecka.jpg
+1	word_001.png	121	611	297	836	To	0o	0.000000	0.295556	C:\Users\Adi\Desktop\Listy\Osiecka\Osiecka.jpg
+2	word_002.png	325	622	539	832	jest	je	0.000000	0.345146	C:\Users\Adi\Desktop\Listy\Osiecka\Osiecka.jpg
+3	word_003.png	570	622	784	805	list	4h	0.000000	0.072860	C:\Users\Adi\Desktop\Listy\Osiecka\Osiecka.jpg
+4	word_004.png	898	691	998	825	o	0	0.000000	0.999746	C:\Users\Adi\Desktop\Listy\Osiecka\Osiecka.jpg
+5	word_005.png	1039	573	1292	839	tym	YJ	0.000000	0.121160	C:\Users\Adi\Desktop\Listy\Osiecka\Osiecka.jpg
+6	word_006.png	1416	577	1671	805	jak	akl	0.000000	0.123426	C:\Users\Adi\Desktop\Listy\Osiecka\Osiecka.jpg
+7	word_007.png	1699	570	2037	760	Panna	Iaua	0.000000	0.374753	C:\Users\Adi\Desktop\Listy\Osiecka\Osiecka.jpg
+8	word_008.png	66	829	183	998	z	2	0.000000	0.692714	C:\Users\Adi\Desktop\Listy\Osiecka\Osiecka.jpg
+9	word_009.png	197	825	753	995	chłopcem	cfvhcua	0.000000	0.175342	C:\Users\Adi\Desktop\Listy\Osiecka\Osiecka.jpg
+10	word_010.png	815	839	1229	1026	próbują	Ino b18	0.000000	0.317266	C:\Users\Adi\Desktop\Listy\Osiecka\Osiecka.jpg
+11	word_011.png	1257	815	1886	977	budować	budora<	0.000000	0.249683	C:\Users\Adi\Desktop\Listy\Osiecka\Osiecka.jpg
+12	word_012.png	79	1005	366	1174	dom	dou	0.000000	0.886629	C:\Users\Adi\Desktop\Listy\Osiecka\Osiecka.jpg
+13	word_013.png	414	1036	521	1150	i	[manual]	0.000000	1.000000	C:\Users\Adi\Desktop\Listy\Osiecka\Osiecka.jpg
+14	word_014.png	542	998	680	1147	to	1	0.000000	0.853101	C:\Users\Adi\Desktop\Listy\Osiecka\Osiecka.jpg
+15	word_015.png	732	1029	912	1147	nie	wje	0.000000	0.201633	C:\Users\Adi\Desktop\Listy\Osiecka\Osiecka.jpg
+16	word_016.png	932	1008	1457	1136	wychodzi	U4clceeei	0.000000	0.068015	C:\Users\Adi\Desktop\Listy\Osiecka\Osiecka.jpg
+17	word_017.png	1526	991	1633	1122	i	[manual]	0.000000	1.000000	C:\Users\Adi\Desktop\Listy\Osiecka\Osiecka.jpg
+18	word_018.png	1641	995	1910	1119	ona	929	0.000000	0.172227	C:\Users\Adi\Desktop\Listy\Osiecka\Osiecka.jpg
+19	word_019.png	90	1184	376	1333	lubi	lbi	0.000000	0.533249	C:\Users\Adi\Desktop\Listy\Osiecka\Osiecka.jpg
+20	word_020.png	463	1153	946	1309	właściwie	uflajuvie	0.000000	0.168078	C:\Users\Adi\Desktop\Listy\Osiecka\Osiecka.jpg
+21	word_021.png	981	1150	1264	1312	drogę	Boy	0.000000	0.067745	C:\Users\Adi\Desktop\Listy\Osiecka\Osiecka.jpg
+22	word_022.png	1333	1129	1706	1271	Potem	@Aeu	0.000000	0.158260	C:\Users\Adi\Desktop\Listy\Osiecka\Osiecka.jpg
+23	word_023.png	1747	1126	1913	1264	są	[manual]	0.000000	1.000000	C:\Users\Adi\Desktop\Listy\Osiecka\Osiecka.jpg
+24	word_024.png	90	1336	463	1478	różne	acz	0.000000	0.529173	C:\Users\Adi\Desktop\Listy\Osiecka\Osiecka.jpg
+25	word_025.png	479	1316	836	1454	wersje	verlje	0.000000	0.578222	C:\Users\Adi\Desktop\Listy\Osiecka\Osiecka.jpg
+26	word_026.png	863	1316	1323	1447	piosenki	Juki kio	0.000000	0.279249	C:\Users\Adi\Desktop\Listy\Osiecka\Osiecka.jpg
+27	word_027.png	1357	1264	2006	1416	urodzonej	urod2ony	0.000000	0.247795	C:\Users\Adi\Desktop\Listy\Osiecka\Osiecka.jpg
+28	word_028.png	55	1513	211	1671	z	1	0.000000	0.730817	C:\Users\Adi\Desktop\Listy\Osiecka\Osiecka.jpg
+29	word_029.png	242	1478	501	1661	tego	hv	0.000000	0.627134	C:\Users\Adi\Desktop\Listy\Osiecka\Osiecka.jpg
+30	word_030.png	553	1443	853	1599	listu	l; M	0.000000	0.225884	C:\Users\Adi\Desktop\Listy\Osiecka\Osiecka.jpg
+31	word_031.png	963	1440	1333	1616	tylko	huo	0.000000	0.400506	C:\Users\Adi\Desktop\Listy\Osiecka\Osiecka.jpg
+32	word_032.png	1409	1412	1968	1599	tajemnica	tavuia	0.000000	0.210196	C:\Users\Adi\Desktop\Listy\Osiecka\Osiecka.jpg

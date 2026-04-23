@@ -1,0 +1,10 @@
+id	crop_file	xmin	ymin	xmax	ymax	text	suggested_text	prediction_score	prob	source_image
+0	word_000.png	253	430	786	619	Piosenki	Piosenki	1.000000	0.696038	C:\Users\Adi\Desktop\Listy\Osiecka\Osiecka2.jpg
+1	word_001.png	833	511	923	601	w	w	1.000000	0.705371	C:\Users\Adi\Desktop\Listy\Osiecka\Osiecka2.jpg
+2	word_002.png	966	469	1434	688	dużych	dużych	1.000000	0.310949	C:\Users\Adi\Desktop\Listy\Osiecka\Osiecka2.jpg
+3	word_003.png	193	837	365	971	po	po	1.000000	0.727450	C:\Users\Adi\Desktop\Listy\Osiecka\Osiecka2.jpg
+4	word_004.png	251	645	941	855	słonecznych	słonecznych	1.000000	0.062440	C:\Users\Adi\Desktop\Listy\Osiecka\Osiecka2.jpg
+5	word_005.png	370	830	1164	982	śniadaniu	śniadaniu	1.000000	0.087214	C:\Users\Adi\Desktop\Listy\Osiecka\Osiecka2.jpg
+6	word_006.png	1011	698	1616	980	kapeluszach	kapeluszach	1.000000	0.182015	C:\Users\Adi\Desktop\Listy\Osiecka\Osiecka2.jpg
+7	word_007.png	241	961	381	1096	z	z	1.000000	1.000000	C:\Users\Adi\Desktop\Listy\Osiecka\Osiecka2.jpg
+8	word_008.png	403	980	1089	1168	nadzieją	nadzieją	1.000000	0.282995	C:\Users\Adi\Desktop\Listy\Osiecka\Osiecka2.jpg

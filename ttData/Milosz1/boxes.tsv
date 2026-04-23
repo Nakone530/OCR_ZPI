@@ -1,0 +1,19 @@
+id	crop_file	xmin	ymin	xmax	ymax	text	suggested_text	prediction_score	prob	source_image
+0	word_000.jpg	53	143	122	206	Panie	K Gux	0.000000	0.195069	C:\Users\Adi\Desktop\Listy\Milosz\Milosz.jpg
+1	word_001.jpg	127	151	214	203	Redaktorze	2Ap4u4	0.000000	0.047263	C:\Users\Adi\Desktop\Listy\Milosz\Milosz.jpg
+2	word_002.jpg	64	209	113	260	To	Tc	0.000000	0.976179	C:\Users\Adi\Desktop\Listy\Milosz\Milosz.jpg
+3	word_003.jpg	118	214	174	262	jest	Jx	0.000000	0.742609	C:\Users\Adi\Desktop\Listy\Milosz\Milosz.jpg
+4	word_004.jpg	193	212	308	264	pierwsza	hoanza	0.000000	0.178953	C:\Users\Adi\Desktop\Listy\Milosz\Milosz.jpg
+5	word_005.jpg	321	214	387	265	część	Cifo?	0.000000	0.075382	C:\Users\Adi\Desktop\Listy\Milosz\Milosz.jpg
+6	word_006.jpg	399	215	472	268	mego	Ce	0.000000	0.104093	C:\Users\Adi\Desktop\Listy\Milosz\Milosz.jpg
+7	word_007.jpg	485	223	604	275	podręcznika	@Aseud	0.000000	0.108378	C:\Users\Adi\Desktop\Listy\Milosz\Milosz.jpg
+8	word_008.jpg	624	211	727	270	historii	cn'	0.000000	0.396374	C:\Users\Adi\Desktop\Listy\Milosz\Milosz.jpg
+9	word_009.jpg	68	275	200	330	literatury	Qfrhiy	0.000000	0.103617	C:\Users\Adi\Desktop\Listy\Milosz\Milosz.jpg
+10	word_010.jpg	220	281	321	330	polskiej	Kacs}	0.000000	0.040034	C:\Users\Adi\Desktop\Listy\Milosz\Milosz.jpg
+11	word_011.jpg	343	277	462	329	Oczywiście	Cuno4	0.000000	0.274586	C:\Users\Adi\Desktop\Listy\Milosz\Milosz.jpg
+12	word_012.jpg	477	284	546	330	brak	Dk	0.000000	0.375996	C:\Users\Adi\Desktop\Listy\Milosz\Milosz.jpg
+13	word_013.jpg	560	286	598	322	tu	4i	0.000000	0.158188	C:\Users\Adi\Desktop\Listy\Milosz\Milosz.jpg
+14	word_014.jpg	609	287	700	326	wstępu	424P~	0.000000	0.097758	C:\Users\Adi\Desktop\Listy\Milosz\Milosz.jpg
+15	word_015.jpg	491	343	604	381	Pozdrawiam	ln	0.000000	0.188990	C:\Users\Adi\Desktop\Listy\Milosz\Milosz.jpg
+16	word_016.jpg	567	378	642	415	Czesław	lol	0.000000	0.151661	C:\Users\Adi\Desktop\Listy\Milosz\Milosz.jpg
+17	word_017.jpg	647	373	730	415	Miłosz	[manual]	0.000000	1.000000	C:\Users\Adi\Desktop\Listy\Milosz\Milosz.jpg

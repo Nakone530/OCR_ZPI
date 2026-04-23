@@ -1,0 +1,109 @@
+id	crop_file	xmin	ymin	xmax	ymax	text	suggested_text	prediction_score	prob	source_image
+0	word_000.png	203	49	375	109	Stygmat	Stygmat	1.000000	0.481431	C:\Users\Adi\Desktop\Listy\Norwid\Norwid.png
+1	word_001.png	39	89	174	149	Podobno	Podobno	1.000000	1.000000	C:\Users\Adi\Desktop\Listy\Norwid\Norwid.png
+2	word_002.png	188	114	234	151	że	że	1.000000	1.000000	C:\Users\Adi\Desktop\Listy\Norwid\Norwid.png
+3	word_003.png	412	116	594	161	najniewinniejszem	zadań	1.000000	0.008672	C:\Users\Adi\Desktop\Listy\Norwid\Norwid.png
+4	word_004.png	56	148	109	195	Ze	czynności	1.000000	1.000000	C:\Users\Adi\Desktop\Listy\Norwid\Norwid.png
+5	word_005.png	114	152	198	190	zadań	[manual]	1.000000	1.000000	C:\Users\Adi\Desktop\Listy\Norwid\Norwid.png
+6	word_006.png	209	155	347	191	czynności	0uec < <l	0.666667	0.083897	C:\Users\Adi\Desktop\Listy\Norwid\Norwid.png
+7	word_007.png	288	183	408	199	zadaniem	[manual]	1.000000	1.000000	C:\Users\Adi\Desktop\Listy\Norwid\Norwid.png
+8	word_008.png	359	150	485	181	człowieka	[manual]	1.000000	1.000000	C:\Users\Adi\Desktop\Listy\Norwid\Norwid.png
+9	word_009.png	39	194	65	220	i	[manual]	1.000000	1.000000	C:\Users\Adi\Desktop\Listy\Norwid\Norwid.png
+10	word_010.png	72	192	222	231	najpiękniejszej	n4y]	1.000000	0.058852	C:\Users\Adi\Desktop\Listy\Norwid\Norwid.png
+11	word_011.png	240	190	281	222	szej	Lea	1.000000	0.655111	C:\Users\Adi\Desktop\Listy\Norwid\Norwid.png
+12	word_012.png	309	198	348	224	a	[manual]	1.000000	1.000000	C:\Users\Adi\Desktop\Listy\Norwid\Norwid.png
+13	word_013.png	351	195	455	223	pewno	he v	1.000000	0.190891	C:\Users\Adi\Desktop\Listy\Norwid\Norwid.png
+14	word_014.png	461	184	507	215	że	[manual]	1.000000	1.000000	C:\Users\Adi\Desktop\Listy\Norwid\Norwid.png
+15	word_015.png	513	188	571	221	naj	[manual]	1.000000	1.000000	C:\Users\Adi\Desktop\Listy\Norwid\Norwid.png
+16	word_016.png	76	232	241	255	ciekawszem	6'ekawj129	1.000000	0.111714	C:\Users\Adi\Desktop\Listy\Norwid\Norwid.png
+17	word_017.png	252	230	286	252	w	[manual]	1.000000	1.000000	C:\Users\Adi\Desktop\Listy\Norwid\Norwid.png
+18	word_018.png	295	226	433	252	znaczeniu	Zu Ell2e 41	0.666667	0.077704	C:\Users\Adi\Desktop\Listy\Norwid\Norwid.png
+19	word_019.png	436	229	458	249	s	[manual]	1.000000	1.000000	C:\Users\Adi\Desktop\Listy\Norwid\Norwid.png
+20	word_020.png	457	225	573	250	wojem	4OL+	1.000000	0.181406	C:\Users\Adi\Desktop\Listy\Norwid\Norwid.png
+21	word_021.png	67	256	132	292	jest	[manual]	1.000000	1.000000	C:\Users\Adi\Desktop\Listy\Norwid\Norwid.png
+22	word_022.png	145	253	287	286	zdanie	QuZ2	1.000000	0.117922	C:\Users\Adi\Desktop\Listy\Norwid\Norwid.png
+23	word_023.png	294	252	333	284	te	tz	1.000000	0.316618	C:\Users\Adi\Desktop\Listy\Norwid\Norwid.png
+24	word_024.png	353	250	447	289	Żeby	Zel	1.000000	0.085090	C:\Users\Adi\Desktop\Listy\Norwid\Norwid.png
+25	word_025.png	453	250	545	288	pójść	[manual]	1.000000	1.000000	C:\Users\Adi\Desktop\Listy\Norwid\Norwid.png
+26	word_026.png	552	256	581	280	zo	[manual]	1.000000	1.000000	C:\Users\Adi\Desktop\Listy\Norwid\Norwid.png
+27	word_027.png	75	285	166	324	baczyć	bauz	1.000000	0.244718	C:\Users\Adi\Desktop\Listy\Norwid\Norwid.png
+28	word_028.png	175	294	214	323	się	[manual]	1.000000	1.000000	C:\Users\Adi\Desktop\Listy\Norwid\Norwid.png
+29	word_029.png	226	294	250	321	z	[manual]	1.000000	1.000000	C:\Users\Adi\Desktop\Listy\Norwid\Norwid.png
+30	word_030.png	259	283	317	319	kim	[manual]	1.000000	1.000000	C:\Users\Adi\Desktop\Listy\Norwid\Norwid.png
+31	word_031.png	354	285	411	319	lub	<l	1.000000	0.708652	C:\Users\Adi\Desktop\Listy\Norwid\Norwid.png
+32	word_032.png	428	285	593	316	odzobaczyć	[manual]	1.000000	1.000000	C:\Users\Adi\Desktop\Listy\Norwid\Norwid.png
+33	word_033.png	70	322	120	355	się	[manual]	1.000000	1.000000	C:\Users\Adi\Desktop\Listy\Norwid\Norwid.png
+34	word_034.png	160	316	271	357	zrobić	7Dbie	1.000000	0.455645	C:\Users\Adi\Desktop\Listy\Norwid\Norwid.png
+35	word_035.png	271	314	353	355	wizytę	Vet	1.000000	0.109735	C:\Users\Adi\Desktop\Listy\Norwid\Norwid.png
+36	word_036.png	358	314	558	349	Kapłaństwo	[manual]	1.000000	1.000000	C:\Users\Adi\Desktop\Listy\Norwid\Norwid.png
+37	word_037.png	563	325	593	346	w	[manual]	1.000000	1.000000	C:\Users\Adi\Desktop\Listy\Norwid\Norwid.png
+38	word_038.png	67	358	126	384	tem	[manual]	1.000000	1.000000	C:\Users\Adi\Desktop\Listy\Norwid\Norwid.png
+39	word_039.png	141	354	219	383	jest	[manual]	1.000000	1.000000	C:\Users\Adi\Desktop\Listy\Norwid\Norwid.png
+40	word_040.png	229	352	479	377	człowieczeństwo	[manual]	1.000000	1.000000	C:\Users\Adi\Desktop\Listy\Norwid\Norwid.png
+41	word_041.png	485	351	571	386	prakty	[manual]	1.000000	1.000000	C:\Users\Adi\Desktop\Listy\Norwid\Norwid.png
+42	word_042.png	66	386	177	422	cznie	' cralae	1.000000	0.247906	C:\Users\Adi\Desktop\Listy\Norwid\Norwid.png
+43	word_043.png	185	385	207	421	i	[manual]	1.000000	1.000000	C:\Users\Adi\Desktop\Listy\Norwid\Norwid.png
+44	word_044.png	212	381	356	420	potoczny	[manual]	1.000000	1.000000	C:\Users\Adi\Desktop\Listy\Norwid\Norwid.png
+45	word_045.png	214	373	251	398	jest	[manual]	1.000000	1.000000	C:\Users\Adi\Desktop\Listy\Norwid\Norwid.png
+46	word_046.png	368	379	518	414	obrządek	ic	1.000000	0.237221	C:\Users\Adi\Desktop\Listy\Norwid\Norwid.png
+47	word_047.png	524	382	586	407	cere	[manual]	1.000000	1.000000	C:\Users\Adi\Desktop\Listy\Norwid\Norwid.png
+48	word_048.png	79	416	204	451	moniału	Auu ,	0.500000	0.059203	C:\Users\Adi\Desktop\Listy\Norwid\Norwid.png
+49	word_049.png	220	422	259	447	w	[manual]	1.000000	1.000000	C:\Users\Adi\Desktop\Listy\Norwid\Norwid.png
+50	word_050.png	267	415	393	444	naturze	axi/e	1.000000	0.142330	C:\Users\Adi\Desktop\Listy\Norwid\Norwid.png
+51	word_051.png	401	411	500	446	życia	[manual]	1.000000	1.000000	C:\Users\Adi\Desktop\Listy\Norwid\Norwid.png
+52	word_052.png	506	406	573	441	leżę	[manual]	1.000000	1.000000	C:\Users\Adi\Desktop\Listy\Norwid\Norwid.png
+53	word_053.png	72	453	155	497	cego	Ella	1.000000	0.119439	C:\Users\Adi\Desktop\Listy\Norwid\Norwid.png
+54	word_054.png	175	444	269	486	Idzie	[manual]	1.000000	1.000000	C:\Users\Adi\Desktop\Listy\Norwid\Norwid.png
+55	word_055.png	282	450	318	488	się	[manual]	1.000000	1.000000	C:\Users\Adi\Desktop\Listy\Norwid\Norwid.png
+56	word_056.png	336	442	390	480	bez	[manual]	1.000000	1.000000	C:\Users\Adi\Desktop\Listy\Norwid\Norwid.png
+57	word_057.png	401	446	516	480	żadnego	[manual]	1.000000	1.000000	C:\Users\Adi\Desktop\Listy\Norwid\Norwid.png
+58	word_058.png	526	444	584	475	inne	[manual]	1.000000	1.000000	C:\Users\Adi\Desktop\Listy\Norwid\Norwid.png
+59	word_059.png	132	487	283	515	interesu	[manual]	1.000000	1.000000	C:\Users\Adi\Desktop\Listy\Norwid\Norwid.png
+60	word_060.png	304	482	396	510	mówi	ald1?	1.000000	0.193833	C:\Users\Adi\Desktop\Listy\Norwid\Norwid.png
+61	word_061.png	404	479	444	517	się	[manual]	1.000000	1.000000	C:\Users\Adi\Desktop\Listy\Norwid\Norwid.png
+62	word_062.png	452	476	489	512	to	[manual]	1.000000	1.000000	C:\Users\Adi\Desktop\Listy\Norwid\Norwid.png
+63	word_063.png	497	484	539	508	co	[manual]	1.000000	1.000000	C:\Users\Adi\Desktop\Listy\Norwid\Norwid.png
+64	word_064.png	543	471	580	506	i	[manual]	1.000000	1.000000	C:\Users\Adi\Desktop\Listy\Norwid\Norwid.png
+65	word_065.png	64	500	127	533	go	[manual]	1.000000	1.000000	C:\Users\Adi\Desktop\Listy\Norwid\Norwid.png
+66	word_066.png	230	512	295	530	samo	ayn 0	0.500000	0.175413	C:\Users\Adi\Desktop\Listy\Norwid\Norwid.png
+67	word_067.png	303	507	350	527	przez	[manual]	1.000000	1.000000	C:\Users\Adi\Desktop\Listy\Norwid\Norwid.png
+68	word_068.png	359	505	385	526	się	[manual]	1.000000	1.000000	C:\Users\Adi\Desktop\Listy\Norwid\Norwid.png
+69	word_069.png	419	509	570	554	pomiędzy	4or ? 52	0.333333	0.486927	C:\Users\Adi\Desktop\Listy\Norwid\Norwid.png
+70	word_070.png	71	525	131	558	tak	v	1.000000	0.113619	C:\Users\Adi\Desktop\Listy\Norwid\Norwid.png
+71	word_071.png	132	522	199	556	jest	'gf{	1.000000	0.035678	C:\Users\Adi\Desktop\Listy\Norwid\Norwid.png
+72	word_072.png	201	526	413	551	powiedziane	Lu} 4 4 24le	0.500000	0.368563	C:\Users\Adi\Desktop\Listy\Norwid\Norwid.png
+73	word_073.png	73	554	211	590	osobami	0106amn	1.000000	0.170880	C:\Users\Adi\Desktop\Listy\Norwid\Norwid.png
+74	word_074.png	221	561	259	584	w	[manual]	1.000000	1.000000	C:\Users\Adi\Desktop\Listy\Norwid\Norwid.png
+75	word_075.png	266	550	355	584	chwili	Anl	1.000000	0.255291	C:\Users\Adi\Desktop\Listy\Norwid\Norwid.png
+76	word_076.png	365	550	457	590	danej	Qeuy	1.000000	0.112781	C:\Users\Adi\Desktop\Listy\Norwid\Norwid.png
+77	word_077.png	513	578	591	618	odbiera	[manual]	1.000000	1.000000	C:\Users\Adi\Desktop\Listy\Norwid\Norwid.png
+78	word_078.png	75	627	116	655	ra	[manual]	1.000000	1.000000	C:\Users\Adi\Desktop\Listy\Norwid\Norwid.png
+79	word_079.png	130	616	176	660	się	[manual]	1.000000	1.000000	C:\Users\Adi\Desktop\Listy\Norwid\Norwid.png
+80	word_080.png	183	621	216	657	i	[manual]	1.000000	1.000000	C:\Users\Adi\Desktop\Listy\Norwid\Norwid.png
+81	word_081.png	222	627	377	656	zamienia	hana , LLL	0.666667	0.173229	C:\Users\Adi\Desktop\Listy\Norwid\Norwid.png
+82	word_082.png	380	615	592	658	potwierdzenie	notzz9 2E4	1.000000	0.100576	C:\Users\Adi\Desktop\Listy\Norwid\Norwid.png
+83	word_083.png	72	658	123	689	lub	Lub	1.000000	0.163136	C:\Users\Adi\Desktop\Listy\Norwid\Norwid.png
+84	word_084.png	132	662	343	694	zaprzeczenie	nab 2{820 aie	0.666667	0.009118	C:\Users\Adi\Desktop\Listy\Norwid\Norwid.png
+85	word_085.png	353	651	516	693	mniemań	4172 212) 441	0.000000	0.195403	C:\Users\Adi\Desktop\Listy\Norwid\Norwid.png
+86	word_086.png	524	660	542	685	o	[manual]	1.000000	1.000000	C:\Users\Adi\Desktop\Listy\Norwid\Norwid.png
+87	word_087.png	548	656	580	696	la	[manual]	1.000000	1.000000	C:\Users\Adi\Desktop\Listy\Norwid\Norwid.png
+88	word_088.png	59	690	112	728	da	[manual]	1.000000	1.000000	C:\Users\Adi\Desktop\Listy\Norwid\Norwid.png
+89	word_089.png	126	696	224	723	czemś	Vlana S	1.000000	0.107350	C:\Users\Adi\Desktop\Listy\Norwid\Norwid.png
+90	word_090.png	228	696	399	729	pierwszem	Vi8u7 224	0.500000	0.209648	C:\Users\Adi\Desktop\Listy\Norwid\Norwid.png
+91	word_091.png	408	695	540	722	lepszem	Zen? Lens	1.000000	0.189939	C:\Users\Adi\Desktop\Listy\Norwid\Norwid.png
+92	word_092.png	549	698	589	737	bez	[manual]	1.000000	1.000000	C:\Users\Adi\Desktop\Listy\Norwid\Norwid.png
+93	word_093.png	63	723	232	762	umyślnego	{nuv Inss	1.000000	0.267492	C:\Users\Adi\Desktop\Listy\Norwid\Norwid.png
+94	word_094.png	253	730	361	766	wyboru	4ubosza	1.000000	0.167508	C:\Users\Adi\Desktop\Listy\Norwid\Norwid.png
+95	word_095.png	372	724	397	759	i	[manual]	1.000000	1.000000	C:\Users\Adi\Desktop\Listy\Norwid\Norwid.png
+96	word_096.png	402	738	553	756	interesu	LLe{	1.000000	0.447750	C:\Users\Adi\Desktop\Listy\Norwid\Norwid.png
+97	word_097.png	33	752	57	789	i	[manual]	1.000000	1.000000	C:\Users\Adi\Desktop\Listy\Norwid\Norwid.png
+98	word_098.png	59	766	235	795	poszukuje	nojalle	1.000000	0.062515	C:\Users\Adi\Desktop\Listy\Norwid\Norwid.png
+99	word_099.png	241	771	289	799	się	{4	0.000000	0.240499	C:\Users\Adi\Desktop\Listy\Norwid\Norwid.png
+100	word_100.png	303	764	440	792	sposobem	J/nezo 2E4	1.000000	0.015802	C:\Users\Adi\Desktop\Listy\Norwid\Norwid.png
+101	word_101.png	447	764	520	796	tym	7Em	1.000000	0.234472	C:\Users\Adi\Desktop\Listy\Norwid\Norwid.png
+102	word_102.png	526	762	586	794	bez	[manual]	1.000000	1.000000	C:\Users\Adi\Desktop\Listy\Norwid\Norwid.png
+103	word_103.png	143	800	167	823	z	[manual]	1.000000	1.000000	C:\Users\Adi\Desktop\Listy\Norwid\Norwid.png
+104	word_104.png	173	797	284	829	własno	~{acao	1.000000	0.069603	C:\Users\Adi\Desktop\Listy\Norwid\Norwid.png
+105	word_105.png	290	793	403	832	wolnie	ur-Quce	1.000000	0.239230	C:\Users\Adi\Desktop\Listy\Norwid\Norwid.png
+106	word_106.png	404	797	430	831	i	[manual]	1.000000	1.000000	C:\Users\Adi\Desktop\Listy\Norwid\Norwid.png
+107	word_107.png	434	794	585	826	bezwłasno	6eJ	1.000000	0.062633	C:\Users\Adi\Desktop\Listy\Norwid\Norwid.png

@@ -91,8 +91,11 @@ def get_train_transform() -> transforms.Compose:
     """
     return transforms.Compose([
         transforms.Grayscale(num_output_channels=1),
-        transforms.Resize((IMAGE_SIZE, IMAGE_SIZE)),
-        transforms.RandomRotation(10),
+
+        transforms.Resize((32, 128)),
+
+        transforms.RandomRotation(5),
+
         transforms.ToTensor(),
         transforms.Normalize((0.5,), (0.5,))
     ])

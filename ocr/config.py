@@ -30,6 +30,7 @@ DATA_URL = "http://www.ee.surrey.ac.uk/CVSSP/demos/chars74k/EnglishFnt.tgz"
 
 # Katalog lokalny na przechowywanie danych
 DATA_DIR = "./data"
+DATA_ROOT_DIR = "./ttData"
 
 # Ścieżka do pobranego archiwum
 ARCHIVE_PATH = os.path.join(DATA_DIR, "EnglishFnt.tgz")
@@ -37,6 +38,7 @@ ARCHIVE_PATH = os.path.join(DATA_DIR, "EnglishFnt.tgz")
 # Ścieżka do rozpakowanych obrazów datasetu
 EXTRACTED_DIR = os.path.join(DATA_DIR, "English", "Fnt")
 
+IMAGES_DIR = "./ttData"
 # ── Model ─────────────────────────────────────────────────────────────────────
 # Ścieżka do zapisanego wytrenowanego modelu
 MODEL_PATH = "./models/model_ocr.pth"
@@ -62,9 +64,10 @@ STD  = [0.5, 0.5, 0.5]
 
 # ── Klasy (46: A-z - alfabet bez znaków polskich) ──────────────────────────────────────
 # Zestaw znaków obsługiwanych przez model OCR (wielkie litery A-z)
-CHARS = "ABCDEFGHIJKLMNOPRSTUWYZabcderghijklmnoprstuwyz"
+CHARS = "ABCDEFGHIJKLMNOPRSTUWYZĄĆĘŁŃÓŚŹŻabcdefghijklmnoprstuwyząćęłńóśźż"
 NUM_CLASSES = len(CHARS)
 
-# Mapowania indeks <-> znak dla CTC (0 = blank)
-char2idx = {c: i + 1 for i, c in enumerate(CHARS)}
-idx2char  = {i + 1: c for i, c in enumerate(CHARS)}
+char2idx = {c: i + 1 for i, c in enumerate(CHARS)}  # 0 = blank!
+idx2char = {i + 1: c for i, c in enumerate(CHARS)}
+
+BLANK = 0

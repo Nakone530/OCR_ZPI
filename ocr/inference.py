@@ -463,8 +463,55 @@ def _finalize_debug_crops(
         plt.show()
 
 
-# ── Predykcja pojedynczej litery ───────────────────────────────────────────────
+# ── Przekazanie zdjęć folderu do predykcji ───────────────────────────────────────────────
 
+
+def process_folder(folder_path, args, model_path, device, info):
+    if not os.path.isdir(folder_path):
+        raise ValueError(f"To nie jest katalog: {folder_path}")
+
+    model = load_model(model_path, device, info)
+
+    for filename in os.listdir(folder_path):
+        if not filename.lower().endswith(".jpg"):
+            continue
+
+        file_path = os.path.join(folder_path, filename)
+
+        if not os.path.isfile(file_path):
+            continue
+
+        try:
+            _require_file(file_path, info)
+            info(f"\nRozpoznawanie: {file_path}")
+
+            saved_copy_path = save_image_to_today_folder(file_path, info)
+
+            result = predict_image(file_path, model, device, args)
+
+            text = result["text"]
+            confidence = result["confidence"]
+            probs = result["probs"]
+
+            active_labels = get_active_chars()
+
+            output_handler = create_output_handler(args, source_image=file_path)
+
+            ocr_result = OCRResult(
+                text=text,
+                confidence=confidence,
+                probs=probs,
+                mode="word",
+                class_labels=active_labels
+            )
+
+            output_handler.output(ocr_result, info)
+
+        except Exception as e:
+            info(f"Błąd dla pliku {file_path}: {e}")
+
+# ── Predykcja pojedynczej litery ───────────────────────────────────────────────
+            
 def predict_image(
     image_path: str,
     model: nn.Module,

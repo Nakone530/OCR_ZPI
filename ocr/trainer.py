@@ -10,8 +10,6 @@ Odpowiedzialności:
 
 import os
 import sys
-import tarfile
-import urllib.request
 import re
 import signal
 import threading
@@ -25,7 +23,7 @@ import torch.nn.functional as F
 from torchvision import datasets
 
 from .config import (
-    DATA_URL, DATA_DIR, ARCHIVE_PATH, EXTRACTED_DIR, MODEL_PATH, CHECKPOINT_PATH,
+    DATA_DIR, ARCHIVE_PATH, EXTRACTED_DIR, MODEL_PATH, CHECKPOINT_PATH,
     MODEL_ARCHIVE_DIR, MODEL_ARCHIVE_KEEP_COUNT, IMAGES_DIR, CHARS, char2idx, idx2char, DATA_ROOT_DIR
 )
 from .model import SimpleCNN
@@ -65,32 +63,7 @@ def reset_training_flags():
 
 # -- Dataset
 
-def download_dataset(info=None) -> None:
-    """Pobiera archiwum datasetu, jeśli jeszcze go nie ma."""
-    if info is None:
-        info = print
-    
-    if not os.path.exists(ARCHIVE_PATH):
-        info(f"Pobieranie datasetu z {DATA_URL}...")
-        try:
-            urllib.request.urlretrieve(DATA_URL, ARCHIVE_PATH)
-            info("\nPobrano!")
-        except Exception as e:
-            info(f"Błąd podczas pobierania: {e}")
-            raise
 
-    if not os.path.exists(EXTRACTED_DIR):
-        info("Rozpakowywanie archiwum (to może chwilę potrwać)...")
-        try:
-            with tarfile.open(ARCHIVE_PATH, "r:gz") as tar:
-                tar.extractall(path=DATA_DIR)
-            info("Rozpakowano!")
-        except Exception as e:
-            info(f"Błąd podczas rozpakowania: {e}")
-            raise
-    else:
-        info("Dataset już jest rozpakowany")
-        
 def pad_images(images):
     """
     Padding obrazów do tej samej szerokości (OCR/CRNN).
@@ -617,7 +590,6 @@ def infinite_train(batch_size=32, model_path=None, checkpoint_interval=5, info=N
     
     try:
         info("1. Ładowanie datasetu...")
-        download_dataset(info)
         
         info("2. Ładowanie transformacji obrazów...")
         train_transform = get_train_transform()

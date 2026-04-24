@@ -22,7 +22,7 @@ from typing import Optional, List
 from ocr.config import MODEL_PATH
 from ocr.inference import get_active_chars, load_model, predict_image, predict_letter, predict_segments, predict_word
 from ocr.output import OCRResult, create_output_handler
-from ocr.trainer import download_dataset, train_model, infinite_train
+from ocr.trainer import train_model, infinite_train
 from ocr.utils import save_image_to_today_folder
 from ocr.json_output import (
     build_image_result_json,
@@ -54,8 +54,6 @@ def build_parser() -> argparse.ArgumentParser:
 
     # Tryby działania
     mode = parser.add_mutually_exclusive_group()
-    mode.add_argument("--prepare", "-p", action="store_true",
-                      help="Pobierz i przygotuj dane")
     mode.add_argument("--train", "-t", action="store_true",
                       help="Trenuj model (określona liczba epok)")
     mode.add_argument("--infinite", action="store_true",
@@ -252,12 +250,7 @@ def main(args=None, info=None, buffor=None) -> None:
     info(f"Używane urządzenie: {device}")
     info(f"Używany model: {model_path}")
     parser = build_parser()
-
-    # ── Przygotowanie danych ──
-    if args.prepare:
-        download_dataset()
-        print("\nDane przygotowane!")
-
+    
     # ── Trening ──
     if args.train:
         train_model(epochs=args.epochs, batch_size=args.batch_size, model_path=args.resume, info=info)

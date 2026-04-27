@@ -17,6 +17,7 @@ import time
 import gc
 from datetime import datetime
 import json
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -27,7 +28,7 @@ from .config import (
     MODEL_ARCHIVE_DIR, MODEL_ARCHIVE_KEEP_COUNT, IMAGES_DIR, CHARS, char2idx, idx2char, DATA_ROOT_DIR
 )
 from .model import SimpleCNN
-from .utils import get_train_transform
+from .utils import get_train_transform, load_all_datasets
 from .model_archive import ModelArchiver
 from .OCRDataset import OCRDataset
 from . import info
@@ -92,17 +93,39 @@ def pad_images(images):
         pad_w = max_w - w
 
         # (left, right, top, bottom)
-        img = F.pad(img, (0, pad_w, 0, 0), value=0)
+        img = F.pad(img, (0, pad_w, 0, 0), value=255)
         padded.append(img)
 
     return torch.stack(padded)
+
+def _tight_crop(gray: np.ndarray) -> np.ndarray:
+    """Przycina obraz do obszaru zawierającego piksele znaku."""
+    rows = np.where(np.sum(gray < 128, axis=1) > 0)[0]
+    cols = np.where(np.sum(gray < 128, axis=0) > 0)[0]
+    if len(rows) == 0 or len(cols) == 0:
+        return gray
+    return gray[rows[0]:rows[-1] + 1, cols[0]:cols[-1] + 1]
+
 
 def collate_fn(batch):
     images, texts = zip(*batch)
 
     images = list(images)
-    images = pad_images(images)  # padding szerokości
+    #images = pad_images(images)
+    processed_images = []
 
+    for img in images:
+        # jeśli to PIL → numpy
+        if hasattr(img, "convert"):
+            img = np.array(img.convert("L"))
+        elif img.ndim == 3:
+            img = np.array(img)
+
+        img = _tight_crop(img)
+        processed_images.append(torch.tensor(img, dtype=torch.float32))
+
+    images = torch.stack(processed_images)
+    
     targets = []
     target_lengths = []
 
@@ -118,30 +141,7 @@ def collate_fn(batch):
 
     return images, targets, target_lengths
 
-def load_all_datasets(root_dir):
-    all_data = []
 
-    for author in os.listdir(root_dir):
-        author_path = os.path.join(root_dir, author)
-
-        if not os.path.isdir(author_path):
-            continue
-
-        json_path = os.path.join(author_path, "boxes.jsonl")
-
-        if not os.path.exists(json_path):
-            continue
-
-        with open(json_path, "r", encoding="utf-8") as f:
-            for line in f:
-                item = json.loads(line)
-
-                # KLUCZOWE: dodaj pełną ścieżkę do obrazu
-                item["image_path"] = os.path.join(author_path, item["crop_file"])
-
-                all_data.append(item)
-
-    return all_data
 
 # -- Trening
 
@@ -353,7 +353,7 @@ def init_or_load_model(num_classes, model_path=None, info=None):
             GLOBAL_MODEL.load_state_dict(checkpoint)
 
 
-def train_model(epochs=10, batch_size=32, model_path=None, info=None):
+def train_model(epochs=10, batch_size=32, model_path=None, info=None, args=None):
     global GLOBAL_MODEL, GLOBAL_OPTIMIZER, GLOBAL_CRITERION
     global GLOBAL_DEVICE, GLOBAL_EPOCH, GLOBAL_BEST_ACC, GLOBAL_CLASS_NAMES
 
@@ -367,7 +367,7 @@ def train_model(epochs=10, batch_size=32, model_path=None, info=None):
     dataset = OCRDataset(
         json_data=data,
         images_dir=None,  # już niepotrzebne
-        transform=get_train_transform()
+        transform=get_train_transform(args)
     )
     
     info(f"4. Dataset załadowany: {len(dataset)} obrazów")

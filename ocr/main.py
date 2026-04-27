@@ -18,19 +18,28 @@ import sys
 import torch
 
 from ocr.config import MODEL_PATH
-from ocr.display import print_multi_result, print_text_result, print_top5, print_word_result, visualize_prediction
-from ocr.inference import get_active_chars, load_model, predict_image, predict_segments, predict_word, process_folder
+from ocr.inference import get_active_chars, load_model, predict_image, predict_letter, predict_segments, predict_word, process_folder
+from ocr.output import OCRResult, create_output_handler
+from ocr.trainer import train_model, infinite_train
+from ocr.utils import save_image_to_today_folder
 from ocr.json_output import (
     build_image_result_json,
+    build_word_result_json,
     build_lines_result_json,
     build_multi_result_json,
-    build_word_result_json,
     dump_json,
     write_json,
 )
-from ocr.output import OCRResult, create_output_handler
-from ocr.trainer import download_dataset, infinite_train, train_model
-from ocr.utils import save_image_to_today_folder
+from ocr.display import (
+    print_multi_result,
+    print_single_result,
+    print_text_result,
+    print_top5,
+    print_word_result,
+    print_text_result,
+    visualize_prediction,
+)
+#--State
 
 
 # -- Parsowanie argumentow ------------------------------------------------------
@@ -128,7 +137,10 @@ def build_args(state):
 
     if state.get("denoise"):
         args.append("--denoise")
-    if state.get("json"):
+    if state["mode"] == "crnn":
+        args += ["--crnn", state["input_path"]]
+
+    if state["json"]:
         args.append("--json")
     return args
 
@@ -177,11 +189,7 @@ def main(args=None, info=None, buffor=None):
     info(f"Uzywany model: {model_path}")
 
     parser = build_parser()
-
-    if args.prepare:
-        download_dataset()
-        info("\nDane przygotowane!")
-
+    
     # ── Trening ──
     if args.train:
         train_model(epochs=args.epochs, batch_size=args.batch_size, model_path=args.resume, info=info, args=args)
@@ -326,6 +334,23 @@ def main(args=None, info=None, buffor=None):
             info(f"TEXT: {text}")
             info(f"CONFIDENCE: {confidence:.2f}%")
 
+    # ── CRNN ──
+    elif args.crnn:
+        _require_file(args.crnn, info)
+        info(f"\nRozpoznawanie CRNN: {args.crnn}")
+        save_image_to_today_folder(args.crnn, info)
+
+        model = load_model(model_path, device, info)
+        result = predict_image(args.crnn, model, device, args)
+        text = result["text"]
+        confidence = result["confidence"]
+
+        info(f"Rozpoznany tekst: '{text}' ({confidence:.1f}%)")
+        if args.json:
+            payload = {"file": args.crnn, "text": text, "confidence": confidence}
+            info(dump_json(payload, pretty=args.json_pretty))
+
+    # ── Wyraz ──
     elif args.word:
         _require_file(args.word, info)
         info(f"\nRozpoznawanie wyrazu: {args.word}")
@@ -333,7 +358,6 @@ def main(args=None, info=None, buffor=None):
 
         model = load_model(model_path, device, info)
         word, avg_word_confidence, class_confidence = predict_word(args.word, model, device, args)
-
         if args.json:
             payload = build_word_result_json(
                 image_path=args.word,
@@ -342,7 +366,9 @@ def main(args=None, info=None, buffor=None):
                 device=str(device),
             )
             info(dump_json(payload, pretty=args.json_pretty))
-            out_path = args.json_path or (os.path.splitext(saved_copy_path)[0] + ".json")
+            out_path = args.json_path
+            if out_path is None:
+                out_path = os.path.splitext(saved_copy_path)[0] + ".json"
             write_json(out_path, payload, pretty=args.json_pretty)
         else:
             print_word_result(word, avg_word_confidence, class_confidence, info)

@@ -8,6 +8,7 @@ Odpowiedzialności:
   - segmentacja i rozpoznawanie wielu linii tekstu
 """
 
+import difflib
 import os
 import re
 import json
@@ -23,6 +24,7 @@ import matplotlib.pyplot as plt
 
 
 from PIL import Image
+
 from .config import CHARS, MODEL_PATH, NUM_CLASSES, char2idx, idx2char
 from .model import SimpleCNN
 from .utils import get_inf_transform, load_and_optionally_denoise, preprocess_letter, save_image_to_temp_folder, save_image_to_today_folder
@@ -492,6 +494,7 @@ def process_folder(folder_path, args, model_path, device, info):
 
             info(f"\nRozpoznawanie: {file_path}")
 
+<<<<<<< HEAD
             result = predict_image(file_path, model, device, args)
             
             # Dodaj bbox
@@ -499,6 +502,9 @@ def process_folder(folder_path, args, model_path, device, info):
             if bbox_data and bbox_index < len(bbox_data):
                 bbox = bbox_data[bbox_index].get("bbox")
             bbox_index += 1
+=======
+            result = predict_letter(file_path, model, device, args)
+>>>>>>> 64db64c88b3a12dee352597855991af311f76060
 
             results.append({
                 "file": file_path,
@@ -541,18 +547,17 @@ def _load_bbox_data(folder_path):
     
     return bbox_data if bbox_data else None
 # ── Predykcja pojedynczej litery ───────────────────────────────────────────────
-            
-def predict_image(
+def predict_letter(
     image_path: str,
     model: nn.Module,
     device: torch.device,
     args,
 ) -> tuple[str, float, torch.Tensor]:
 
+
     """
         funkcja rozpoznaje wyraz słowa
     """
-
     image = load_and_optionally_denoise(image_path, args, mode="L")
     
     img_array = np.array(image)
@@ -621,6 +626,63 @@ def predict_image(
             f"[DEBUG][image] predykcja: '{text}' ({confidence:.1f}%)"
         )
 
+        debug_crops.append((img_array.copy(), f"{text}_{confidence:.1f}"))
+        _finalize_debug_crops(debug_crops, args, image_path, mode_tag="image")
+
+    return {"text": text, "confidence": confidence, "per_char_confidences": confidences, "probs": probs_out}
+
+
+# ── Predykcja tekstu modelem CRNN ─────────────────────────────────────────────
+
+def predict_image(
+    image_path: str,
+    model: nn.Module,
+    device: torch.device,
+    args,
+) -> dict:
+    """Rozpoznaje tekst modelem CRNN+CTC. Zwraca dict {text, confidence, per_char_confidences, probs}."""
+    image = load_and_optionally_denoise(image_path, args, mode="L")
+    img_array = np.array(image)
+    debug = _is_debug_enabled(args)
+
+    debug_crops: list[tuple[np.ndarray, str]] = []
+
+    model.eval()
+    with torch.no_grad():
+        original_shape = img_array.shape
+        img_array = _tight_crop(img_array)
+        cropped_shape = img_array.shape
+
+        pil = Image.fromarray(img_array).convert("L")
+        tensor = get_transform()(pil).unsqueeze(0).to(device)
+        preprocessed_shape = tensor.shape
+
+        outputs = model(tensor)  # (T, B, C)
+        log_probs = outputs.log_softmax(2)
+        probs = log_probs.exp()
+        preds = log_probs.argmax(2)[:, 0].cpu().numpy()
+
+        chars = []
+        confidences = []
+        prev = 0  # blank
+        for t in range(len(preds)):
+            p = preds[t]
+            if p != prev and p != 0:
+                chars.append(idx2char[p])
+                confidences.append(probs[t, 0, p].item())
+            prev = p
+
+        text = "".join(chars)
+        confidence = float(np.mean(confidences) * 100) if confidences else 0.0
+        probs_out = probs[0, 0]
+
+    if debug:
+        info(
+            "[DEBUG][image] kształty obrazu: "
+            f"oryginał={original_shape}, po_crop={cropped_shape}, "
+            f"po_preprocess={preprocessed_shape}"
+        )
+        info(f"[DEBUG][image] predykcja CRNN: '{text}' ({confidence:.1f}%)")
         debug_crops.append((img_array.copy(), f"{text}_{confidence:.1f}"))
         _finalize_debug_crops(debug_crops, args, image_path, mode_tag="image")
 
@@ -832,6 +894,12 @@ def predict_segments(
     return text, words_with_confidence, class_confidence
 
 
+def compute_accuracy(predicted: str, reference: str) -> float:
+    """Oblicza procentowe podobieństwo (0–100) między predykcją a referencją."""
+    pred_norm = predicted.lower().strip()
+    ref_norm = reference.lower().strip()
+    ratio = difflib.SequenceMatcher(None, pred_norm, ref_norm).ratio()
+    return ratio * 100
 
 #Debug
 

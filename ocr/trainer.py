@@ -8,11 +8,11 @@ Odpowiedzialności:
   - nieskończony trening z możliwością przerwania i kontynuacji
 """
 
+import difflib
 import os
 import sys
-import tarfile
-import urllib.request
 import re
+import shutil
 import signal
 import threading
 import time
@@ -26,7 +26,7 @@ import torch.nn.functional as F
 from torchvision import datasets
 
 from .config import (
-    DATA_URL, DATA_DIR, ARCHIVE_PATH, EXTRACTED_DIR, MODEL_PATH, CHECKPOINT_PATH,
+    DATA_DIR, ARCHIVE_PATH, EXTRACTED_DIR, MODEL_PATH, CHECKPOINT_PATH,
     MODEL_ARCHIVE_DIR, MODEL_ARCHIVE_KEEP_COUNT, IMAGES_DIR, CHARS, char2idx, idx2char, DATA_ROOT_DIR
 )
 from .model import SimpleCNN
@@ -45,6 +45,7 @@ GLOBAL_CLASS_NAMES = None
 
 GLOBAL_EPOCH = 0
 GLOBAL_BEST_ACC = 0.0
+GLOBAL_VAL_ACCURACY = 0.0
 
 # -- flagi kontrolne dla nieskończonego treningu
 TRAINING_PAUSED = False
@@ -66,38 +67,31 @@ def reset_training_flags():
 
 # -- Dataset
 
-def download_dataset(info=None) -> None:
-    """Pobiera archiwum datasetu, jeśli jeszcze go nie ma."""
-    if info is None:
-        info = print
-    
-    if not os.path.exists(ARCHIVE_PATH):
 
-        info(f"brak datasetu")
-        # TODO: Tutaj powinno być pobieranie datasetu
-        info("\nPobrano!")
-
-    if not os.path.exists(EXTRACTED_DIR):
-        info("Rozpakowywanie archiwum (to może chwilę potrwać)...")
-        try:
-            with tarfile.open(ARCHIVE_PATH, "r:gz") as tar:
-                tar.extractall(path=DATA_DIR)
-            info("Rozpakowano!")
-        except Exception as e:
-            info(f"Błąd podczas rozpakowania: {e}")
-            raise
-    else:
-        info("Dataset już jest rozpakowany")
-        
 def pad_images(images):
     """
     Padding obrazów do tej samej szerokości (OCR/CRNN).
-    Zakłada: obrazy mają ten sam height, różny width.
+    Zakłada: obrazy są tensorami formatu (C, H, W) o tym samym H, różnym W.
     """
+    # Konwertuj na tensory jeśli potrzeba
+    tensor_images = []
+    for img in images:
+        if isinstance(img, torch.Tensor):
+            tensor_images.append(img)
+        else:
+            # Jeśli PIL Image, konwertuj do tensora
+            import torchvision.transforms as T
+            img_tensor = T.ToTensor()(img)
+            tensor_images.append(img_tensor)
+    
+    images = tensor_images
     max_w = max(img.shape[-1] for img in images)
 
     padded = []
     for img in images:
+        if img.dim() == 2:  # (H, W) -> dodaj kanał
+            img = img.unsqueeze(0)
+        
         _, h, w = img.shape
         pad_w = max_w - w
 
@@ -168,13 +162,12 @@ def _robust_torch_save(payload: dict, path: str, retries: int = 3, delay_s: floa
             return path
         except Exception as exc:
             last_exc = exc
-            info(f"[WARN] Nie udało się zapisać '{path}' (próba {attempt}/{retries}): {exc}")
             if attempt < retries:
                 time.sleep(delay_s)
 
     base, ext = os.path.splitext(path)
     fallback = f"{base}_{datetime.now().strftime('%Y%m%d_%H%M%S')}{ext}"
-    info(f"[WARN] Zapis awaryjny do: {fallback}")
+    os.makedirs(os.path.dirname(os.path.abspath(fallback)), exist_ok=True)
     torch.save(payload, fallback)
     return fallback
 
@@ -250,6 +243,94 @@ def infinite_handler(signum, frame, info=None):
 # Rejestracja obsługi sygnału SIGINT (Ctrl+C)
 signal.signal(signal.SIGINT, handler)
 
+def _compute_val_char_accuracy(model, val_loader, device) -> float:
+    """Oblicza dokładność znakową modelu na zbiorze walidacyjnym.
+
+    Używa CTC greedy decoding i SequenceMatcher do porównania z referencją.
+    Zwraca średnią ważoną długością tekstu referencyjnego (0–100%).
+    """
+    total_weight = 0.0
+    weighted_sum = 0.0
+
+    model.eval()
+    with torch.inference_mode():
+        for images, targets, target_lengths in val_loader:
+            images = images.to(device)
+            outputs = model(images)
+            log_probs = outputs.log_softmax(2)
+            preds = log_probs.argmax(2)  # (T, B)
+
+            target_offset = 0
+            for b in range(images.size(0)):
+                tl = target_lengths[b].item()
+                gt_indices = targets[target_offset:target_offset + tl].tolist()
+                gt_text = ''.join(idx2char.get(i, '') for i in gt_indices)
+                target_offset += tl
+
+                prev = 0
+                pred_chars = []
+                for t in range(preds.size(0)):
+                    p = int(preds[t, b].item())
+                    if p != prev and p != 0:
+                        pred_chars.append(idx2char.get(p, ''))
+                    prev = p
+                pred_text = ''.join(pred_chars)
+
+                weight = len(gt_text)
+                if weight > 0:
+                    ratio = difflib.SequenceMatcher(None, pred_text.lower(), gt_text.lower()).ratio()
+                    weighted_sum += ratio * weight
+                    total_weight += weight
+
+    return (weighted_sum / total_weight * 100) if total_weight > 0 else 0.0
+
+
+def get_stored_accuracy(model_path=None) -> float:
+    """Zwraca val_char_accuracy zapisaną w checkpoincie lub -1.0 gdy brak."""
+    path = model_path or MODEL_PATH
+    if not os.path.exists(path):
+        return -1.0
+    try:
+        checkpoint = torch.load(path, map_location='cpu')
+        if isinstance(checkpoint, dict):
+            return checkpoint.get('val_char_accuracy', -1.0)
+    except Exception:
+        return -1.0
+    return -1.0
+
+
+def _make_backup(path: str) -> str | None:
+    """Tworzy kopię zapasową pliku modelu (.bak) przed nadpisaniem."""
+    if os.path.exists(path):
+        backup = path + ".bak"
+        shutil.copy2(path, backup)
+        return backup
+    return None
+
+
+def _make_backup_as(src: str, dst: str) -> bool:
+    """Kopiuje plik src do dst (backup pod wskazaną nazwą). Zwraca True jeśli sukces."""
+    if os.path.exists(src):
+        os.makedirs(os.path.dirname(os.path.abspath(dst)), exist_ok=True)
+        shutil.copy2(src, dst)
+        return True
+    return False
+
+
+def restore_from_backup(path: str = None, info=None) -> bool:
+    """Przywraca model z kopii zapasowej (.bak). Zwraca True jeśli sukces."""
+    if info is None:
+        info = print
+    path = path or MODEL_PATH
+    backup = path + ".bak"
+    if os.path.exists(backup):
+        shutil.copy2(backup, path)
+        info(f"Model przywrócony z: {backup}")
+        return True
+    info(f"Brak kopii zapasowej: {backup}")
+    return False
+
+
 def _archive_previous_model(current_model_path):
     """Archiwizuje poprzedni model jeśli istnieje."""
     try:
@@ -268,7 +349,7 @@ def _archive_previous_model(current_model_path):
 
 def save_model(path, info=None):
     """Zapisuje aktualny stan modelu do pliku."""
-    global GLOBAL_MODEL, GLOBAL_OPTIMIZER, GLOBAL_EPOCH, GLOBAL_BEST_ACC, GLOBAL_CLASS_NAMES
+    global GLOBAL_MODEL, GLOBAL_OPTIMIZER, GLOBAL_EPOCH, GLOBAL_BEST_ACC, GLOBAL_CLASS_NAMES, GLOBAL_VAL_ACCURACY
 
     if info is None:
         info = print
@@ -276,18 +357,22 @@ def save_model(path, info=None):
     if GLOBAL_MODEL is None:
         raise RuntimeError("Model nie jest zainicjalizowany")
 
+    if path == MODEL_PATH:
+        _make_backup(path)
+
     payload = {
         "epoch": GLOBAL_EPOCH,
         "model_state_dict": _state_dict_to_cpu(GLOBAL_MODEL.state_dict()),
         "optimizer_state_dict": _optimizer_state_to_cpu(GLOBAL_OPTIMIZER.state_dict()),
-        "best_acc": GLOBAL_BEST_ACC,
+        "best_loss": GLOBAL_BEST_ACC,
         "class_names": GLOBAL_CLASS_NAMES,
+        "val_char_accuracy": GLOBAL_VAL_ACCURACY,
     }
 
     saved_path = _robust_torch_save(payload, path)
 
     info(f"Model zapisany do: {saved_path}")
-    
+
     # Archiwizuj poprzedni model jeśli jest to główny model
     if path == MODEL_PATH:
         _archive_previous_model(saved_path)
@@ -298,44 +383,48 @@ def save_model(path, info=None):
 def save_best_model(path, info=None):
     """Zapisuje najlepszy model (jeśli został zachowany) do pliku."""
     global BEST_MODEL_STATE, GLOBAL_BEST_ACC
-    
+
     if info is None:
         info = print
-    
+
+    os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
+
     if BEST_MODEL_STATE is None:
         info("Brak zapisanego najlepszego modelu - zapisuję aktualny stan.")
-
         return save_model(path, info)
-    
+
+    _make_backup(path)
     torch.save(BEST_MODEL_STATE, path)
-    info(f"Najlepszy model (acc: {BEST_MODEL_STATE.get('best_acc', 0):.2f}%) zapisany do: {path}")
+    acc = BEST_MODEL_STATE.get('val_char_accuracy', None)
+    acc_str = f", acc: {acc:.2f}%" if acc is not None else ""
+    info(f"Najlepszy model (loss: {BEST_MODEL_STATE.get('best_loss', 0):.4f}{acc_str}) zapisany do: {path}")
     return path
 
 
 def capture_best_model(info=None):
     """Przechwytuje aktualny stan modelu jako najlepszy."""
-    global BEST_MODEL_STATE, GLOBAL_MODEL, GLOBAL_OPTIMIZER, GLOBAL_EPOCH, GLOBAL_BEST_ACC, GLOBAL_CLASS_NAMES
-    
+    global BEST_MODEL_STATE, GLOBAL_MODEL, GLOBAL_OPTIMIZER, GLOBAL_EPOCH, GLOBAL_BEST_ACC, GLOBAL_CLASS_NAMES, GLOBAL_VAL_ACCURACY
+
     if info is None:
         info = print
-    
+
     if GLOBAL_MODEL is None:
         return
-    
+
     BEST_MODEL_STATE = {
         "epoch": GLOBAL_EPOCH,
         "model_state_dict": _state_dict_to_cpu(GLOBAL_MODEL.state_dict()),
         "optimizer_state_dict": _optimizer_state_to_cpu(GLOBAL_OPTIMIZER.state_dict()),
-        "best_acc": GLOBAL_BEST_ACC,
+        "best_loss": GLOBAL_BEST_ACC,
         "class_names": GLOBAL_CLASS_NAMES,
+        "val_char_accuracy": GLOBAL_VAL_ACCURACY,
     }
-    # Zapisz też automatycznie do pliku
     save_best_model(MODEL_PATH, info)
 
 
 def init_or_load_model(num_classes, model_path=None, info=None):
     global GLOBAL_MODEL, GLOBAL_OPTIMIZER, GLOBAL_CRITERION
-    global GLOBAL_DEVICE, GLOBAL_EPOCH, GLOBAL_BEST_ACC, GLOBAL_CLASS_NAMES
+    global GLOBAL_DEVICE, GLOBAL_EPOCH, GLOBAL_BEST_ACC, GLOBAL_CLASS_NAMES, GLOBAL_VAL_ACCURACY
 
     if info is None:
         info = print
@@ -356,17 +445,26 @@ def init_or_load_model(num_classes, model_path=None, info=None):
             GLOBAL_EPOCH = checkpoint.get("epoch", 0)
             GLOBAL_BEST_ACC = checkpoint.get("best_acc", 0.0)
             GLOBAL_CLASS_NAMES = checkpoint.get("class_names", GLOBAL_CLASS_NAMES)
+            GLOBAL_VAL_ACCURACY = checkpoint.get("val_char_accuracy", 0.0)
         else:
             GLOBAL_MODEL.load_state_dict(checkpoint)
 
 
 def train_model(epochs=10, batch_size=32, model_path=None, info=None, args=None):
     global GLOBAL_MODEL, GLOBAL_OPTIMIZER, GLOBAL_CRITERION
-    global GLOBAL_DEVICE, GLOBAL_EPOCH, GLOBAL_BEST_ACC, GLOBAL_CLASS_NAMES
+    global GLOBAL_DEVICE, GLOBAL_EPOCH, GLOBAL_BEST_ACC, GLOBAL_CLASS_NAMES, GLOBAL_VAL_ACCURACY
 
     if info is None:
         info = print
 
+    # Odczyt dokładności istniejącego modelu i kopia zapasowa
+    prev_accuracy = get_stored_accuracy(MODEL_PATH)
+    backup_path = MODEL_PATH + ".backup"
+    _make_backup_as(MODEL_PATH, backup_path)
+    if prev_accuracy >= 0:
+        info(f"Poprzednia dokładność modelu: {prev_accuracy:.2f}%")
+    else:
+        info("Brak poprzedniego modelu – pierwszy trening.")
 
     info("3. Ładowanie datasetu OCR...")
     data = load_all_datasets(DATA_ROOT_DIR)
@@ -472,9 +570,7 @@ def train_model(epochs=10, batch_size=32, model_path=None, info=None, args=None)
                 val_loss += loss.item()
 
         val_loss /= len(val_loader)
-        
-        capture_best_model()
-        
+
         epoch_time = time.time() - epoch_start
         info(f"Epoch {epoch+1} | train_loss={running_loss:.4f} | val_loss={val_loss:.4f} | time={epoch_time:.1f}s")
         if torch.isnan(loss):
@@ -486,10 +582,33 @@ def train_model(epochs=10, batch_size=32, model_path=None, info=None, args=None)
         GLOBAL_EPOCH = epoch + 1
 
     total_training_time = time.time() - training_start
+
+    # Oblicz dokładność nowego modelu i porównaj z poprzednim
+    info("\nObliczanie dokładności znakowej na zbiorze walidacyjnym...")
+    new_accuracy = _compute_val_char_accuracy(GLOBAL_MODEL, val_loader, GLOBAL_DEVICE)
+    GLOBAL_VAL_ACCURACY = new_accuracy
+    info(f"Nowa dokładność: {new_accuracy:.2f}%")
+
+    if prev_accuracy < 0:
+        info("Pierwszy model – zapisuję jako punkt odniesienia.")
+        capture_best_model(info)
+    elif new_accuracy >= prev_accuracy:
+        info(f"Poprawa: {prev_accuracy:.2f}% -> {new_accuracy:.2f}% – zapisuję nowy model.")
+        capture_best_model(info)
+    else:
+        info(f"Brak poprawy: {prev_accuracy:.2f}% -> {new_accuracy:.2f}% – przywracam poprzedni model.")
+        if os.path.exists(backup_path):
+            shutil.copy2(backup_path, MODEL_PATH)
+
+    # Usuń plik backup
+    if os.path.exists(backup_path):
+        os.remove(backup_path)
+
     info("\n" + "=" * 60)
     info("  PODSUMOWANIE TRENINGU")
     info("=" * 60)
     info(f"  Zakończona epoka: {GLOBAL_EPOCH}")
+    info(f"  Dokładność znakowa (val): {GLOBAL_VAL_ACCURACY:.2f}%")
     info(f"  Całkowity czas treningu: {total_training_time:.1f}s")
     info("=" * 60)
 
@@ -590,21 +709,27 @@ def infinite_train(batch_size=32, model_path=None, checkpoint_interval=5, info=N
     # Reset flag
     TRAINING_PAUSED = False
     TRAINING_STOP = False
+    GLOBAL_BEST_ACC = float('inf')  # reset na nieskończoność dla loss (chcemy minimalizować)
     
     # UWAGA: signal.signal() nie może być używany w wątku!
     # Dlatego nie ustawiamy handlera - nieskończony trening będzie działać bez Ctrl+C
     
     try:
         info("1. Ładowanie datasetu...")
-        download_dataset(info)
         
         info("2. Ładowanie transformacji obrazów...")
         train_transform = get_train_transform()
         
-        info("3. Wczytywanie Datasetu")
+        info("3. Ładowanie datasetu OCR...")
+        data = load_all_datasets(DATA_ROOT_DIR)
+        
+        dataset = OCRDataset(
+            json_data=data,
+            images_dir=None,
+            transform=get_train_transform()
+        )
 
-
-        info(f"4. Dataset załadowany: {len(dataset)} obrazów, {len(dataset.classes)} klas")
+        info(f"4. Dataset załadowany: {len(dataset)} obrazów")
         
         train_size = int(0.8 * len(dataset))
         val_size = len(dataset) - train_size
@@ -618,7 +743,7 @@ def infinite_train(batch_size=32, model_path=None, checkpoint_interval=5, info=N
         info("7. Inicjalizacja lub ładowanie modelu...")
         # init albo load
         if GLOBAL_MODEL is None:
-            init_or_load_model(len(dataset.classes), model_path, info)
+            init_or_load_model(len(CHARS) + 1, model_path, info)
         
 
         info("8. Rozpoczynanie treningu...")
@@ -627,7 +752,7 @@ def infinite_train(batch_size=32, model_path=None, checkpoint_interval=5, info=N
         info("="*60)
         info(f"  Urządzenie: {GLOBAL_DEVICE}")
         info(f"  Batch size: {batch_size}")
-        info(f"  Klasy: {len(dataset.classes)}")
+        info(f"  Klasy: {len(CHARS) + 1}")
         info(f"  Próbki treningowe: {len(train_dataset)}")
         info(f"  Próbki walidacyjne: {len(val_dataset)}")
         info(f"  Checkpoint co: {checkpoint_interval} epok")
@@ -651,16 +776,31 @@ def infinite_train(batch_size=32, model_path=None, checkpoint_interval=5, info=N
             GLOBAL_MODEL.train()
             running_loss = 0.0
             
-            for step, (images, labels) in enumerate(train_loader, start=1):
+            for step, (images, targets, target_lengths) in enumerate(train_loader, start=1):
                 # Sprawdź czy pauza w trakcie epoki
                 if TRAINING_PAUSED:
                     break
                     
-                images, labels = images.to(GLOBAL_DEVICE), labels.to(GLOBAL_DEVICE)
+                images = images.to(GLOBAL_DEVICE)
+                targets = targets.to(GLOBAL_DEVICE)
+                target_lengths = target_lengths.to(GLOBAL_DEVICE)
                 
                 GLOBAL_OPTIMIZER.zero_grad(set_to_none=True)
                 outputs = GLOBAL_MODEL(images)
-                loss = GLOBAL_CRITERION(outputs, labels)
+                log_probs = outputs.log_softmax(2)
+                
+                input_lengths = torch.full(
+                    size=(images.size(0),),
+                    fill_value=outputs.size(0),
+                    dtype=torch.long
+                )
+                
+                loss = GLOBAL_CRITERION(
+                    log_probs,
+                    targets,
+                    input_lengths,
+                    target_lengths
+                )
                 loss.backward()
                 GLOBAL_OPTIMIZER.step()
                 
@@ -674,7 +814,7 @@ def infinite_train(batch_size=32, model_path=None, checkpoint_interval=5, info=N
                          f"Loss: {loss.item():.4f} | Czas: {elapsed}")
 
                 # Zwolnij referencje po każdym kroku dla stabilności długiego treningu.
-                del outputs, loss, images, labels
+                del outputs, loss, images, targets, target_lengths, log_probs, input_lengths
                 
             # Jeśli pauza podczas kroku - wróć do początku pętli
             if TRAINING_PAUSED:
@@ -682,35 +822,50 @@ def infinite_train(batch_size=32, model_path=None, checkpoint_interval=5, info=N
             
             # walidacja
             GLOBAL_MODEL.eval()
-            correct, total = 0, 0
+            val_loss = 0.0
             
             with torch.inference_mode():
-                for images, labels in val_loader:
-                    images, labels = images.to(GLOBAL_DEVICE), labels.to(GLOBAL_DEVICE)
-                    outputs = GLOBAL_MODEL(images)
-                    _, predicted = torch.max(outputs, 1)
+                for images, targets, target_lengths in val_loader:
+                    images = images.to(GLOBAL_DEVICE)
+                    targets = targets.to(GLOBAL_DEVICE)
+                    target_lengths = target_lengths.to(GLOBAL_DEVICE)
                     
-                    total += labels.size(0)
-                    correct += (predicted == labels).sum().item()
+                    outputs = GLOBAL_MODEL(images)
+                    log_probs = outputs.log_softmax(2)
+                    
+                    input_lengths = torch.full(
+                        size=(images.size(0),),
+                        fill_value=outputs.size(0),
+                        dtype=torch.long
+                    )
+                    
+                    loss = GLOBAL_CRITERION(
+                        log_probs,
+                        targets,
+                        input_lengths,
+                        target_lengths
+                    )
 
-                    del outputs, predicted, images, labels
+                    val_loss += loss.item()
+                    del outputs, log_probs, input_lengths, images, targets, target_lengths
             
-            val_acc = 100 * correct / total
+            val_loss /= len(val_loader)
+
             epoch_time = time.time() - epoch_start
             avg_loss = running_loss / total_steps
-            
+
             info(f"\n>>> Epoch [{epoch+1}] zakończona")
-            info(f"    Val Acc: {val_acc:.2f}% | Avg Loss: {avg_loss:.4f} | Czas: {epoch_time:.1f}s")
-            
+            info(f"    Train Loss: {avg_loss:.4f} | Val Loss: {val_loss:.4f} | Czas: {epoch_time:.1f}s")
+
             GLOBAL_EPOCH = epoch + 1
             epoch = GLOBAL_EPOCH
-            
-            # Zapisz najlepszy model jeśli poprawa
-            if val_acc > GLOBAL_BEST_ACC:
+
+            # Zapisz najlepszy model jeśli poprawa (mniejszy loss)
+            if val_loss < GLOBAL_BEST_ACC:  # GLOBAL_BEST_ACC przechowuje teraz best_loss
                 old_best = GLOBAL_BEST_ACC
-                GLOBAL_BEST_ACC = val_acc
+                GLOBAL_BEST_ACC = val_loss
                 capture_best_model()
-                info(f"    [NEW BEST] Poprawa: {old_best:.2f}% -> {val_acc:.2f}%")
+                info(f"    [NEW BEST] Poprawa loss: {old_best:.4f} -> {val_loss:.4f}")
 
             # Okresowy checkpoint
             if epoch % checkpoint_interval == 0:
@@ -725,6 +880,11 @@ def infinite_train(batch_size=32, model_path=None, checkpoint_interval=5, info=N
 
 
         
+        # Końcowa dokładność znakowa po zakończeniu pętli
+        info("\nObliczanie końcowej dokładności znakowej...")
+        final_acc = _compute_val_char_accuracy(GLOBAL_MODEL, val_loader, GLOBAL_DEVICE)
+        GLOBAL_VAL_ACCURACY = final_acc
+
         # Podsumowanie końcowe
         total_time = datetime.now() - start_time
         info("\n" + "="*60)
@@ -732,7 +892,8 @@ def infinite_train(batch_size=32, model_path=None, checkpoint_interval=5, info=N
         info("="*60)
         info(f"  Całkowity czas: {total_time}")
         info(f"  Epoki: {GLOBAL_EPOCH}")
-        info(f"  Najlepsza dokładność: {GLOBAL_BEST_ACC:.2f}%")
+        info(f"  Najlepszy loss: {GLOBAL_BEST_ACC:.4f}")
+        info(f"  Dokładność znakowa (val): {GLOBAL_VAL_ACCURACY:.2f}%")
         info("="*60)
 
     except Exception as e:

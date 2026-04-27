@@ -9,7 +9,7 @@ Narzędzia pomocnicze:
 import os
 from datetime import date
 from pathlib import Path
-
+import random
 import json
 try:
     import cv2  # type: ignore
@@ -26,6 +26,7 @@ try:
 except ModuleNotFoundError:  # pragma: no cover
     fitz = None
 from torchvision import transforms
+import torchvision.transforms.functional as F
 
 from datetime import datetime
 from typing import Any
@@ -74,7 +75,7 @@ def get_inf_transform(args) -> transforms.Compose:
         >>> transform = get_transform()
         >>> tensor = transform(pil_image)
     """
-    pack = []
+    pack = [ResizeWithAspect(),]
     if getattr(args, "denoise", False):
         pack.append(trans_denoise_bil())
 
@@ -102,7 +103,9 @@ def get_train_transform(args) -> transforms.Compose:
         >>> tensor = train_transform(pil_image)
     """
     pack = [
-        transforms.RandomRotation(5)
+        transforms.RandomRotation(5),
+        RandomPadding(),
+        ResizeWithAspect(),
     ]
     if getattr(args, "denoise", False):
         pack.append(trans_denoise_bil())
@@ -110,6 +113,39 @@ def get_train_transform(args) -> transforms.Compose:
     pack.extend(base_transform())
     return transforms.Compose(pack)
 
+
+class RandomPadding:
+    def __init__(self, max_pad=20):
+        self.max_pad = max_pad
+
+    def __call__(self, img):
+        left = random.randint(0, self.max_pad)
+        top = random.randint(0, self.max_pad)
+        right = random.randint(0, self.max_pad)
+        bottom = random.randint(0, self.max_pad)
+        return F.pad(img, (left, top, right, bottom), fill=255)
+    
+class ResizeWithAspect:
+    def __init__(self, size=(32, 128), fill=255):
+        self.h, self.w = size
+        self.fill = fill
+
+    def __call__(self, img):
+        w, h = img.size
+        scale = min(self.w / w, self.h / h)
+        
+        new_w = int(w * scale)
+        new_h = int(h * scale)
+
+        img = F.resize(img, (new_h, new_w))
+
+        pad_w = self.w - new_w
+        pad_h = self.h - new_h
+
+        left = pad_w // 2
+        top = pad_h // 2
+
+        return F.pad(img, (left, top, pad_w - left, pad_h - top), fill=self.fill)
 
 def preprocess_letter(img: np.ndarray) -> np.ndarray:
     """

@@ -19,19 +19,47 @@ import sys
 import torch
 
 from ocr.config import MODEL_PATH
-from ocr.display import print_multi_result, print_text_result, print_top5, print_word_result, visualize_prediction
-from ocr.inference import get_active_chars, load_model, predict_image, predict_segments, predict_word, process_folder
+from ocr.inference import compute_accuracy, get_active_chars, load_model, predict_image, predict_letter, predict_segments, predict_word, process_folder
+from ocr.output import OCRResult, create_output_handler
+from ocr.trainer import train_model, infinite_train
+from ocr.utils import save_image_to_today_folder
 from ocr.json_output import (
     build_image_result_json,
+    build_word_result_json,
     build_lines_result_json,
     build_multi_result_json,
-    build_word_result_json,
     dump_json,
     write_json,
 )
-from ocr.output import OCRResult, create_output_handler
-from ocr.trainer import download_dataset, infinite_train, train_model
-from ocr.utils import save_image_to_today_folder
+from ocr.display import (
+    print_multi_result,
+    print_single_result,
+    print_text_result,
+    print_top5,
+    print_word_result,
+    print_text_result,
+    visualize_prediction,
+)
+#--State
+
+
+
+# ── Pomocniki ─────────────────────────────────────────────────────────────────
+
+def _print_accuracy(predicted_text: str, reference_path: str, info=None) -> None:
+    if info is None:
+        info = print
+    try:
+        reference = open(reference_path, encoding="utf-8").read()
+    except OSError as e:
+        info(f"Błąd odczytu pliku referencyjnego: {e}")
+        return
+    acc = compute_accuracy(predicted_text, reference)
+    info("\n" + "=" * 60)
+    info(f"  Dokładność OCR: {acc:.2f}%")
+    info(f"  Predykcja:  {predicted_text.strip()[:80]}")
+    info(f"  Referencja: {reference.strip()[:80]}")
+    info("=" * 60)
 
 
 # -- Funkcje pomocnicze dla wyświetlania rozmieszczenia tekstu ------------------
@@ -114,6 +142,9 @@ def build_parser() -> argparse.ArgumentParser:
     mode.add_argument("--annotate", type=str, metavar="PLIK", help="Wycinki: popraw bboxy i zapisz wycinki + adnotacje")
     mode.add_argument("--folder", type=str, metavar="PLIK", help="Rozpoznaj zdjęcia w folderze")
     mode.add_argument("--page", type=str, metavar="PLIK", help="Separacja zdjęcia na wyrazy oraz ich rozpoznanie")
+    # Porównanie z referencją
+    parser.add_argument("--accuracy", "-a", type=str, default=None, metavar="PLIK",
+                        help="Plik z referencyjną transkrypcją; oblicza procentowe podobieństwo wyniku OCR do referencji")
 
     parser.add_argument("--epochs", "-e", type=int, default=10, help="Liczba epok (domyslnie: 10)")
     parser.add_argument("--batch-size", "-b", type=int, default=32, help="Rozmiar batcha (domyslnie: 32)")
@@ -191,7 +222,10 @@ def build_args(state):
 
     if state.get("denoise"):
         args.append("--denoise")
-    if state.get("json"):
+    if state["mode"] == "crnn":
+        args += ["--crnn", state["input_path"]]
+
+    if state["json"]:
         args.append("--json")
     return args
 
@@ -240,11 +274,7 @@ def main(args=None, info=None, buffor=None):
     info(f"Uzywany model: {model_path}")
 
     parser = build_parser()
-
-    if args.prepare:
-        download_dataset()
-        info("\nDane przygotowane!")
-
+    
     # ── Trening ──
     if args.train:
         train_model(epochs=args.epochs, batch_size=args.batch_size, model_path=args.resume, info=info, args=args)
@@ -406,6 +436,26 @@ def main(args=None, info=None, buffor=None):
             info(f"TEXT: {text}")
             info(f"CONFIDENCE: {confidence:.2f}%")
 
+        if args.accuracy:
+            _print_accuracy(text, args.accuracy, info)
+
+    # ── CRNN ──
+    elif args.crnn:
+        _require_file(args.crnn, info)
+        info(f"\nRozpoznawanie CRNN: {args.crnn}")
+        save_image_to_today_folder(args.crnn, info)
+
+        model = load_model(model_path, device, info)
+        result = predict_image(args.crnn, model, device, args)
+        text = result["text"]
+        confidence = result["confidence"]
+
+        info(f"Rozpoznany tekst: '{text}' ({confidence:.1f}%)")
+        if args.json:
+            payload = {"file": args.crnn, "text": text, "confidence": confidence}
+            info(dump_json(payload, pretty=args.json_pretty))
+
+    # ── Wyraz ──
     elif args.word:
         _require_file(args.word, info)
         info(f"\nRozpoznawanie wyrazu: {args.word}")
@@ -413,7 +463,6 @@ def main(args=None, info=None, buffor=None):
 
         model = load_model(model_path, device, info)
         word, avg_word_confidence, class_confidence = predict_word(args.word, model, device, args)
-
         if args.json:
             payload = build_word_result_json(
                 image_path=args.word,
@@ -422,11 +471,17 @@ def main(args=None, info=None, buffor=None):
                 device=str(device),
             )
             info(dump_json(payload, pretty=args.json_pretty))
-            out_path = args.json_path or (os.path.splitext(saved_copy_path)[0] + ".json")
+            out_path = args.json_path
+            if out_path is None:
+                out_path = os.path.splitext(saved_copy_path)[0] + ".json"
             write_json(out_path, payload, pretty=args.json_pretty)
         else:
             print_word_result(word, avg_word_confidence, class_confidence, info)
 
+        if args.accuracy:
+            _print_accuracy(word, args.accuracy, info)
+
+    # ── Tekst wieloliniowy ──
     elif args.lines:
         _require_file(args.lines, info)
         info(f"\nRozpoznawanie tekstu: {args.lines}")
@@ -448,6 +503,12 @@ def main(args=None, info=None, buffor=None):
         else:
             print_text_result(text, words_with_confidence, class_confidence, info)
 
+        if args.accuracy:
+            _print_accuracy(text, args.accuracy, info)
+
+
+
+    # ── Wiele zdjęć ──
     elif args.multi:
         model = load_model(model_path, device, info)
         info(f"\nRozpoznawanie {len(args.multi)} pliku(-ow):")

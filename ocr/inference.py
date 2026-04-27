@@ -10,6 +10,7 @@ Odpowiedzialności:
 
 import os
 import re
+import json
 from datetime import datetime
 from pathlib import Path
 import cv2
@@ -472,6 +473,11 @@ def process_folder(folder_path, args, model_path, device, info):
 
     model = load_model(model_path, device, info)
     results = []
+    
+    # Ładuj bbox data
+    bbox_data = _load_bbox_data(folder_path)
+    bbox_index = 0
+    
     for filename in os.listdir(folder_path):
         if not filename.lower().endswith(".png"):
             continue
@@ -487,12 +493,19 @@ def process_folder(folder_path, args, model_path, device, info):
             info(f"\nRozpoznawanie: {file_path}")
 
             result = predict_image(file_path, model, device, args)
+            
+            # Dodaj bbox
+            bbox = None
+            if bbox_data and bbox_index < len(bbox_data):
+                bbox = bbox_data[bbox_index].get("bbox")
+            bbox_index += 1
 
             results.append({
                 "file": file_path,
                 "text": result["text"],
                 "confidence": result["confidence"],
-                "probs": result["probs"]
+                "probs": result["probs"],
+                "bbox": bbox
             })
         except Exception as e:
             info(f"Błąd dla {file_path}: {e}")
@@ -502,6 +515,31 @@ def process_folder(folder_path, args, model_path, device, info):
             })
 
     return results
+
+
+def _load_bbox_data(folder_path):
+    """Ładuje dane bounding box z pliku boxes.jsonl."""
+    jsonl_path = os.path.join(folder_path, "boxes.jsonl")
+    if not os.path.exists(jsonl_path):
+        return None
+    
+    bbox_data = []
+    try:
+        with open(jsonl_path, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                row = json.loads(line)
+                bbox_xyxy = row.get("bbox_xyxy", [])
+                if len(bbox_xyxy) == 4:
+                    bbox_data.append({
+                        "bbox": bbox_xyxy,
+                    })
+    except:
+        return None
+    
+    return bbox_data if bbox_data else None
 # ── Predykcja pojedynczej litery ───────────────────────────────────────────────
             
 def predict_image(

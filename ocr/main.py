@@ -11,6 +11,7 @@ Laczy wszystkie moduly:
 """
 
 import argparse
+import json
 import logging
 import os
 import sys
@@ -31,6 +32,68 @@ from ocr.json_output import (
 from ocr.output import OCRResult, create_output_handler
 from ocr.trainer import download_dataset, infinite_train, train_model
 from ocr.utils import save_image_to_today_folder
+
+
+# -- Funkcje pomocnicze dla wyświetlania rozmieszczenia tekstu ------------------
+
+def display_text_layout(words, info):
+    """Wyświetla tekst w oryginalnym rozmieszczeniu (z podziałem na linie)."""
+    if not words:
+        return
+    
+    # Filtruj słowa bez bbox
+    words_with_bbox = [w for w in words if w.get("bbox") is not None]
+    
+    if not words_with_bbox:
+        return
+    
+    # Grupuj po Y (podstawie linii)
+    lines = []
+    current_line = []
+    current_y = None
+    y_threshold = 20  # piksele tolerancji dla tej samej linii
+    
+    # Sortuj po Y
+    sorted_words = sorted(
+        words_with_bbox,
+        key=lambda w: w["bbox"][1] if w.get("bbox") else 0
+    )
+    
+    for word in sorted_words:
+        bbox = word.get("bbox")
+        if not bbox:
+            continue
+        
+        y = bbox[1]
+        if current_y is None or abs(y - current_y) <= y_threshold:
+            current_line.append(word)
+            if current_y is None:
+                current_y = y
+        else:
+            if current_line:
+                lines.append(current_line)
+            current_line = [word]
+            current_y = y
+    
+    if current_line:
+        lines.append(current_line)
+    
+    # Wyświetl linie
+    info("\n" + "=" * 60)
+    info("TEKST W ROZMIESZCZENIU:")
+    info("=" * 60)
+    
+    for line in lines:
+        # Sortuj słowa w linii po X (od lewej do prawej)
+        line_sorted = sorted(
+            line,
+            key=lambda w: w.get("bbox", [0, 0, 0, 0])[0] if w.get("bbox") else 0
+        )
+        
+        line_text = " ".join(w["text"] for w in line_sorted)
+        info(line_text)
+    
+    info("=" * 60)
 
 
 # -- Parsowanie argumentow ------------------------------------------------------
@@ -212,7 +275,7 @@ def main(args=None, info=None, buffor=None):
 
     elif args.page:
         _require_file(args.page, info)
-        info(f"\nUruchamianie adnotacji : {args.annotate}")
+        info(f"\nUruchamianie adnotacji : {args.page}")
         from ocr.bbox_annotator import process_letter
 
         output_dir = process_letter(
@@ -225,10 +288,14 @@ def main(args=None, info=None, buffor=None):
             info(f"Adnotacje zapisane w: {output_dir}")
 
         results = process_folder(output_dir, args, model_path, device, info)
-        rows = []
+        
+        # Przygotuj dane do wyświetlania w rozmieszczeniu
+        table_rows = []
+        layout_words = []  # słowa z informacją o linii
+        
         for r in results:
             if "error" in r:
-                rows.append({
+                table_rows.append({
                     "key": None,
                     "file": r["file"],
                     "text": f"ERROR: {r['error']}",
@@ -239,21 +306,34 @@ def main(args=None, info=None, buffor=None):
             filename = os.path.basename(r["file"])      # word_061.png
             name, _ = os.path.splitext(filename)        # word_061
 
-            rows.append({
+            table_rows.append({
                 "key": name,                            # klucz sortowania
                 "file": r["file"],
                 "text": r["text"],
                 "confidence": r["confidence"]
             })
-            rows.sort(key=lambda r: r["key"])
+            
+            # Dodaj do listy dla wyświetlania rozmieszczenia
+            layout_words.append({
+                "text": r["text"],
+                "confidence": r["confidence"],
+                "bbox": r.get("bbox")
+            })
+        
+        table_rows.sort(key=lambda r: r["key"] if r["key"] else "")
+        
+        # Wyświetl tabelę
         info(f"\n{'NAME':<12} {'TEXT':<20} {'CONF':<10}")
         info("-" * 45)
 
-        for r in rows:
+        for r in table_rows:
             if r["confidence"] is None:
                 info(f"{r['key']:<12} {r['text']:<20} {'-':<10}")
             else:
                 info(f"{r['key']:<12} {r['text']:<20} {r['confidence']:.2f}%")
+        
+        # Wyświetl w rozmieszczeniu
+        display_text_layout(layout_words, info)
         
 
 

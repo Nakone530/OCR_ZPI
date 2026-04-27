@@ -10,6 +10,7 @@ import os
 from datetime import date
 from pathlib import Path
 
+import json
 try:
     import cv2  # type: ignore
 except ModuleNotFoundError:  # pragma: no cover
@@ -38,7 +39,24 @@ from . import info
 
 # ── Transformacje ──────────────────────────────────────────────────────────────
 
-def get_transform() -> transforms.Compose:
+def base_transform():
+    """
+    pipeline transformacji obrazu do inferencji (bez augmentacji danych).
+    
+    Pipeline zawiera:
+      - Konwersja do skali szarości (1 kanał)
+      - Zmiana rozmiaru do IMAGE_SIZE x IMAGE_SIZE
+      - Konwersja do tensora PyTorch
+      - Normalizacja wartości pikseli (mean=0.5, std=0.5)
+    """
+    return [
+        transforms.Grayscale(num_output_channels=1),
+        transforms.Resize((32, 128)),
+        transforms.ToTensor(),
+        transforms.Normalize((0.5,), (0.5,)),
+    ]
+
+def get_inf_transform(args) -> transforms.Compose:
     """
     Zwraca pipeline transformacji obrazu do inferencji (bez augmentacji danych).
     
@@ -48,9 +66,6 @@ def get_transform() -> transforms.Compose:
       - Konwersja do tensora PyTorch
       - Normalizacja wartości pikseli (mean=0.5, std=0.5)
     
-    Argumenty:
-        Brak argumentów.
-    
     Zwraca:
         transforms.Compose: Złożona transformacja gotowa do użycia
                             na obrazach PIL podczas predykcji.
@@ -59,27 +74,24 @@ def get_transform() -> transforms.Compose:
         >>> transform = get_transform()
         >>> tensor = transform(pil_image)
     """
-    return transforms.Compose([
-        transforms.Grayscale(num_output_channels=1),
-        transforms.Resize((IMAGE_SIZE, IMAGE_SIZE)),
-        transforms.ToTensor(),
-        transforms.Normalize((0.5,), (0.5,)),
-    ])
+    pack = []
+    if getattr(args, "denoise", False):
+        pack.append(trans_denoise_bil())
+
+    pack.extend(base_transform())
+    return transforms.Compose(pack)
 
 
-def get_train_transform() -> transforms.Compose:
+def get_train_transform(args) -> transforms.Compose:
     """
     Zwraca pipeline transformacji obrazu do trenowania modelu (z augmentacją danych).
     
     Pipeline zawiera:
+      - Losowa rotacja obrazu o maksymalnie 10 stopni (augmentacja)
       - Konwersja do skali szarości (1 kanał)
       - Zmiana rozmiaru do IMAGE_SIZE x IMAGE_SIZE
-      - Losowa rotacja obrazu o maksymalnie 10 stopni (augmentacja)
       - Konwersja do tensora PyTorch
       - Normalizacja wartości pikseli (mean=0.5, std=0.5)
-    
-    Argumenty:
-        Brak argumentów.
     
     Zwraca:
         transforms.Compose: Złożona transformacja z augmentacją
@@ -89,16 +101,14 @@ def get_train_transform() -> transforms.Compose:
         >>> train_transform = get_train_transform()
         >>> tensor = train_transform(pil_image)
     """
-    return transforms.Compose([
-        transforms.Grayscale(num_output_channels=1),
-
-        transforms.Resize((32, 128)),
-
-        transforms.RandomRotation(5),
-
-        transforms.ToTensor(),
-        transforms.Normalize((0.5,), (0.5,))
-    ])
+    pack = [
+        transforms.RandomRotation(5)
+    ]
+    if getattr(args, "denoise", False):
+        pack.append(trans_denoise_bil())
+        
+    pack.extend(base_transform())
+    return transforms.Compose(pack)
 
 
 def preprocess_letter(img: np.ndarray) -> np.ndarray:
@@ -144,10 +154,7 @@ def preprocess_letter(img: np.ndarray) -> np.ndarray:
 def denoise_pil(img_pil: Image.Image) -> Image.Image:
     """
     Odszumia obraz PIL filtrem bilateralnym.
-    
-    Filtr bilateralny wygładza obraz zachowując krawędzie, co jest idealne
-    dla OCR - redukuje szum bez rozmywania krawędzi liter.
-    
+
     Argumenty:
         img_pil (Image.Image): Obraz wejściowy w formacie PIL.
     
@@ -167,7 +174,21 @@ def denoise_pil(img_pil: Image.Image) -> Image.Image:
     out = cv2.bilateralFilter(bgr, 9, 75, 75)
     return Image.fromarray(cv2.cvtColor(out, cv2.COLOR_BGR2RGB))
 
+class trans_denoise_bil:
+    def __init__(self, d=9, sigma_color=75, sigma_space=75):
+        self.d = d
+        self.sigma_color = sigma_color
+        self.sigma_space = sigma_space
 
+    def __call__(self, img: Image.Image):
+        rgb = img.convert("RGB")
+        arr = np.array(rgb)
+
+        bgr = cv2.cvtColor(arr, cv2.COLOR_RGB2BGR)
+        out = cv2.bilateralFilter(bgr, self.d, self.sigma_color, self.sigma_space)
+        out = cv2.cvtColor(out, cv2.COLOR_BGR2RGB)
+
+        return Image.fromarray(out)
 # ── Ładowanie obrazu ───────────────────────────────────────────────────────────
 
 def load_image(image_path: str, mode: str = "L") -> Image.Image:
@@ -257,6 +278,32 @@ def load_and_optionally_denoise(image_path: str, args, mode: str = "L") -> Image
 
     return img.convert(mode)
 
+# ── ładowanie datasetu ────────────────────────────────────────────────────
+
+def load_all_datasets(root_dir):
+    all_data = []
+
+    for author in os.listdir(root_dir):
+        author_path = os.path.join(root_dir, author)
+
+        if not os.path.isdir(author_path):
+            continue
+
+        json_path = os.path.join(author_path, "boxes.jsonl")
+
+        if not os.path.exists(json_path):
+            continue
+
+        with open(json_path, "r", encoding="utf-8") as f:
+            for line in f:
+                item = json.loads(line)
+
+                # KLUCZOWE: dodaj pełną ścieżkę do obrazu
+                item["image_path"] = os.path.join(author_path, item["crop_file"])
+
+                all_data.append(item)
+
+    return all_data
 
 # ── Zapis do folderu z datą ────────────────────────────────────────────────────
 

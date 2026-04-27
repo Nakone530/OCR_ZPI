@@ -26,8 +26,8 @@ from PIL import Image
 
 from .config import CHARS, MODEL_PATH, NUM_CLASSES, char2idx, idx2char
 from .model import SimpleCNN
-from .utils import get_transform, load_and_optionally_denoise, preprocess_letter, save_image_to_temp_folder
-from .display import visualize_prediction
+from .utils import get_inf_transform, load_and_optionally_denoise, preprocess_letter, save_image_to_temp_folder, save_image_to_today_folder
+from .display import visualize_prediction, show_image
 from . import info
 
 # ── Ładowanie modelu ───────────────────────────────────────────────────────────
@@ -378,7 +378,7 @@ def _classify_letter(letter_gray: np.ndarray, model: nn.Module, device: torch.de
         >>> char, conf, probs = _classify_letter(letter_img, model, device, True)
     """
     pil = Image.fromarray(letter_gray).resize((28, 28)).convert("L")
-    tensor = get_transform()(pil).unsqueeze(0).to(device)
+    tensor = get_inf_transform()(pil).unsqueeze(0).to(device)
     probs = torch.softmax(model(tensor), dim=1)
     confidence, predicted = torch.max(probs, 1)
     if(more):
@@ -465,8 +465,46 @@ def _finalize_debug_crops(
         plt.show()
 
 
-# ── Predykcja pojedynczej litery (CNN) ────────────────────────────────────────
+# ── Przekazanie zdjęć folderu do predykcji ───────────────────────────────────────────────
 
+
+def process_folder(folder_path, args, model_path, device, info):
+    if not os.path.isdir(folder_path):
+        raise ValueError(f"To nie jest katalog: {folder_path}")
+
+    model = load_model(model_path, device, info)
+    results = []
+    for filename in os.listdir(folder_path):
+        if not filename.lower().endswith(".png"):
+            continue
+
+        file_path = os.path.join(folder_path, filename)
+
+        if not os.path.isfile(file_path):
+            continue
+
+        try:
+
+
+            info(f"\nRozpoznawanie: {file_path}")
+
+            result = predict_image(file_path, model, device, args)
+
+            results.append({
+                "file": file_path,
+                "text": result["text"],
+                "confidence": result["confidence"],
+                "probs": result["probs"]
+            })
+        except Exception as e:
+            info(f"Błąd dla {file_path}: {e}")
+            results.append({
+                "file": file_path,
+                "error": str(e)
+            })
+
+    return results
+# ── Predykcja pojedynczej litery ───────────────────────────────────────────────
 def predict_letter(
     image_path: str,
     model: nn.Module,
@@ -476,45 +514,37 @@ def predict_letter(
 
 
     """
-    Rozpoznaje pojedynczy znak na zdjęciu.
-    
-    Funkcja ładuje obraz, przycina do bounding boxa znaku,
-    przetwarza i klasyfikuje przy użyciu modelu CNN.
-    
-    Argumenty:
-        image_path (str): Ścieżka do obrazu ze znakiem.
-        model (nn.Module): Wytrenowany model CNN.
-        device (torch.device): Urządzenie (CPU/CUDA) do obliczeń.
-        args: Obiekt argparse.Namespace z parametrami odszumiania.
-    
-    Zwraca:
-        tuple[str, float, torch.Tensor]: Krotka zawierająca:
-            - predicted_char (str): Rozpoznany znak (np. "A")
-            - confidence (float): Pewność predykcji w procentach (0-100)
-            - probs (torch.Tensor): Tensor prawdopodobieństw dla wszystkich klas
-    
-    Przykład:
-        >>> char, conf, probs = predict_image("letter.png", model, device, args)
-        >>> print(f"Rozpoznano: {char} z pewnością {conf:.1f}%")
+        funkcja rozpoznaje wyraz słowa
     """
     image = load_and_optionally_denoise(image_path, args, mode="L")
+    
     img_array = np.array(image)
     debug = _is_debug_enabled(args)
-
+    #if(debug):
+        #show_image(image, "przed crop")
+    
     debug_crops: list[tuple[np.ndarray, str]] = []
 
     model.eval()
     with torch.no_grad():
         original_shape = img_array.shape
-
-        # crop (zostawiamy)
-        img_array = _tight_crop(img_array)
+        
+        # crop
+        #img_array = _tight_crop(img_array)
         cropped_shape = img_array.shape
-
-        # UWAGA: zmień preprocess (nie letter!)
+        
+        # UWAGA: zmień preprocess
         pil = Image.fromarray(img_array).convert("L")
-        tensor = get_transform()(pil).unsqueeze(0).to(device)
-
+        
+        if(debug):
+            #show_image(pil, "po crop", True)
+            img_before = pil
+            
+        tensor = get_inf_transform(args)(pil).unsqueeze(0).to(device)
+        
+        if(debug):
+            show_before_after(img_before, tensor)
+            
         preprocessed_shape = tensor.shape
 
         outputs = model(tensor)  # (T, B, C)
@@ -828,3 +858,34 @@ def compute_accuracy(predicted: str, reference: str) -> float:
     ref_norm = reference.lower().strip()
     ratio = difflib.SequenceMatcher(None, pred_norm, ref_norm).ratio()
     return ratio * 100
+
+#Debug
+
+def show_before_after(pil_img, tensor_img):
+    before = np.array(pil_img)
+
+    after = tensor_img.squeeze(0).detach().cpu()
+
+    after = after * 0.5 + 0.5
+    after = after.numpy()
+
+    if after.shape[0] == 1:
+        after = after[0]
+        cmap = "gray"
+    else:
+        after = np.transpose(after, (1, 2, 0))
+        cmap = None
+
+    plt.figure(figsize=(8, 4))
+
+    plt.subplot(1, 2, 1)
+    plt.title("Before")
+    plt.imshow(before, cmap="gray" if before.ndim == 2 else None)
+    plt.axis("off")
+
+    plt.subplot(1, 2, 2)
+    plt.title("After")
+    plt.imshow(after, cmap=cmap)
+    plt.axis("off")
+
+    plt.show()

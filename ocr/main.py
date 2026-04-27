@@ -18,7 +18,7 @@ import sys
 import torch
 
 from ocr.config import MODEL_PATH
-from ocr.inference import get_active_chars, load_model, predict_image, predict_letter, predict_segments, predict_word, process_folder
+from ocr.inference import compute_accuracy, get_active_chars, load_model, predict_image, predict_letter, predict_segments, predict_word, process_folder
 from ocr.output import OCRResult, create_output_handler
 from ocr.trainer import train_model, infinite_train
 from ocr.utils import save_image_to_today_folder
@@ -42,6 +42,25 @@ from ocr.display import (
 #--State
 
 
+
+# ── Pomocniki ─────────────────────────────────────────────────────────────────
+
+def _print_accuracy(predicted_text: str, reference_path: str, info=None) -> None:
+    if info is None:
+        info = print
+    try:
+        reference = open(reference_path, encoding="utf-8").read()
+    except OSError as e:
+        info(f"Błąd odczytu pliku referencyjnego: {e}")
+        return
+    acc = compute_accuracy(predicted_text, reference)
+    info("\n" + "=" * 60)
+    info(f"  Dokładność OCR: {acc:.2f}%")
+    info(f"  Predykcja:  {predicted_text.strip()[:80]}")
+    info(f"  Referencja: {reference.strip()[:80]}")
+    info("=" * 60)
+
+
 # -- Parsowanie argumentow ------------------------------------------------------
 
 def build_parser() -> argparse.ArgumentParser:
@@ -60,6 +79,9 @@ def build_parser() -> argparse.ArgumentParser:
     mode.add_argument("--annotate", type=str, metavar="PLIK", help="Wycinki: popraw bboxy i zapisz wycinki + adnotacje")
     mode.add_argument("--folder", type=str, metavar="PLIK", help="Rozpoznaj zdjęcia w folderze")
     mode.add_argument("--page", type=str, metavar="PLIK", help="Separacja zdjęcia na wyrazy oraz ich rozpoznanie")
+    # Porównanie z referencją
+    parser.add_argument("--accuracy", "-a", type=str, default=None, metavar="PLIK",
+                        help="Plik z referencyjną transkrypcją; oblicza procentowe podobieństwo wyniku OCR do referencji")
 
     parser.add_argument("--epochs", "-e", type=int, default=10, help="Liczba epok (domyslnie: 10)")
     parser.add_argument("--batch-size", "-b", type=int, default=32, help="Rozmiar batcha (domyslnie: 32)")
@@ -334,6 +356,9 @@ def main(args=None, info=None, buffor=None):
             info(f"TEXT: {text}")
             info(f"CONFIDENCE: {confidence:.2f}%")
 
+        if args.accuracy:
+            _print_accuracy(text, args.accuracy, info)
+
     # ── CRNN ──
     elif args.crnn:
         _require_file(args.crnn, info)
@@ -373,6 +398,10 @@ def main(args=None, info=None, buffor=None):
         else:
             print_word_result(word, avg_word_confidence, class_confidence, info)
 
+        if args.accuracy:
+            _print_accuracy(word, args.accuracy, info)
+
+    # ── Tekst wieloliniowy ──
     elif args.lines:
         _require_file(args.lines, info)
         info(f"\nRozpoznawanie tekstu: {args.lines}")
@@ -394,6 +423,12 @@ def main(args=None, info=None, buffor=None):
         else:
             print_text_result(text, words_with_confidence, class_confidence, info)
 
+        if args.accuracy:
+            _print_accuracy(text, args.accuracy, info)
+
+
+
+    # ── Wiele zdjęć ──
     elif args.multi:
         model = load_model(model_path, device, info)
         info(f"\nRozpoznawanie {len(args.multi)} pliku(-ow):")

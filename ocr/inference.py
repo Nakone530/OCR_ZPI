@@ -125,7 +125,7 @@ def _find_bounds(projection: np.ndarray) -> list[tuple[int, int]]:
     
     Argumenty:
         projection (np.ndarray): Jednowymiarowa tablica z wartościami projekcji.
-                                 Typowo suma pikseli w wierszach lub kolumnach.
+                                Typowo suma pikseli w wierszach lub kolumnach.
     
     Zwraca:
         list[tuple[int, int]]: Lista krotek (start, end) określających
@@ -372,7 +372,7 @@ def _classify_letter(letter_gray: np.ndarray, model: nn.Module, device: torch.de
     
     Zwraca:
         str | tuple: Rozpoznany znak lub krotka (znak, pewność, probs) 
-                     w zależności od parametru 'more'.
+                    w zależności od parametru 'more'.
     
     Przykład:
         >>> char = _classify_letter(letter_img, model, device, False)
@@ -490,11 +490,8 @@ def process_folder(folder_path, args, model_path, device, info):
             continue
 
         try:
-
-
             info(f"\nRozpoznawanie: {file_path}")
 
-<<<<<<< HEAD
             result = predict_image(file_path, model, device, args)
             
             # Dodaj bbox
@@ -502,9 +499,6 @@ def process_folder(folder_path, args, model_path, device, info):
             if bbox_data and bbox_index < len(bbox_data):
                 bbox = bbox_data[bbox_index].get("bbox")
             bbox_index += 1
-=======
-            result = predict_letter(file_path, model, device, args)
->>>>>>> 64db64c88b3a12dee352597855991af311f76060
 
             results.append({
                 "file": file_path,
@@ -654,7 +648,7 @@ def predict_image(
         cropped_shape = img_array.shape
 
         pil = Image.fromarray(img_array).convert("L")
-        tensor = get_transform()(pil).unsqueeze(0).to(device)
+        tensor = get_inf_transform(args)(pil).unsqueeze(0).to(device)
         preprocessed_shape = tensor.shape
 
         outputs = model(tensor)  # (T, B, C)
@@ -797,7 +791,7 @@ def predict_segments(
         >>> text = predict_segments("document.png", model, device, args)
         >>> print(text)
         'HELLO WORLD
-         THIS IS TEXT'
+        THIS IS TEXT'
     
     Uwaga:
         Funkcja automatycznie wykrywa spacje między wyrazami

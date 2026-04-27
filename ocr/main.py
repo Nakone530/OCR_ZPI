@@ -20,7 +20,7 @@ import torch
 
 from typing import Optional, List
 from ocr.config import MODEL_PATH
-from ocr.inference import get_active_chars, load_model, predict_image, predict_letter, predict_segments, predict_word
+from ocr.inference import compute_accuracy, get_active_chars, load_model, predict_image, predict_letter, predict_segments, predict_word
 from ocr.output import OCRResult, create_output_handler
 from ocr.trainer import train_model, infinite_train
 from ocr.utils import save_image_to_today_folder
@@ -43,6 +43,24 @@ from ocr.display import (
 )
 #--State
 
+
+
+# ── Pomocniki ─────────────────────────────────────────────────────────────────
+
+def _print_accuracy(predicted_text: str, reference_path: str, info=None) -> None:
+    if info is None:
+        info = print
+    try:
+        reference = open(reference_path, encoding="utf-8").read()
+    except OSError as e:
+        info(f"Błąd odczytu pliku referencyjnego: {e}")
+        return
+    acc = compute_accuracy(predicted_text, reference)
+    info("\n" + "=" * 60)
+    info(f"  Dokładność OCR: {acc:.2f}%")
+    info(f"  Predykcja:  {predicted_text.strip()[:80]}")
+    info(f"  Referencja: {reference.strip()[:80]}")
+    info("=" * 60)
 
 
 # ── Parsowanie argumentów ──────────────────────────────────────────────────────
@@ -117,6 +135,10 @@ def build_parser() -> argparse.ArgumentParser:
     # Parametr modelu
     parser.add_argument("--model-path", type=str, default=None, metavar="PLIK",
                         help="Ścieżka do wytrenowanego modelu (domyślnie: model_ocr.pth)")
+
+    # Porównanie z referencją
+    parser.add_argument("--accuracy", "-a", type=str, default=None, metavar="PLIK",
+                        help="Plik z referencyjną transkrypcją; oblicza procentowe podobieństwo wyniku OCR do referencji")
 
     # Parametry wyjścia
     parser.add_argument("--output", "-o", type=str, metavar="PLIK",
@@ -317,6 +339,9 @@ def main(args=None, info=None, buffor=None) -> None:
             print(f"TEXT: {text}")
             print(f"CONFIDENCE: {confidence:.2f}%")
 
+        if args.accuracy:
+            _print_accuracy(text, args.accuracy, info)
+
     # ── CRNN ──
     elif args.crnn:
         _require_file(args.crnn, info)
@@ -357,6 +382,8 @@ def main(args=None, info=None, buffor=None) -> None:
         else:
             print_word_result(word, avg_word_confidence, class_confidence, info)
 
+        if args.accuracy:
+            _print_accuracy(word, args.accuracy, info)
 
     # ── Tekst wieloliniowy ──
     elif args.lines:
@@ -383,6 +410,9 @@ def main(args=None, info=None, buffor=None) -> None:
             write_json(out_path, payload, pretty=args.json_pretty)
         else:
             print_text_result(text, words_with_confidence, class_confidence, info)
+
+        if args.accuracy:
+            _print_accuracy(text, args.accuracy, info)
 
 
 

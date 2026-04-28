@@ -14,6 +14,8 @@ from textual.screen import Screen
 from textual.binding import Binding
 from ocr.main import build_parser, main
 from ocr.config import MODEL_PATH
+from ocr.inference import process_folder, load_model
+import torch
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # UTILITY FUNCTIONS
@@ -46,6 +48,7 @@ class MainMenuScreen(Screen):
     BINDINGS = [
         Binding("q", "quit", "Wyjście"),
         Binding("r", "app_push_screen('recognize')", "Rozpoznawanie"),
+        Binding("f", "app_push_screen('folder')", "Transkrypcja"),
         Binding("t", "app_push_screen('train')", "Trening"),
         Binding("s", "app_push_screen('settings')", "Ustawienia"),
     ]
@@ -61,6 +64,7 @@ class MainMenuScreen(Screen):
         )
         yield Static("")
         yield Button("Rozpoznaj obraz/wyraz/tekst [r]", id="recognize_btn")
+        yield Button("Transkrypcja z folderu [f]", id="folder_btn")
         yield Button("Trenuj model [t]", id="train_btn")
         yield Button("Ustawienia [s]", id="settings_btn")
         yield Button("Wyjście [q]", id="quit_btn")
@@ -69,6 +73,8 @@ class MainMenuScreen(Screen):
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "recognize_btn":
             self.app.push_screen("recognize")
+        elif event.button.id == "folder_btn":
+            self.app.push_screen("folder")
         elif event.button.id == "train_btn":
             self.app.push_screen("train")
         elif event.button.id == "settings_btn":
@@ -396,6 +402,126 @@ class TrainScreen(Screen):
         thread.start()
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# FOLDER RECOGNITION SCREEN
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class FolderRecognizeScreen(Screen):
+    """Ekran rozpoznawania obrazów z folderu (transkrypcja)"""
+    BINDINGS = [
+        Binding("escape", "back", "Powrót do menu"),
+        Binding("enter", "run_folder_recognition", "Uruchom"),
+    ]
+    
+    def compose(self) -> ComposeResult:
+        yield Header(show_clock=False)
+        yield Static(" TRANSKRYPCJA Z FOLDERU", id="subtitle")
+        
+        yield Static("\n Ścieżka do folderu z obrazami:")
+        yield Input(
+            placeholder="Wpisz ścieżkę do folderu np. ./inference/obraz_001",
+            id="folder_path"
+        )
+        
+        yield Static("\n Opcje dodatkowe:")
+        yield Checkbox(" Włącz odszumianie (denoise)", id="denoise")
+        yield Checkbox(" Wyjście JSON", id="json_output")
+        yield Checkbox(" Zapisz do pliku", id="save_output")
+        
+        yield Static("Ścieżka do zapisu (opcjonalnie):")
+        yield Input(
+            placeholder="np. transkrypcja.json (lub transkrypcja.txt)",
+            id="output_path"
+        )
+        
+        yield Static("\n")
+        with Horizontal():
+            yield Button(" Uruchom [Enter]", id="folder_run")
+            yield Button(" Powrót [Esc]", id="back_btn")
+        
+        yield Static("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+        yield Log(id="output_log")
+        yield Footer()
+    
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "folder_run":
+            self._run_folder_recognition()
+        elif event.button.id == "back_btn":
+            self.app.pop_screen()
+    
+    def action_run_folder_recognition(self):
+        """Action dla Enter key"""
+        self._run_folder_recognition()
+    
+    def action_back(self):
+        """Action dla Escape key"""
+        self.app.pop_screen()
+    
+    def _run_folder_recognition(self):
+        """Uruchom rozpoznawanie folderu"""
+        log = self.query_one("#output_log", Log)
+        log.clear()
+        
+        folder_path = self.query_one("#folder_path", Input).value.strip()
+        denoise = self.query_one("#denoise", Checkbox).value
+        json_output = self.query_one("#json_output", Checkbox).value
+        save_output = self.query_one("#save_output", Checkbox).value
+        output_path = self.query_one("#output_path", Input).value.strip()
+        
+        # Walidacja
+        if not folder_path:
+            log.write_line(" Błąd: Podaj ścieżkę do folderu!")
+            return
+        
+        if not os.path.isdir(folder_path):
+            log.write_line(f" Błąd: Folder nie istnieje: {folder_path}")
+            return
+        
+        # Buduj argumenty
+        args = ["--folder", folder_path]
+        
+        if denoise:
+            args.append("--denoise")
+        if json_output:
+            args.append("--json")
+            args.append("--json-pretty")
+        if save_output and output_path:
+            args += ["--output", output_path]
+        
+        log.write_line(f" Uruchamianie transkrypcji folderu...")
+        log.write_line(f" Folder: {folder_path}")
+        if denoise:
+            log.write_line(" Odszumianie: Włączone")
+        if save_output:
+            log.write_line(f" Zapis: {output_path or 'domyślna lokalizacja'}")
+        log.write_line("━" * 40 + "\n")
+        
+        # Uruchom w wątku aby nie blokować interfejsu
+        def run_folder_thread():
+            try:
+                parser = build_parser()
+                parsed_args = parser.parse_args(args)
+                
+                # Użytkownik może mieć swój model w ustawieniach
+                model_path = self.app.state.get("model_path", MODEL_PATH)
+                parsed_args.model_path = model_path
+                
+                def info(msg):
+                    # Thread-safe write to log
+                    self.app.call_from_thread(log.write_line, msg)
+                
+                main(parsed_args, info)
+                self.app.call_from_thread(log.write_line, "\n" + "━" * 40)
+                self.app.call_from_thread(log.write_line, " Transkrypcja ukończona!")
+            except Exception as e:
+                self.app.call_from_thread(log.write_line, f"\n Błąd: {str(e)}")
+                import traceback
+                self.app.call_from_thread(log.write_line, traceback.format_exc())
+        
+        # Start thread
+        thread = threading.Thread(target=run_folder_thread, daemon=True)
+        thread.start()
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # SETTINGS SCREEN
 # ═══════════════════════════════════════════════════════════════════════════════
 
@@ -593,6 +719,7 @@ class OCRTUI(App):
         """Zarejestruj wszystkie ekrany na starcie"""
         self.install_screen(MainMenuScreen(), "main")
         self.install_screen(RecognizeScreen(), "recognize")
+        self.install_screen(FolderRecognizeScreen(), "folder")
         self.install_screen(TrainScreen(), "train")
         self.install_screen(SettingsScreen(), "settings")
         self.push_screen("main")

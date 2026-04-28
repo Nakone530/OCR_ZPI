@@ -64,7 +64,7 @@ class MainMenuScreen(Screen):
         )
         yield Static("")
         yield Button("Rozpoznaj obraz/wyraz/tekst [r]", id="recognize_btn")
-        yield Button("Transkrypcja z folderu [f]", id="folder_btn")
+        yield Button("Transkrypcja całego Obrazu/Folderu [f]", id="folder_btn")
         yield Button("Trenuj model [t]", id="train_btn")
         yield Button("Ustawienia [s]", id="settings_btn")
         yield Button("Wyjście [q]", id="quit_btn")
@@ -319,7 +319,7 @@ class TrainScreen(Screen):
         from ocr.trainer import stop_training
         stop_training()
         log = self.query_one("#output_log", Log)
-        log.write_line("\n⏹️  Zatrzymywanie treningu...")
+        log.write_line("\n  Zatrzymywanie treningu...")
 
     def _run_training(self):
         """Uruchom trening w oddzielnym wątku"""
@@ -430,10 +430,8 @@ class FolderRecognizeScreen(Screen):
         )
         
         yield Static("\n Opcje dodatkowe:")
-        yield Checkbox(" Włącz odszumianie (denoise)", id="denoise")
-        yield Checkbox(" Wyjście JSON", id="json_output")
-        yield Checkbox(" Zapisz do pliku", id="save_output")
         yield Checkbox(" Cichy tryb (bez szczegółowych komunikatów)", id="quiet_mode")
+        
         
         yield Static("Ścieżka do zapisu (opcjonalnie):")
         yield Input(

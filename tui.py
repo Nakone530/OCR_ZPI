@@ -433,6 +433,7 @@ class FolderRecognizeScreen(Screen):
         yield Checkbox(" Włącz odszumianie (denoise)", id="denoise")
         yield Checkbox(" Wyjście JSON", id="json_output")
         yield Checkbox(" Zapisz do pliku", id="save_output")
+        yield Checkbox(" Cichy tryb (bez szczegółowych komunikatów)", id="quiet_mode")
         
         yield Static("Ścieżka do zapisu (opcjonalnie):")
         yield Input(
@@ -487,6 +488,7 @@ class FolderRecognizeScreen(Screen):
         json_output = self.query_one("#json_output", Checkbox).value
         save_output = self.query_one("#save_output", Checkbox).value
         output_path = self.query_one("#output_path", Input).value.strip()
+        quiet_mode = self.query_one("#quiet_mode", Checkbox).value
         
         # Walidacja
         if not input_path:
@@ -516,11 +518,15 @@ class FolderRecognizeScreen(Screen):
             args.append("--json-pretty")
         if save_output and output_path:
             args += ["--output", output_path]
+        if quiet_mode:
+            args.append("--quiet")
         
         log.write_line(f" Uruchamianie transkrypcji [{mode}]...")
         log.write_line(f" Ścieżka: {input_path}")
         if denoise:
             log.write_line(" Odszumianie: Włączone")
+        if quiet_mode:
+            log.write_line(" Cichy tryb: Włączony")
         if save_output:
             log.write_line(f" Zapis: {output_path or 'domyślna lokalizacja'}")
         log.write_line("━" * 40 + "\n")

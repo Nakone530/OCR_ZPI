@@ -498,7 +498,9 @@ def process_folder(folder_path, args, model_path, device, info):
             continue
 
         try:
-            info(f"\nRozpoznawanie: {file_path}")
+            # Wyświetl komunikat tylko jeśli nie jest aktywny tryb quiet
+            if not getattr(args, 'quiet', False):
+                info(f"\nRozpoznawanie: {file_path}")
 
             result = predict_letter(file_path, model, device, args)
             

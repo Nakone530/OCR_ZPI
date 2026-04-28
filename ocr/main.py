@@ -397,38 +397,6 @@ def main(args=None, info=None, buffor=None):
             else:
                 info(f"{r['key']:<12} {r['text']:<20} {r['confidence']:.2f}%")
         
-    elif args.folder:
-        results = process_folder(args.folder, args, model_path, device, info)
-        rows = []
-        for r in results:
-            if "error" in r:
-                rows.append({
-                    "key": None,
-                    "file": r["file"],
-                    "text": f"ERROR: {r['error']}",
-                    "confidence": None
-                })
-                continue
-
-            filename = os.path.basename(r["file"])      # word_061.png
-            name, _ = os.path.splitext(filename)        # word_061
-
-            rows.append({
-                "key": name,                            # klucz sortowania
-                "file": r["file"],
-                "text": r["text"],
-                "confidence": r["confidence"]
-            })
-        rows.sort(key=lambda r: r["key"] if r["key"] else "")
-        info(f"\n{'NAME':<12} {'TEXT':<20} {'CONF':<10}")
-        info("-" * 45)
-
-        for r in rows:
-            if r["confidence"] is None:
-                info(f"{str(r['key']) if r['key'] else '-':<12} {r['text']:<20} {'-':<10}")
-            else:
-                info(f"{r['key']:<12} {r['text']:<20} {r['confidence']:.2f}%")
-        
     elif args.image:
         _require_file(args.image, info)
         info(f"\nRozpoznawanie: {args.image}")

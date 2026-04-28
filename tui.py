@@ -406,20 +406,27 @@ class TrainScreen(Screen):
 # ═══════════════════════════════════════════════════════════════════════════════
 
 class FolderRecognizeScreen(Screen):
-    """Ekran rozpoznawania obrazów z folderu (transkrypcja)"""
+    """Ekran rozpoznawania obrazów z folderu lub strony (transkrypcja)"""
     BINDINGS = [
         Binding("escape", "back", "Powrót do menu"),
-        Binding("enter", "run_folder_recognition", "Uruchom"),
+        Binding("enter", "run_transcription", "Uruchom"),
     ]
     
     def compose(self) -> ComposeResult:
         yield Header(show_clock=False)
-        yield Static(" TRANSKRYPCJA Z FOLDERU", id="subtitle")
+        yield Static(" TRANSKRYPCJA - FOLDER / STRONA", id="subtitle")
         
-        yield Static("\n Ścieżka do folderu z obrazami:")
+        yield Static("\n Wybierz tryb przetwarzania:")
+        yield RadioSet(
+            RadioButton("Folder z wycinkami (--folder)", id="folder"),
+            RadioButton("Pojedyncza strona (--page)", id="page"),
+            id="transcription_mode"
+        )
+        
+        yield Static("\n Ścieżka do pliku/folderu:")
         yield Input(
-            placeholder="Wpisz ścieżkę do folderu np. ./inference/obraz_001",
-            id="folder_path"
+            placeholder="np. ./inference/obraz_001 lub ./strona.png",
+            id="input_path"
         )
         
         yield Static("\n Opcje dodatkowe:")
@@ -435,7 +442,7 @@ class FolderRecognizeScreen(Screen):
         
         yield Static("\n")
         with Horizontal():
-            yield Button(" Uruchom [Enter]", id="folder_run")
+            yield Button(" Uruchom [Enter]", id="run_btn")
             yield Button(" Powrót [Esc]", id="back_btn")
         
         yield Static("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
@@ -443,41 +450,64 @@ class FolderRecognizeScreen(Screen):
         yield Footer()
     
     def on_button_pressed(self, event: Button.Pressed) -> None:
-        if event.button.id == "folder_run":
-            self._run_folder_recognition()
+        if event.button.id == "run_btn":
+            self._run_transcription()
         elif event.button.id == "back_btn":
             self.app.pop_screen()
     
-    def action_run_folder_recognition(self):
+    def action_run_transcription(self):
         """Action dla Enter key"""
-        self._run_folder_recognition()
+        self._run_transcription()
     
     def action_back(self):
         """Action dla Escape key"""
         self.app.pop_screen()
     
-    def _run_folder_recognition(self):
-        """Uruchom rozpoznawanie folderu"""
+    def _run_transcription(self):
+        """Uruchom transkrypcję folderu lub strony"""
         log = self.query_one("#output_log", Log)
         log.clear()
         
-        folder_path = self.query_one("#folder_path", Input).value.strip()
+        # Pobierz mode
+        radio_set = self.query_one(RadioSet)
+        pressed = radio_set.pressed_button
+        if pressed is None:
+            # Użyj domyślnego trybu jeśli nic nie wybrane
+            mode = "folder"
+            # Ustaw domyślny przycisk
+            for button in radio_set.query(RadioButton):
+                if button.id == "folder":
+                    button.value = True
+                    break
+        else:
+            mode = pressed.id
+        
+        input_path = self.query_one("#input_path", Input).value.strip()
         denoise = self.query_one("#denoise", Checkbox).value
         json_output = self.query_one("#json_output", Checkbox).value
         save_output = self.query_one("#save_output", Checkbox).value
         output_path = self.query_one("#output_path", Input).value.strip()
         
         # Walidacja
-        if not folder_path:
-            log.write_line(" Błąd: Podaj ścieżkę do folderu!")
+        if not input_path:
+            log.write_line(f" Błąd: Podaj ścieżkę do {mode}u!")
             return
         
-        if not os.path.isdir(folder_path):
-            log.write_line(f" Błąd: Folder nie istnieje: {folder_path}")
+        if not os.path.exists(input_path):
+            log.write_line(f" Błąd: Ścieżka nie istnieje: {input_path}")
+            return
+        
+        # Walidacja dla danego trybu
+        if mode == "folder" and not os.path.isdir(input_path):
+            log.write_line(f" Błąd: To nie jest folder: {input_path}")
+            return
+        
+        if mode == "page" and not os.path.isfile(input_path):
+            log.write_line(f" Błąd: To nie jest plik: {input_path}")
             return
         
         # Buduj argumenty
-        args = ["--folder", folder_path]
+        args = [f"--{mode}", input_path]
         
         if denoise:
             args.append("--denoise")
@@ -487,8 +517,8 @@ class FolderRecognizeScreen(Screen):
         if save_output and output_path:
             args += ["--output", output_path]
         
-        log.write_line(f" Uruchamianie transkrypcji folderu...")
-        log.write_line(f" Folder: {folder_path}")
+        log.write_line(f" Uruchamianie transkrypcji [{mode}]...")
+        log.write_line(f" Ścieżka: {input_path}")
         if denoise:
             log.write_line(" Odszumianie: Włączone")
         if save_output:
@@ -496,7 +526,7 @@ class FolderRecognizeScreen(Screen):
         log.write_line("━" * 40 + "\n")
         
         # Uruchom w wątku aby nie blokować interfejsu
-        def run_folder_thread():
+        def run_transcription_thread():
             try:
                 parser = build_parser()
                 parsed_args = parser.parse_args(args)
@@ -518,7 +548,7 @@ class FolderRecognizeScreen(Screen):
                 self.app.call_from_thread(log.write_line, traceback.format_exc())
         
         # Start thread
-        thread = threading.Thread(target=run_folder_thread, daemon=True)
+        thread = threading.Thread(target=run_transcription_thread, daemon=True)
         thread.start()
 
 # ═══════════════════════════════════════════════════════════════════════════════

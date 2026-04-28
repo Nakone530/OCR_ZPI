@@ -5,8 +5,11 @@
 
 # wyniki i modele
 *.pth
+*.bak
 prediction_result.png
 output.png
+inference/*
+models/model_ocr.pth
 
 # Foldery z historią rozpoznań (YYYY-MM-DD)
 [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]/

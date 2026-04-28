@@ -492,7 +492,7 @@ def process_folder(folder_path, args, model_path, device, info):
         try:
             info(f"\nRozpoznawanie: {file_path}")
 
-            result = predict_image(file_path, model, device, args)
+            result = predict_letter(file_path, model, device, args)
             
             # Dodaj bbox
             bbox = None

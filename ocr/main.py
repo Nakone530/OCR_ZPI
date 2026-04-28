@@ -317,53 +317,53 @@ def main(args=None, info=None, buffor=None):
         if output_dir:
             info(f"Adnotacje zapisane w: {output_dir}")
 
-        results = process_folder(output_dir, args, model_path, device, info)
-        
-        # Przygotuj dane do wyświetlania w rozmieszczeniu
-        table_rows = []
-        layout_words = []  # słowa z informacją o linii
-        
-        for r in results:
-            if "error" in r:
-                table_rows.append({
-                    "key": None,
-                    "file": r["file"],
-                    "text": f"ERROR: {r['error']}",
-                    "confidence": None
-                })
-                continue
-
-            filename = os.path.basename(r["file"])      # word_061.png
-            name, _ = os.path.splitext(filename)        # word_061
-
-            table_rows.append({
-                "key": name,                            # klucz sortowania
-                "file": r["file"],
-                "text": r["text"],
-                "confidence": r["confidence"]
-            })
+            results = process_folder(output_dir, args, model_path, device, info)
             
-            # Dodaj do listy dla wyświetlania rozmieszczenia
-            layout_words.append({
-                "text": r["text"],
-                "confidence": r["confidence"],
-                "bbox": r.get("bbox")
-            })
-        
-        table_rows.sort(key=lambda r: r["key"] if r["key"] else "")
-        
-        # Wyświetl tabelę
-        info(f"\n{'NAME':<12} {'TEXT':<20} {'CONF':<10}")
-        info("-" * 45)
+            # Przygotuj dane do wyświetlania w rozmieszczeniu
+            table_rows = []
+            layout_words = []  # słowa z informacją o linii
+            
+            for r in results:
+                if "error" in r:
+                    table_rows.append({
+                        "key": None,
+                        "file": r["file"],
+                        "text": f"ERROR: {r['error']}",
+                        "confidence": None
+                    })
+                    continue
 
-        for r in table_rows:
-            if r["confidence"] is None:
-                info(f"{str(r['key']) if r['key'] else '-':<12} {r['text']:<20} {'-':<10}")
-            else:
-                info(f"{r['key']:<12} {r['text']:<20} {r['confidence']:.2f}%")
-        
-        # Wyświetl w rozmieszczeniu
-        display_text_layout(layout_words, info)
+                filename = os.path.basename(r["file"])      # word_061.png
+                name, _ = os.path.splitext(filename)        # word_061
+
+                table_rows.append({
+                    "key": name,                            # klucz sortowania
+                    "file": r["file"],
+                    "text": r["text"],
+                    "confidence": r["confidence"]
+                })
+                
+                # Dodaj do listy dla wyświetlania rozmieszczenia
+                layout_words.append({
+                    "text": r["text"],
+                    "confidence": r["confidence"],
+                    "bbox": r.get("bbox")
+                })
+            
+            table_rows.sort(key=lambda r: r["key"] if r["key"] else "")
+            
+            # Wyświetl tabelę
+            info(f"\n{'NAME':<12} {'TEXT':<20} {'CONF':<10}")
+            info("-" * 45)
+
+            for r in table_rows:
+                if r["confidence"] is None:
+                    info(f"{str(r['key']) if r['key'] else '-':<12} {r['text']:<20} {'-':<10}")
+                else:
+                    info(f"{r['key']:<12} {r['text']:<20} {r['confidence']:.2f}%")
+            
+            # Wyświetl w rozmieszczeniu
+            display_text_layout(layout_words, info)
 
     elif args.folder:
         # Obsługiwane rozszerzenia plików graficznych

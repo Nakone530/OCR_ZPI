@@ -366,36 +366,76 @@ def main(args=None, info=None, buffor=None):
         display_text_layout(layout_words, info)
 
     elif args.folder:
-        results = process_folder(args.folder, args, model_path, device, info)
-        rows = []
-        for r in results:
-            if "error" in r:
-                rows.append({
-                    "key": None,
-                    "file": r["file"],
-                    "text": f"ERROR: {r['error']}",
-                    "confidence": None
-                })
-                continue
-
-            filename = os.path.basename(r["file"])      # word_061.png
-            name, _ = os.path.splitext(filename)        # word_061
-
-            rows.append({
-                "key": name,                            # klucz sortowania
-                "file": r["file"],
-                "text": r["text"],
-                "confidence": r["confidence"]
-            })
-        rows.sort(key=lambda r: r["key"] if r["key"] else "")
-        info(f"\n{'NAME':<12} {'TEXT':<20} {'CONF':<10}")
-        info("-" * 45)
-
-        for r in rows:
-            if r["confidence"] is None:
-                info(f"{str(r['key']) if r['key'] else '-':<12} {r['text']:<20} {'-':<10}")
-            else:
-                info(f"{r['key']:<12} {r['text']:<20} {r['confidence']:.2f}%")
+        # Obsługiwane rozszerzenia plików graficznych
+        supported_formats = {'.png', '.jpg', '.jpeg', '.bmp', '.gif', '.tiff', '.webp'}
+        image_files = []
+        
+        # Zbierz wszystkie obrazy z folderu
+        for filename in sorted(os.listdir(args.folder)):
+            if any(filename.lower().endswith(fmt) for fmt in supported_formats):
+                full_path = os.path.join(args.folder, filename)
+                if os.path.isfile(full_path):
+                    image_files.append(full_path)
+        
+        if not image_files:
+            info(f"Błąd: Nie znaleziono obrazów w folderze {args.folder}")
+        else:
+            from ocr.bbox_annotator import process_letter
+            
+            # Przetwórz każdy obraz
+            for image_file in image_files:
+                info(f"\n{'='*60}")
+                info(f"Przetwarzanie: {os.path.basename(image_file)}")
+                info(f"{'='*60}")
+                
+                try:
+                    # Segmentuj obraz (bez edycji bboxów - non_interactive=True)
+                    output_dir = process_letter(
+                        image_path=image_file,
+                        base_dir=args.annotation_dir,
+                        enable_box_edit=False,  # Brak edycji bboxów
+                        non_interactive=True,   # Automatycznie
+                    )
+                    
+                    if output_dir:
+                        # Przetwórz segmenty
+                        results = process_folder(output_dir, args, model_path, device, info)
+                        
+                        # Zbierz wyniki dla rozmieszczenia i tabeli
+                        layout_words = []
+                        table_rows = []
+                        
+                        for r in results:
+                            if "error" not in r:
+                                filename_only = os.path.basename(r["file"])
+                                name, _ = os.path.splitext(filename_only)
+                                
+                                layout_words.append({
+                                    "text": r["text"],
+                                    "confidence": r["confidence"],
+                                    "bbox": r.get("bbox")
+                                })
+                                
+                                table_rows.append({
+                                    "name": name,
+                                    "text": r["text"],
+                                    "confidence": r["confidence"]
+                                })
+                        
+                        # Wyświetl tabelę
+                        if table_rows:
+                            info(f"\n{'NAME':<12} {'TEXT':<20} {'CONF':<10}")
+                            info("-" * 45)
+                            for row in table_rows:
+                                info(f"{row['name']:<12} {row['text']:<20} {row['confidence']:.2f}%")
+                        
+                        # Wyświetl rozmieszczenie dla tego obrazu
+                        display_text_layout(layout_words, info)
+                
+                except Exception as e:
+                    info(f"Błąd przy przetwarzaniu {image_file}: {e}")
+                    import traceback
+                    info(traceback.format_exc())
         
     elif args.image:
         _require_file(args.image, info)

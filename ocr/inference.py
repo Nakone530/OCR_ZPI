@@ -480,8 +480,16 @@ def process_folder(folder_path, args, model_path, device, info):
     bbox_data = _load_bbox_data(folder_path)
     bbox_index = 0
     
+    # Obsługiwane rozszerzenia plików graficznych
+    supported_formats = {'.png', '.jpg', '.jpeg', '.bmp', '.gif', '.tiff', '.webp'}
+    
     for filename in os.listdir(folder_path):
-        if not filename.lower().endswith(".png"):
+        # Pomijaj plik source_image (oryginalne zdjęcie)
+        if filename.lower().startswith('source_image'):
+            continue
+        
+        # Sprawdź czy plik ma obsługiwane rozszerzenie
+        if not any(filename.lower().endswith(fmt) for fmt in supported_formats):
             continue
 
         file_path = os.path.join(folder_path, filename)

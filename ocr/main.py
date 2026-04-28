@@ -311,8 +311,8 @@ def main(args=None, info=None, buffor=None):
         output_dir = process_letter(
             image_path=args.page,
             base_dir=args.annotation_dir,
-            enable_box_edit=not args.no_edit,
-            non_interactive=args.non_interactive,
+            enable_box_edit=False,  # Bez edycji dla --page
+            non_interactive=True,  # Zawsze nieinteraktywne dla --page
         )
         if output_dir:
             info(f"Adnotacje zapisane w: {output_dir}")
@@ -364,6 +364,8 @@ def main(args=None, info=None, buffor=None):
             
             # Wyświetl w rozmieszczeniu
             display_text_layout(layout_words, info)
+        else:
+            info(" Błąd: nie udało się przetwórić strony. Sprawdź, czy obraz jest prawidłowy.")
 
     elif args.folder:
         # Obsługiwane rozszerzenia plików graficznych

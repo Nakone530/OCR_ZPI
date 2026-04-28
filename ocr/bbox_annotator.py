@@ -740,6 +740,16 @@ def process_letter(image_path, base_dir="inference", enable_box_edit=True, non_i
 
     img_cv2 = cv2.imread(image_path)
     if img_cv2 is None:
+        # Alternatywna metoda dla plików z polskimi znakami
+        try:
+            import numpy as np
+            from pathlib import Path
+            img_array = np.fromfile(image_path, np.uint8)
+            img_cv2 = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
+        except:
+            pass
+    
+    if img_cv2 is None:
         print(f"Błąd: nie udało się wczytać obrazu '{image_path}'.")
         return None
 

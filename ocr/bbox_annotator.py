@@ -808,6 +808,12 @@ def process_letter(image_path, base_dir="inference", enable_box_edit=True, non_i
     cv2.imwrite(source_image_copy, img_cv2, [cv2.IMWRITE_JPEG_QUALITY, 95])
     print(f"Zapisano oryginalne zdjęcie: {source_image_copy}")
 
+    # Otwórz plik boxes.jsonl do zapisu
+    jsonl_path = os.path.join(output_dir, "boxes.jsonl")
+    jsonl_file = open(jsonl_path, "w", encoding="utf-8")
+
+    counter = 0
+
     for box_data in edited_boxes:
         xmin, ymin, xmax, ymax = box_data["box"]
         crop_img = img_cv2[ymin:ymax, xmin:xmax]
@@ -820,7 +826,18 @@ def process_letter(image_path, base_dir="inference", enable_box_edit=True, non_i
         cv2.imwrite(save_path, crop_img, [cv2.IMWRITE_PNG_COMPRESSION, 1])
 
         print(f"{file_name} | bbox=({xmin},{ymin},{xmax},{ymax})")
+        
+        # Zapisz bbox do jsonl
+        bbox_entry = {
+            "file_name": file_name,
+            "bbox_xyxy": [xmin, ymin, xmax, ymax]
+        }
+        jsonl_file.write(json.dumps(bbox_entry, ensure_ascii=False) + "\n")
+        
         counter += 1
+
+    jsonl_file.close()
+    print(f"Zapisano bounding boxy do: {jsonl_path}")
 
     print(f"\nGotowe! Wszystkie wycinki z '{letter_name}' znajdziesz w: {output_dir}")
     return output_dir

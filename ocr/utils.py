@@ -25,6 +25,8 @@ try:
     import fitz  # type: ignore  # PyMuPDF
 except ModuleNotFoundError:  # pragma: no cover
     fitz = None
+import torch
+import torch.nn as nn
 from torchvision import transforms
 import torchvision.transforms.functional as F
 
@@ -34,7 +36,8 @@ from datetime import date
 
 from pathlib import Path
 import matplotlib.pyplot as plt
-from .config import IMAGE_SIZE, MEAN, STD
+from .config import IMAGE_SIZE, MEAN, STD, CHARS, MODEL_PATH, NUM_CLASSES, char2idx, idx2char
+from .model import SimpleCNN
 from . import info
 
 
@@ -467,3 +470,145 @@ def save_image_to_temp_folder(image: Any, order: str) -> str:
         img.save(filepath)
 
     return filepath
+
+# ── Ładowanie modelu ───────────────────────────────────────────────────────────
+
+ACTIVE_CHARS = list(CHARS)
+
+
+def _map_chars74k_sample_to_char(sample_name: str) -> str:
+    """Mapuje nazwę SampleXXX z Chars74K na znak (A-Z, a-z, 0-9) gdy to możliwe."""
+    match = re.fullmatch(r"Sample(\d+)", sample_name)
+    if not match:
+        return sample_name
+
+    idx = int(match.group(1))
+    if 1 <= idx <= 10:
+        return str(idx - 1)
+    if 11 <= idx <= 36:
+        return chr(ord("A") + (idx - 11))
+    if 37 <= idx <= 62:
+        return chr(ord("a") + (idx - 37))
+    return sample_name
+
+
+def get_active_chars() -> list[str]:
+    """Zwraca aktualne mapowanie indeks->znak używane przez model."""
+    return list(ACTIVE_CHARS)
+
+
+def _set_active_chars(checkpoint: object | None = None) -> None:
+    """Ustawia mapowanie indeks->znak na podstawie checkpointa lub domyślnej konfiguracji."""
+    global ACTIVE_CHARS
+    if isinstance(checkpoint, dict) and "class_names" in checkpoint:
+        class_names = checkpoint.get("class_names")
+        if isinstance(class_names, list) and class_names:
+            ACTIVE_CHARS = [_map_chars74k_sample_to_char(str(name)) for name in class_names]
+            info(f"Wczytano mapowanie klas z checkpointa ({len(ACTIVE_CHARS)} klas)")
+            return
+
+    ACTIVE_CHARS = list(CHARS)
+
+
+def _label_for_idx(idx: int) -> str:
+    if 0 <= idx < len(ACTIVE_CHARS):
+        return ACTIVE_CHARS[idx]
+    return f"<UNK:{idx}>"
+
+#print(matplotlib.get_backend())
+
+def load_model(model_path: str = MODEL_PATH, device: torch.device = None, info=None) -> nn.Module:
+    if info is None:
+        info = print
+
+    if device is None:
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    if os.path.exists(model_path):
+        info(f"Wczytywanie modelu z {model_path}...")
+
+        checkpoint = torch.load(model_path, map_location=device)
+
+        _set_active_chars(checkpoint)
+
+        if isinstance(checkpoint, dict) and "model_state_dict" in checkpoint:
+            state_dict = checkpoint["model_state_dict"]
+            info("Wczytano checkpoint")
+        else:
+            state_dict = checkpoint
+            info("Wczytano state_dict")
+
+        model = SimpleCNN(num_classes=len(CHARS) + 1)
+
+        model.load_state_dict(state_dict)
+        info("Model wczytany!")
+
+    else:
+        info(f"UWAGA: Nie znaleziono modelu {model_path}")
+        model = SimpleCNN(num_classes=len(CHARS) + 1)
+
+    model.to(device)
+    model.eval()
+
+    return model
+
+#------Zarządzanie modelami------------
+def list_models(models_dir: str):
+    models = [
+        name for name in os.listdir(models_dir)
+        if os.path.isdir(os.path.join(models_dir, name))
+    ]
+    models.sort()
+    return models
+
+def select_models(models):
+    print("\nDostępne modele:")
+    for i, m in enumerate(models):
+        print(f"[{i}] {m}")
+
+    default_idx = int(input("\nWybierz DEFAULT model (index): "))
+    selected = input("Wybierz ensemble (np. 0,1,2) lub ENTER = wszystkie: ")
+
+    if selected.strip() == "":
+        ensemble = models
+    else:
+        ensemble = [models[int(i)] for i in selected.split(",")]
+
+    default_model = models[default_idx]
+
+    return default_model, ensemble
+
+
+
+def load_models(models_dir, selected_models, device, info):
+    loaded = {}
+
+    for m in selected_models:
+        path = os.path.join(models_dir, m, "model.pth")
+        info(f"Ładowanie modelu: {m}")
+        loaded[m] = load_model(path, device, info)
+
+    return loaded
+
+from collections import Counter
+
+def aggregate(results, default_model):
+    votes = Counter()
+    confidence_sum = {}
+
+    for model_name, res in results.items():
+        text = res["text"]
+        conf = res["confidence"]
+
+        votes[text] += 1
+        confidence_sum[text] = confidence_sum.get(text, 0) + conf
+
+    # majority
+    top_text, top_count = votes.most_common(1)[0]
+
+    # czy jest consensus?
+    if top_count >= 2:
+        return top_text
+
+    # fallback: default model
+    return results[default_model]["text"]

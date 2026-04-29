@@ -27,91 +27,26 @@ from PIL import Image
 
 from .config import CHARS, MODEL_PATH, NUM_CLASSES, char2idx, idx2char
 from .model import SimpleCNN
-from .utils import get_inf_transform, load_and_optionally_denoise, preprocess_letter, save_image_to_temp_folder, save_image_to_today_folder
+from .utils import (
+    get_inf_transform,
+    load_and_optionally_denoise,
+    preprocess_letter,
+    save_image_to_temp_folder,
+    save_image_to_today_folder,
+    list_models,
+    select_models,
+    load_models,
+    aggregate,
+    _map_chars74k_sample_to_char,
+    get_active_chars,
+    _set_active_chars,
+    _label_for_idx,
+    load_model,
+)
 from .display import visualize_prediction, show_image
 from . import info
 
-# ── Ładowanie modelu ───────────────────────────────────────────────────────────
 
-ACTIVE_CHARS = list(CHARS)
-
-
-def _map_chars74k_sample_to_char(sample_name: str) -> str:
-    """Mapuje nazwę SampleXXX z Chars74K na znak (A-Z, a-z, 0-9) gdy to możliwe."""
-    match = re.fullmatch(r"Sample(\d+)", sample_name)
-    if not match:
-        return sample_name
-
-    idx = int(match.group(1))
-    if 1 <= idx <= 10:
-        return str(idx - 1)
-    if 11 <= idx <= 36:
-        return chr(ord("A") + (idx - 11))
-    if 37 <= idx <= 62:
-        return chr(ord("a") + (idx - 37))
-    return sample_name
-
-
-def get_active_chars() -> list[str]:
-    """Zwraca aktualne mapowanie indeks->znak używane przez model."""
-    return list(ACTIVE_CHARS)
-
-
-def _set_active_chars(checkpoint: object | None = None) -> None:
-    """Ustawia mapowanie indeks->znak na podstawie checkpointa lub domyślnej konfiguracji."""
-    global ACTIVE_CHARS
-    if isinstance(checkpoint, dict) and "class_names" in checkpoint:
-        class_names = checkpoint.get("class_names")
-        if isinstance(class_names, list) and class_names:
-            ACTIVE_CHARS = [_map_chars74k_sample_to_char(str(name)) for name in class_names]
-            info(f"Wczytano mapowanie klas z checkpointa ({len(ACTIVE_CHARS)} klas)")
-            return
-
-    ACTIVE_CHARS = list(CHARS)
-
-
-def _label_for_idx(idx: int) -> str:
-    if 0 <= idx < len(ACTIVE_CHARS):
-        return ACTIVE_CHARS[idx]
-    return f"<UNK:{idx}>"
-
-#print(matplotlib.get_backend())
-
-def load_model(model_path: str = MODEL_PATH, device: torch.device = None, info=None) -> nn.Module:
-    if info is None:
-        info = print
-
-    if device is None:
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-    if os.path.exists(model_path):
-        info(f"Wczytywanie modelu z {model_path}...")
-
-        checkpoint = torch.load(model_path, map_location=device)
-
-        _set_active_chars(checkpoint)
-
-        if isinstance(checkpoint, dict) and "model_state_dict" in checkpoint:
-            state_dict = checkpoint["model_state_dict"]
-            info("Wczytano checkpoint")
-        else:
-            state_dict = checkpoint
-            info("Wczytano state_dict")
-
-        # CRNN zamiast CNN
-        model = SimpleCNN(num_classes=len(CHARS) + 1)
-
-        model.load_state_dict(state_dict)
-        info("Model wczytany!")
-
-    else:
-        info(f"UWAGA: Nie znaleziono modelu {model_path}")
-        model = SimpleCNN(num_classes=len(CHARS) + 1)
-
-    model.to(device)
-    model.eval()
-
-    return model
 
 
 # ── Segmentacja pomocnicza ─────────────────────────────────────────────────────
@@ -469,32 +404,46 @@ def _finalize_debug_crops(
 # ── Przekazanie zdjęć folderu do predykcji ───────────────────────────────────────────────
 
 
-def process_folder(folder_path, args, model_path, device, info):
+def process_folder(folder_path, args, models_dir, device, info):
+
     if not os.path.isdir(folder_path):
         raise ValueError(f"To nie jest katalog: {folder_path}")
-
-    model = load_model(model_path, device, info)
-    results = []
     
-    # Ładuj bbox data
+    models_dir = os.path.dirname(models_dir)
+    models = list_models(models_dir)
+    default_model, selected_models = select_models(models)
+
+    loaded_models = load_models(models_dir, selected_models, device, info)
+
     bbox_data = _load_bbox_data(folder_path)
     bbox_index = 0
-    
+
+    results = []
+
     for filename in os.listdir(folder_path):
         if not filename.lower().endswith(".png"):
             continue
 
         file_path = os.path.join(folder_path, filename)
 
-        if not os.path.isfile(file_path):
-            continue
-
         try:
             info(f"\nRozpoznawanie: {file_path}")
 
-            result = predict_letter(file_path, model, device, args)
-            
-            # Dodaj bbox
+            per_model = predict_letter_multi(
+                file_path,
+                loaded_models,
+                device,
+                args,
+                info
+            )
+
+            final_text = aggregate(per_model, default_model)
+
+            best_conf = max(
+                r["confidence"] for r in per_model.values()
+            )
+
+
             bbox = None
             if bbox_data and bbox_index < len(bbox_data):
                 bbox = bbox_data[bbox_index].get("bbox")
@@ -502,13 +451,13 @@ def process_folder(folder_path, args, model_path, device, info):
 
             results.append({
                 "file": file_path,
-                "text": result["text"],
-                "confidence": result["confidence"],
-                "probs": result["probs"],
-                "bbox": bbox
+                "text": final_text,
+                "confidence": best_conf,
+                "bbox": bbox,              # <<< DODANE
+                "per_model": per_model
             })
+
         except Exception as e:
-            info(f"Błąd dla {file_path}: {e}")
             results.append({
                 "file": file_path,
                 "error": str(e)
@@ -540,6 +489,15 @@ def _load_bbox_data(folder_path):
         return None
     
     return bbox_data if bbox_data else None
+
+def predict_letter_multi(image_path, models, device, args, info):
+    results = {}
+
+    for name, model in models.items():
+        res = predict_letter(image_path, model, device, args)
+        results[name] = res
+
+    return results
 # ── Predykcja pojedynczej litery ───────────────────────────────────────────────
 def predict_letter(
     image_path: str,

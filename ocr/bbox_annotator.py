@@ -135,37 +135,76 @@ def detect_word_boxes_auto(image):
 
     height, width = image.shape[:2]
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if image.ndim == 3 else image.copy()
-    gray = cv2.GaussianBlur(gray, (3, 3), 0)
 
-    _, binary_inv = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+    # Odporniejsze przygotowanie maski tekstu.
+    clahe = cv2.createCLAHE(clipLimit=2.5, tileGridSize=(8, 8))
+    enhanced = clahe.apply(gray)
+    blurred = cv2.GaussianBlur(enhanced, (3, 3), 0)
 
-    # Odsiew drobnego szumu przed wykrywaniem komponentow (znakow).
+    _, binary_otsu = cv2.threshold(blurred, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+    block_size = max(21, (min(height, width) // 16) | 1)
+    binary_adapt = cv2.adaptiveThreshold(
+        blurred,
+        255,
+        cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+        cv2.THRESH_BINARY_INV,
+        block_size,
+        9,
+    )
+    binary_inv = cv2.bitwise_and(binary_otsu, binary_adapt)
+    fg_ratio = float(np.count_nonzero(binary_inv)) / float(binary_inv.size)
+    if fg_ratio < 0.003 or fg_ratio > 0.40:
+        binary_inv = binary_otsu
+
+    # Oczyszczanie przez odrzucenie bardzo malych komponentow.
+    num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(binary_inv, connectivity=8)
+    clean = np.zeros_like(binary_inv)
+    min_fg_area = max(5, (width * height) // 130000)
+    for label in range(1, num_labels):
+        area = int(stats[label, cv2.CC_STAT_AREA])
+        if area >= min_fg_area:
+            clean[labels == label] = 255
+
     open_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (2, 2))
-    clean = cv2.morphologyEx(binary_inv, cv2.MORPH_OPEN, open_kernel, iterations=1)
+    clean = cv2.morphologyEx(clean, cv2.MORPH_OPEN, open_kernel, iterations=1)
 
+    def vertical_overlap_ratio(a, b):
+        overlap = max(0.0, min(a["y2"], b["y2"]) - max(a["y1"], b["y1"]))
+        denom = max(1.0, min(float(a["h"]), float(b["h"])))
+        return overlap / denom
+
+    def refine_box_to_foreground(mask, box, px, py):
+        x1, y1, x2, y2 = box
+        ex = max(2, int(round(px * 1.5)))
+        ey = max(2, int(round(py * 1.5)))
+        rx1 = max(0, x1 - ex)
+        ry1 = max(0, y1 - ey)
+        rx2 = min(width, x2 + ex)
+        ry2 = min(height, y2 + ey)
+
+        roi = mask[ry1:ry2, rx1:rx2]
+        ys, xs = np.where(roi > 0)
+        if xs.size == 0:
+            return clamp_box([x1, y1, x2, y2], width, height)
+
+        nx1 = rx1 + int(xs.min()) - px
+        ny1 = ry1 + int(ys.min()) - py
+        nx2 = rx1 + int(xs.max()) + 1 + px
+        ny2 = ry1 + int(ys.max()) + 1 + py
+        return clamp_box([nx1, ny1, nx2, ny2], width, height)
+
+    # Komponenty foregroundu (litery lub ich fragmenty).
     num_labels, _, stats, _ = cv2.connectedComponentsWithStats(clean, connectivity=8)
-
-    char_candidates = []
-    min_char_area = max(8, (width * height) // 50000)
-    max_char_area = max(1200, (width * height) // 220)
-    min_char_h = max(6, height // 260)
-    max_char_h = int(height * 0.30)
-    min_char_w = 2
-
+    components = []
     for label in range(1, num_labels):
         x = int(stats[label, cv2.CC_STAT_LEFT])
         y = int(stats[label, cv2.CC_STAT_TOP])
         w = int(stats[label, cv2.CC_STAT_WIDTH])
         h = int(stats[label, cv2.CC_STAT_HEIGHT])
         area = int(stats[label, cv2.CC_STAT_AREA])
-        if area < min_char_area or area > max_char_area:
+        if area < min_fg_area or w < 2 or h < 3:
             continue
-        if h < min_char_h or h > max_char_h:
-            continue
-        if w < min_char_w:
-            continue
-
-        char_candidates.append(
+        components.append(
             {
                 "x1": x,
                 "y1": y,
@@ -177,31 +216,32 @@ def detect_word_boxes_auto(image):
             }
         )
 
-    if not char_candidates:
+    if not components:
         return []
 
-    char_heights = [c["h"] for c in char_candidates]
-    char_widths = [c["w"] for c in char_candidates]
-    median_h = float(np.median(np.array(char_heights, dtype=np.float32)))
-    median_w = float(np.median(np.array(char_widths, dtype=np.float32)))
+    hs = np.array([c["h"] for c in components], dtype=np.float32)
+    ws = np.array([c["w"] for c in components], dtype=np.float32)
+    h20, h80 = float(np.percentile(hs, 20)), float(np.percentile(hs, 80))
+    w20, w80 = float(np.percentile(ws, 20)), float(np.percentile(ws, 80))
 
-    def vertical_overlap_ratio(a, b):
-        overlap = max(0.0, min(a["y2"], b["y2"]) - max(a["y1"], b["y1"]))
-        denom = max(1.0, min(float(a["h"]), float(b["h"])))
-        return overlap / denom
+    core_h = hs[(hs >= h20) & (hs <= h80)]
+    core_w = ws[(ws >= w20) & (ws <= w80)]
+    median_h = float(np.median(core_h)) if core_h.size else float(np.median(hs))
+    median_w = float(np.median(core_w)) if core_w.size else float(np.median(ws))
+    effective_w = min(median_w, max(10.0, 0.08 * float(width)))
 
-    # Grupowanie znakow w linie.
-    line_tol = max(8.0, 0.65 * median_h)
-    char_candidates.sort(key=lambda c: (c["cy"], c["x1"]))
+    # Grupowanie komponentow w linie.
+    line_tol = max(6.0, 0.55 * median_h)
+    components.sort(key=lambda c: (c["cy"], c["x1"]))
     lines = []
 
-    for char in char_candidates:
+    for char in components:
         best_line_idx = None
         best_dist = 1e9
         for idx, line in enumerate(lines):
             ref = line["ref"]
             dist = abs(char["cy"] - line["cy"])
-            if dist <= line_tol or vertical_overlap_ratio(char, ref) >= 0.18:
+            if dist <= line_tol or vertical_overlap_ratio(char, ref) >= 0.25:
                 if dist < best_dist:
                     best_dist = dist
                     best_line_idx = idx
@@ -229,57 +269,241 @@ def detect_word_boxes_auto(image):
                 "h": max(1, int(round(line["y2"] - line["y1"]))),
             }
 
-    # Grupowanie znakow w wyrazy po odstepach poziomych.
+    # Wycinanie wyrazow w kazdej linii.
     word_boxes = []
     lines.sort(key=lambda l: l["cy"])
-    pad_x = max(1, int(round(0.2 * median_w)))
-    pad_y = max(1, int(round(0.2 * median_h)))
-    min_word_w = max(10, int(round(1.2 * median_w)))
-    min_word_h = max(8, int(round(0.7 * median_h)))
+    pad_x = max(1, int(round(0.25 * effective_w)))
+    pad_y = max(1, int(round(0.18 * median_h)))
+    min_word_w = max(6, int(round(0.75 * effective_w)))
+    min_word_h = max(6, int(round(0.55 * median_h)))
+
+    def append_refined_box(gx1, gy1, gx2, gy2):
+        if (gx2 - gx1) < min_word_w or (gy2 - gy1) < min_word_h:
+            return
+
+        box = clamp_box([gx1 - pad_x, gy1 - pad_y, gx2 + pad_x, gy2 + pad_y], width, height)
+        box = refine_box_to_foreground(clean, box, pad_x, pad_y)
+        word_boxes.append(box)
 
     for line in lines:
         items = sorted(line["items"], key=lambda c: c["x1"])
-        line_h = max(1.0, line["y2"] - line["y1"])
+        if not items:
+            continue
 
-        positive_gaps = []
-        for i in range(1, len(items)):
-            raw_gap = float(items[i]["x1"] - items[i - 1]["x2"])
-            if raw_gap > 0:
-                positive_gaps.append(raw_gap)
+        lx1 = min(c["x1"] for c in items)
+        ly1 = min(c["y1"] for c in items)
+        lx2 = max(c["x2"] for c in items)
+        ly2 = max(c["y2"] for c in items)
 
-        if positive_gaps:
-            typical_gap = float(np.percentile(np.array(positive_gaps, dtype=np.float32), 60))
-            gap_threshold = max(6.0, 1.6 * typical_gap, 0.55 * median_w, 0.18 * line_h)
-        else:
-            gap_threshold = max(6.0, 0.55 * median_w, 0.18 * line_h)
+        line_pad_y = max(1, int(round(0.18 * median_h)))
+        ly1 = max(0, ly1 - line_pad_y)
+        ly2 = min(height, ly2 + line_pad_y)
 
-        current_group = [items[0]]
-        for char in items[1:]:
-            prev = current_group[-1]
-            gap = float(char["x1"] - prev["x2"])
-            overlap_ok = vertical_overlap_ratio(char, prev) >= 0.12
+        roi = clean[ly1:ly2, lx1:lx2]
+        if roi.size == 0:
+            continue
 
-            # Scalaj tylko gdy znaki sa blisko i w tej samej strefie pionowej.
-            if gap <= gap_threshold and overlap_ok:
-                current_group.append(char)
+        proj = np.sum(roi > 0, axis=0).astype(np.float32)
+        if np.max(proj) <= 0:
+            continue
+
+        line_h = float(max(1, ly2 - ly1))
+        max_proj = np.max(proj)
+        low_thr = max(0.0, 0.03 * line_h)
+        p20 = float(np.percentile(proj, 20))
+        p85 = float(np.percentile(proj, 85))
+        valley_thr = max(low_thr, p20 + 0.35 * max(0.0, p85 - p20))
+
+        empty_cols = proj <= valley_thr
+        min_gap_run = max(4, int(round(1.0 * effective_w)))
+        split_points = []
+        run_start = None
+
+        for idx, is_empty in enumerate(empty_cols):
+            if is_empty and run_start is None:
+                run_start = idx
+            elif (not is_empty) and run_start is not None:
+                run_len = idx - run_start
+                if run_len >= min_gap_run:
+                    split_points.append(run_start + (run_len // 2))
+                run_start = None
+
+        if run_start is not None:
+            run_len = len(empty_cols) - run_start
+            if run_len >= min_gap_run:
+                split_points.append(run_start + (run_len // 2))
+
+        segments = []
+        left = 0
+        for sp in split_points:
+            if (sp - left) >= min_word_w:
+                segments.append((left, sp))
+            left = sp
+        if (roi.shape[1] - left) >= min_word_w:
+            segments.append((left, roi.shape[1]))
+
+        # Fallback: podzial po duzych odstepach miedzy komponentami.
+        if len(segments) <= 1 and len(items) > 1:
+            comp_gap = []
+            for i in range(1, len(items)):
+                g = float(items[i]["x1"] - items[i - 1]["x2"])
+                if g > 0:
+                    comp_gap.append(g)
+
+            if comp_gap:
+                gaps_sorted = np.sort(np.array(comp_gap, dtype=np.float32))
+                g25 = float(np.percentile(gaps_sorted, 25))
+                g75 = float(np.percentile(gaps_sorted, 75))
+                g50 = float(np.percentile(gaps_sorted, 50))
+                robust_gap = max(g50, 0.5 * (g25 + g75))
+                word_gap_thr = max(2.2 * effective_w, 2.8 * robust_gap)
             else:
-                gx1 = min(c["x1"] for c in current_group)
-                gy1 = min(c["y1"] for c in current_group)
-                gx2 = max(c["x2"] for c in current_group)
-                gy2 = max(c["y2"] for c in current_group)
-                if (gx2 - gx1) >= min_word_w and (gy2 - gy1) >= min_word_h:
-                    word_boxes.append(clamp_box([gx1 - pad_x, gy1 - pad_y, gx2 + pad_x, gy2 + pad_y], width, height))
-                current_group = [char]
+                word_gap_thr = 2.2 * effective_w
 
-        if current_group:
-            gx1 = min(c["x1"] for c in current_group)
-            gy1 = min(c["y1"] for c in current_group)
-            gx2 = max(c["x2"] for c in current_group)
-            gy2 = max(c["y2"] for c in current_group)
-            if (gx2 - gx1) >= min_word_w and (gy2 - gy1) >= min_word_h:
-                word_boxes.append(clamp_box([gx1 - pad_x, gy1 - pad_y, gx2 + pad_x, gy2 + pad_y], width, height))
+            groups = [[items[0]]]
+            for cur in items[1:]:
+                prev = groups[-1][-1]
+                g = float(cur["x1"] - prev["x2"])
+                if g > word_gap_thr:
+                    groups.append([cur])
+                else:
+                    groups[-1].append(cur)
 
-    boxes = [{"box": b} for b in word_boxes]
+            if len(groups) > 1:
+                for gitems in groups:
+                    gx1 = min(c["x1"] for c in gitems)
+                    gy1 = min(c["y1"] for c in gitems)
+                    gx2 = max(c["x2"] for c in gitems)
+                    gy2 = max(c["y2"] for c in gitems)
+                    append_refined_box(gx1, gy1, gx2, gy2)
+                continue
+
+        for sx1, sx2 in segments:
+            seg = roi[:, sx1:sx2]
+            ys, xs = np.where(seg > 0)
+            if xs.size == 0:
+                continue
+
+            gx1 = lx1 + sx1 + int(xs.min())
+            gx2 = lx1 + sx1 + int(xs.max()) + 1
+            gy1 = ly1 + int(ys.min())
+            gy2 = ly1 + int(ys.max()) + 1
+            append_refined_box(gx1, gy1, gx2, gy2)
+
+    if not word_boxes:
+        return []
+
+    # Redukcja duplikatow mocno nachodzacych boksow.
+    word_boxes = sorted(word_boxes, key=lambda b: (b[1], b[0], b[3], b[2]))
+    merged_boxes = []
+    for box in word_boxes:
+        if not merged_boxes:
+            merged_boxes.append(box)
+            continue
+
+        x1, y1, x2, y2 = box
+        mx1, my1, mx2, my2 = merged_boxes[-1]
+
+        inter_x1 = max(x1, mx1)
+        inter_y1 = max(y1, my1)
+        inter_x2 = min(x2, mx2)
+        inter_y2 = min(y2, my2)
+        inter_w = max(0, inter_x2 - inter_x1)
+        inter_h = max(0, inter_y2 - inter_y1)
+        inter_area = inter_w * inter_h
+
+        area_a = max(1, (x2 - x1) * (y2 - y1))
+        area_b = max(1, (mx2 - mx1) * (my2 - my1))
+        overlap_a = inter_area / float(area_a)
+        overlap_b = inter_area / float(area_b)
+
+        if overlap_a >= 0.85 or overlap_b >= 0.85:
+            merged_boxes[-1] = clamp_box([
+                min(x1, mx1),
+                min(y1, my1),
+                max(x2, mx2),
+                max(y2, my2),
+            ], width, height)
+        else:
+            merged_boxes.append(box)
+
+    # Dodatkowe scalanie drobnych fragmentow (np. pojedyncza litera oddzielona od reszty slowa).
+    refined_boxes = []
+    tiny_w = max(8.0, 1.40 * effective_w)
+    very_tiny_w = max(10.0, 1.80 * effective_w)
+    tiny_area = max(30.0, 1.8 * effective_w * max(8.0, median_h))
+    very_tiny_area = max(45.0, 2.4 * effective_w * max(8.0, median_h))
+    merge_gap_hard = max(2.0, 1.3 * effective_w)
+    merge_gap_soft = max(3.0, 1.8 * effective_w)
+    same_line_tol = max(5.0, 0.40 * median_h)
+
+    for box in merged_boxes:
+        if not refined_boxes:
+            refined_boxes.append(box)
+            continue
+
+        px1, py1, px2, py2 = refined_boxes[-1]
+        x1, y1, x2, y2 = box
+
+        pw = float(px2 - px1)
+        ph = float(py2 - py1)
+        cw = float(x2 - x1)
+        ch = float(y2 - y1)
+        p_area = pw * ph
+        c_area = cw * ch
+
+        center_dist = abs(((py1 + py2) * 0.5) - ((y1 + y2) * 0.5))
+        inter_h = max(0.0, min(py2, y2) - max(py1, y1))
+        v_overlap = inter_h / max(1.0, min(ph, ch))
+        gap = float(x1 - px2)
+
+        prev_tiny = (pw <= tiny_w) or (p_area <= tiny_area)
+        curr_tiny = (cw <= tiny_w) or (c_area <= tiny_area)
+        prev_very_tiny = (pw <= very_tiny_w) or (p_area <= very_tiny_area)
+        curr_very_tiny = (cw <= very_tiny_w) or (c_area <= very_tiny_area)
+
+        should_merge_hard = (
+            center_dist <= same_line_tol
+            and v_overlap >= 0.55
+            and gap >= -1.0
+            and gap <= merge_gap_hard
+            and (prev_tiny or curr_tiny)
+        )
+
+        should_merge_soft = (
+            center_dist <= (1.20 * same_line_tol)
+            and v_overlap >= 0.40
+            and gap >= -1.0
+            and gap <= merge_gap_soft
+            and (prev_very_tiny or curr_very_tiny)
+        )
+
+        # Specjalny przypadek: odklejona pierwsza litera (np. "A" + "la").
+        width_ratio = min(pw, cw) / max(1.0, max(pw, cw))
+        leading_fragment_gap = max(3.0, 1.85 * effective_w)
+        should_merge_leading_fragment = (
+            center_dist <= max(7.0, 0.90 * median_h)
+            and gap >= -1.0
+            and gap <= leading_fragment_gap
+            and width_ratio <= 0.62
+            and (prev_tiny or curr_tiny)
+        )
+
+        if should_merge_hard or should_merge_soft or should_merge_leading_fragment:
+            refined_boxes[-1] = clamp_box(
+                [
+                    min(px1, x1),
+                    min(py1, y1),
+                    max(px2, x2),
+                    max(py2, y2),
+                ],
+                width,
+                height,
+            )
+        else:
+            refined_boxes.append(box)
+
+    boxes = [{"box": b} for b in refined_boxes]
     return sort_boxes_reading_order(boxes)
 
 
@@ -738,15 +962,7 @@ def process_letter(image_path, base_dir="inference", enable_box_edit=True, non_i
 
     letter_name = os.path.splitext(os.path.basename(image_path))[0]
 
-    # Wczytaj obraz - najpierw spróbuj imdecode dla obsługi polskich znaków
-    try:
-        import numpy as np
-        img_array = np.fromfile(image_path, np.uint8)
-        img_cv2 = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
-    except:
-        # Fallback na zwykły imread
-        img_cv2 = cv2.imread(image_path)
-    
+    img_cv2 = cv2.imread(image_path)
     if img_cv2 is None:
         print(f"Błąd: nie udało się wczytać obrazu '{image_path}'.")
         return None

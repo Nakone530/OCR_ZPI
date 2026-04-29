@@ -311,8 +311,8 @@ def main(args=None, info=None, buffor=None):
         output_dir = process_letter(
             image_path=args.page,
             base_dir=args.annotation_dir,
-            enable_box_edit=False,  # Bez edycji dla --page
-            non_interactive=True,  # Zawsze nieinteraktywne dla --page
+            enable_box_edit=not args.no_edit,
+            non_interactive=args.non_interactive,
         )
         if output_dir:
             info(f"Adnotacje zapisane w: {output_dir}")
@@ -384,6 +384,15 @@ def main(args=None, info=None, buffor=None):
         else:
             from ocr.bbox_annotator import process_letter
             
+            # Wyczyść folder annotation_dir przed przetwarzaniem
+            import shutil
+            if os.path.exists(args.annotation_dir):
+                try:
+                    shutil.rmtree(args.annotation_dir)
+                    info(f"Wyczyszczono folder: {args.annotation_dir}")
+                except Exception as e:
+                    info(f"Ostrzeżenie: Nie udało się wyczyścić folderu {args.annotation_dir}: {e}")
+            
             # Przetwórz każdy obraz
             for image_file in image_files:
                 info(f"\n{'='*60}")
@@ -391,13 +400,26 @@ def main(args=None, info=None, buffor=None):
                 info(f"{'='*60}")
                 
                 try:
+                    # Obejście dla polskich znaków w ścieżce - skopiuj do temp folderu
+                    import tempfile
+                    import shutil
+                    temp_dir = tempfile.gettempdir()
+                    temp_image_path = os.path.join(temp_dir, f"ocr_temp_{os.path.basename(image_file)}")
+                    shutil.copy2(image_file, temp_image_path)
+                    
                     # Segmentuj obraz (bez edycji bboxów - non_interactive=True)
                     output_dir = process_letter(
-                        image_path=image_file,
+                        image_path=temp_image_path,
                         base_dir=args.annotation_dir,
-                        enable_box_edit=False,  # Brak edycji bboxów
-                        non_interactive=True,   # Automatycznie
+                        enable_box_edit=not args.no_edit,
+                        non_interactive=args.non_interactive,
                     )
+                    
+                    # Usuń tymczasowy plik
+                    try:
+                        os.remove(temp_image_path)
+                    except:
+                        pass
                     
                     if output_dir:
                         # Przetwórz segmenty

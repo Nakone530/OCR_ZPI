@@ -483,7 +483,7 @@ def process_folder(folder_path, args, model_path, device, info):
     # Obsługiwane rozszerzenia plików graficznych
     supported_formats = {'.png', '.jpg', '.jpeg', '.bmp', '.gif', '.tiff', '.webp'}
     
-    for filename in os.listdir(folder_path):
+    for filename in sorted(os.listdir(folder_path)):
         # Pomijaj plik source_image (oryginalne zdjęcie)
         if filename.lower().startswith('source_image'):
             continue

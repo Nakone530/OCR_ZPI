@@ -482,9 +482,6 @@ class FolderRecognizeScreen(Screen):
             mode = pressed.id
         
         input_path = self.query_one("#input_path", Input).value.strip()
-        denoise = self.query_one("#denoise", Checkbox).value
-        json_output = self.query_one("#json_output", Checkbox).value
-        save_output = self.query_one("#save_output", Checkbox).value
         output_path = self.query_one("#output_path", Input).value.strip()
         quiet_mode = self.query_one("#quiet_mode", Checkbox).value
         
@@ -509,35 +506,55 @@ class FolderRecognizeScreen(Screen):
         # Buduj argumenty
         args = [f"--{mode}", input_path]
         
-        if denoise:
-            args.append("--denoise")
-        if json_output:
-            args.append("--json")
-            args.append("--json-pretty")
-        if save_output and output_path:
-            args += ["--output", output_path]
+        # W trybie --folder: brak edycji bboxów (--no-edit)
+        # W trybie --page: możliwa edycja, ale non-interactive aby nie czekać na input()
+        if mode == "folder":
+            args.append("--no-edit")
+        else:  # mode == "page"
+            args.append("--non-interactive")
+        
         if quiet_mode:
             args.append("--quiet")
         
+        if output_path:
+            args += ["--output", output_path]
+        
         log.write_line(f" Uruchamianie transkrypcji [{mode}]...")
         log.write_line(f" Ścieżka: {input_path}")
-        if denoise:
-            log.write_line(" Odszumianie: Włączone")
         if quiet_mode:
             log.write_line(" Cichy tryb: Włączony")
-        if save_output:
-            log.write_line(f" Zapis: {output_path or 'domyślna lokalizacja'}")
+        if output_path:
+            log.write_line(f" Zapis: {output_path}")
         log.write_line("━" * 40 + "\n")
         
         # Uruchom w wątku aby nie blokować interfejsu
         def run_transcription_thread():
             try:
                 parser = build_parser()
+                # Parsuj argumenty
                 parsed_args = parser.parse_args(args)
+                
+                # Upewnij się że mamy wszystkie wymagane atrybuty
+                if not hasattr(parsed_args, 'folder'):
+                    parsed_args.folder = None
+                if not hasattr(parsed_args, 'page'):
+                    parsed_args.page = None
+                if not hasattr(parsed_args, 'no_edit'):
+                    parsed_args.no_edit = False
+                if not hasattr(parsed_args, 'non_interactive'):
+                    parsed_args.non_interactive = False
+                if not hasattr(parsed_args, 'quiet'):
+                    parsed_args.quiet = False
+                if not hasattr(parsed_args, 'output'):
+                    parsed_args.output = None
                 
                 # Użytkownik może mieć swój model w ustawieniach
                 model_path = self.app.state.get("model_path", MODEL_PATH)
                 parsed_args.model_path = model_path
+                
+                # Ustaw annotation_dir jeśli brakuje
+                if not hasattr(parsed_args, 'annotation_dir'):
+                    parsed_args.annotation_dir = "inference"
                 
                 def info(msg):
                     # Thread-safe write to log

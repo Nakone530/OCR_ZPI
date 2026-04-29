@@ -75,7 +75,8 @@ def get_inf_transform(args) -> transforms.Compose:
         >>> transform = get_transform()
         >>> tensor = transform(pil_image)
     """
-    pack = [ResizeWithAspect(),]
+    pack = [ResizeWithAspect(),
+            RandomOtsu(Otsu()),]
     if getattr(args, "denoise", False):
         pack.append(trans_denoise_bil())
 
@@ -104,12 +105,11 @@ def get_train_transform(args) -> transforms.Compose:
     """
     pack = [
         transforms.RandomRotation(5),
+        RandomDenoise(),
         RandomPadding(),
         ResizeWithAspect(),
+        RandomOtsu(Otsu())
     ]
-    if getattr(args, "denoise", False):
-        pack.append(trans_denoise_bil())
-        
     pack.extend(base_transform())
     return transforms.Compose(pack)
 
@@ -124,7 +124,17 @@ class RandomPadding:
         right = random.randint(0, self.max_pad)
         bottom = random.randint(0, self.max_pad)
         return F.pad(img, (left, top, right, bottom), fill=255)
-    
+
+class RandomDenoise:
+    def __init__(self, p=0.3):
+        self.p = p
+
+    def __call__(self, img):
+        if random.random() < self.p:
+            return trans_denoise_bil()(img)
+        return img
+
+
 class ResizeWithAspect:
     def __init__(self, size=(32, 128), fill=255):
         self.h, self.w = size
@@ -147,6 +157,23 @@ class ResizeWithAspect:
 
         return F.pad(img, (left, top, pad_w - left, pad_h - top), fill=self.fill)
 
+class Otsu:
+    def __call__(self, img):
+        arr = np.array(img.convert("L"))
+        _, th = cv2.threshold(arr, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        return Image.fromarray(th)
+
+
+class RandomOtsu:
+    def __init__(self, otsu, p=0.1):
+        self.otsu = otsu
+        self.p = p
+
+    def __call__(self, img):
+        if random.random() < self.p:
+            return self.otsu(img)
+        return img
+    
 def preprocess_letter(img: np.ndarray) -> np.ndarray:
     """
     Przetwarza obraz pojedynczej litery przed klasyfikacją.

@@ -95,6 +95,66 @@
         "auto-archived"
       ],
       "size_bytes": 38392331
+    },
+    {
+      "filename": "model_20260429_075357.pth",
+      "original_path": "models/model_ocr.pth",
+      "timestamp": "20260429_075357",
+      "datetime": "2026-04-29T07:53:57.747922",
+      "accuracy": 0.0,
+      "epoch": 2,
+      "tags": [
+        "auto-archived"
+      ],
+      "size_bytes": 38447883
+    },
+    {
+      "filename": "model_20260429_081628.pth",
+      "original_path": "models/model_ocr.pth",
+      "timestamp": "20260429_081628",
+      "datetime": "2026-04-29T08:16:28.026615",
+      "accuracy": 0.0,
+      "epoch": 835,
+      "tags": [
+        "auto-archived"
+      ],
+      "size_bytes": 38447883
+    },
+    {
+      "filename": "model_20260429_083647.pth",
+      "original_path": "models/model_ocr.pth",
+      "timestamp": "20260429_083647",
+      "datetime": "2026-04-29T08:36:47.338893",
+      "accuracy": 0.0,
+      "epoch": 507,
+      "tags": [
+        "auto-archived"
+      ],
+      "size_bytes": 38447883
+    },
+    {
+      "filename": "model_20260429_083840.pth",
+      "original_path": "models/model_ocr.pth",
+      "timestamp": "20260429_083840",
+      "datetime": "2026-04-29T08:38:40.969500",
+      "accuracy": 0.0,
+      "epoch": 537,
+      "tags": [
+        "auto-archived"
+      ],
+      "size_bytes": 38447883
+    },
+    {
+      "filename": "model_20260429_083902.pth",
+      "original_path": "models/model_ocr.pth",
+      "timestamp": "20260429_083902",
+      "datetime": "2026-04-29T08:39:02.904904",
+      "accuracy": 0.0,
+      "epoch": 547,
+      "tags": [
+        "auto-archived"
+      ],
+      "size_bytes": 38447883
     }
   ]
 }

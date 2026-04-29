@@ -272,8 +272,8 @@ def detect_word_boxes_auto(image):
     # Wycinanie wyrazow w kazdej linii.
     word_boxes = []
     lines.sort(key=lambda l: l["cy"])
-    pad_x = max(1, int(round(0.25 * effective_w)))
-    pad_y = max(1, int(round(0.18 * median_h)))
+    pad_x = max(2, int(round(0.35 * effective_w)))
+    pad_y = max(2, int(round(0.28 * median_h)))
     min_word_w = max(6, int(round(0.75 * effective_w)))
     min_word_h = max(6, int(round(0.55 * median_h)))
 
@@ -717,6 +717,7 @@ def edit_boxes_interactive(image, boxes):
     print("kółko myszy lub z/c - przybliżanie/oddalanie")
     print("PPM + przeciąganie - przesuwanie widoku (pan)")
     print("x lub Delete - usuń aktualny box")
+    print("a - automatycznie wykryj boxy ponownie")
     print("ENTER - zatwierdź, q - anuluj edycję")
 
     window_name = "Korekta bounding boxow"
@@ -859,6 +860,19 @@ def edit_boxes_interactive(image, boxes):
         if key == ord("p") and boxes:
             selected_idx = (selected_idx - 1) % len(boxes)
             state["selected_idx"] = selected_idx
+            continue
+
+        if key == ord("a"):
+            print("\nPonowna automatyczna detekcja boxow...")
+            auto_boxes = detect_word_boxes_auto(image)
+            if auto_boxes:
+                boxes.clear()
+                boxes.extend(auto_boxes)
+                selected_idx = 0
+                state["selected_idx"] = 0
+                print(f"Wykryto {len(boxes)} boxow automatycznie.")
+            else:
+                print("Nie wykryto boxow - pozostawiono obecne.")
             continue
 
         if key == ord("b"):

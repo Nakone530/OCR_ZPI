@@ -553,13 +553,24 @@ def load_model(model_path: str = MODEL_PATH, device: torch.device = None, info=N
     return model
 
 #------Zarządzanie modelami------------
-def list_models(models_dir: str):
+def list_models(models_dir: str, version: str | None = None):
     models = [
         name for name in os.listdir(models_dir)
         if os.path.isdir(os.path.join(models_dir, name))
     ]
+
+    if version:
+        models = [
+            m for m in models
+            if m.startswith(f"v{version}")
+        ]
+
     models.sort()
     return models
+
+def select_version():
+    version = input("Wybierz wersję (ENTER = wszystkie): ").strip()
+    return version if version else None
 
 def select_models(models):
     print("\nDostępne modele:")

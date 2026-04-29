@@ -8,6 +8,7 @@ Odpowiedzialności:
   - segmentacja i rozpoznawanie wielu linii tekstu
 """
 
+import difflib
 import os
 import re
 from datetime import datetime
@@ -851,6 +852,12 @@ def predict_segments(
     return text, words_with_confidence, class_confidence
 
 
+def compute_accuracy(predicted: str, reference: str) -> float:
+    """Oblicza procentowe podobieństwo (0–100) między predykcją a referencją."""
+    pred_norm = predicted.lower().strip()
+    ref_norm = reference.lower().strip()
+    ratio = difflib.SequenceMatcher(None, pred_norm, ref_norm).ratio()
+    return ratio * 100
 
 #Debug
 

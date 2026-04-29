@@ -49,7 +49,7 @@ from .utils import (
     version_str,
     to_serializable,
     aux_transform,
-    
+    select_version,
 )
 from .display import visualize_prediction, show_image
 from . import info
@@ -418,7 +418,8 @@ def process_folder(folder_path, args, models_dir, device, info):
         raise ValueError(f"To nie jest katalog: {folder_path}")
     
     models_dir = os.path.dirname(models_dir)
-    models = list_models(models_dir)
+    version = select_version()
+    models = list_models(models_dir, version)
     default_model, selected_models = select_models(models)
 
     loaded_models = load_models(models_dir, selected_models, device, info)

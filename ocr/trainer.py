@@ -623,16 +623,16 @@ def train_model(epochs=10, batch_size=32, model_path=None, info=None, args=None)
 
 def save_checkpoint_model(model, epoch, ratio):
     folder = "models"
-    folder = os.path.join(folder, f"v6.{int(ratio*10) - 4}")
+    folder = os.path.join(folder, f"v8.{int(ratio*10) - 4}")
     os.makedirs(folder, exist_ok=True)
 
-    mPath = os.path.join(folder, f"model_epoch{epoch}.pth")
+    mPath = os.path.join(folder, f"model.pth")
     torch.save(model.state_dict(), mPath)
-    dPath = os.path.join(folder, f"model_v6.{int(ratio*10) - 4}_epoch{epoch}.txt")
+    dPath = os.path.join(folder, f"model_v8.{int(ratio*10) - 4}_epoch{epoch}.txt")
     with open(dPath, "w", encoding="utf-8") as f:
         f.write(f"epoch: {epoch}\n")
         f.write(f"ratio: {ratio}\n")
-        f.write(f"model_version: v6.{int(ratio*10) - 4}\n")
+        f.write(f"model_version: v8.{int(ratio*10) - 4}\n")
     
     
     

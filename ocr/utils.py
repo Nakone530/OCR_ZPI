@@ -111,7 +111,8 @@ def get_train_transform(args) -> transforms.Compose:
         RandomDenoise(),
         RandomPadding(),
         ResizeWithAspect(),
-        RandomOtsu(Otsu())
+        RandomOtsu(Otsu()),
+        TightCrop(),
     ]
     pack.extend(base_transform())
     return transforms.Compose(pack)
@@ -176,6 +177,28 @@ class RandomOtsu:
         if random.random() < self.p:
             return self.otsu(img)
         return img
+
+class TightCrop:
+    def __call__(self, img):
+        # zakładamy PIL Image lub tensor -> konwersja do numpy
+        img_np = np.array(img)
+
+        if img_np.ndim == 3:  # RGB → grayscale
+            img_np = img_np.mean(axis=2)
+
+        # maska nie-tła (próg można dostosować)
+        mask = img_np < 250  # dla jasnego tła
+
+        coords = np.argwhere(mask)
+
+        if coords.size == 0:
+            return img  # fallback
+
+        y0, x0 = coords.min(axis=0)
+        y1, x1 = coords.max(axis=0) + 1
+
+        cropped = img.crop((x0, y0, x1, y1))
+        return cropped
     
 def preprocess_letter(img: np.ndarray) -> np.ndarray:
     """

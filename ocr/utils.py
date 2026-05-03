@@ -36,7 +36,8 @@ from datetime import date
 
 from pathlib import Path
 import matplotlib.pyplot as plt
-from .config import IMAGE_SIZE, MEAN, STD, CHARS, MODEL_PATH, NUM_CLASSES, char2idx, idx2char
+import itertools
+from .config import IMAGE_SIZE, MEAN, STD, CHARS, MODEL_PATH, NUM_CLASSES, char2idx, idx2char, VERSION_RE
 from .model import SimpleCNN
 from . import info
 
@@ -552,6 +553,27 @@ def load_model(model_path: str = MODEL_PATH, device: torch.device = None, info=N
 
     return model
 
+
+#------Zarządzanie transkrypcjami------
+
+def load_transcription(path):
+    mapping = {}
+
+    with open(path, "r", encoding="utf-8") as f:
+        for line in f:
+            parts = line.strip().split(maxsplit=1)
+            if len(parts) != 2:
+                continue
+
+            key, text = parts
+
+            # usuń rozszerzenie jeśli jest
+            key = key.replace(".png", "")
+
+            mapping[key] = text
+
+    return mapping
+
 #------Zarządzanie modelami------------
 def list_models(models_dir: str):
     models = [
@@ -612,3 +634,83 @@ def aggregate(results, default_model):
 
     # fallback: default model
     return results[default_model]["text"]
+
+
+def generate_model_ensembles(models, min_size=3, max_size=5):
+    if max_size is None:
+        max_size = len(models)
+
+    max_size = min(max_size, len(models))
+
+    ensembles = []
+
+    for r in range(min_size, max_size + 1):
+        ensembles.extend(itertools.combinations(models, r))
+
+    return ensembles
+
+#---cache----------
+def parse_version(name: str):
+    m = VERSION_RE.match(name)
+    if not m:
+        return None
+    major = int(m.group(1))
+    minor = int(m.group(2) or 0)
+    return (major, minor)
+
+
+def version_str(v):
+    major, minor = v
+    return f"v{major}" if minor == 0 else f"v{major}.{minor}"
+
+
+def resolve_cache_path(models_dir="./models", cache_dir="./cache"):
+    versions = []
+
+    for d in os.listdir(models_dir):
+        full = os.path.join(models_dir, d)
+        if os.path.isdir(full):
+            v = parse_version(d)
+            if v:
+                versions.append(v)
+
+    if not versions:
+        raise ValueError("Brak poprawnych wersji w ./models")
+
+    versions.sort()
+
+    v_min = versions[0]
+    v_max = versions[-1]
+
+    base = f"{version_str(v_min)}_{version_str(v_max)}.json"
+    path = os.path.join(cache_dir, base)
+
+    if not os.path.exists(path):
+        return path
+
+    i = 1
+    while True:
+        suffix = f"_a{i:02d}"
+        new_path = os.path.join(cache_dir, base.replace(".json", f"{suffix}.json"))
+        if not os.path.exists(new_path):
+            return new_path
+        i += 1
+
+
+
+
+def load_cache(cache_path):
+    with open(cache_path, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+def to_serializable(obj):
+    if isinstance(obj, torch.Tensor):
+        return obj.detach().cpu().tolist() if obj.ndim > 0 else obj.item()
+
+    if isinstance(obj, dict):
+        return {k: to_serializable(v) for k, v in obj.items()}
+
+    if isinstance(obj, list):
+        return [to_serializable(v) for v in obj]
+
+    return obj

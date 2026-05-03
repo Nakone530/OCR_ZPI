@@ -22,7 +22,7 @@ Attributes:
 """
 
 import os
-
+import re
 # ── Dataset ──────────────────────────────────────────────────────────────────
 
 # Katalog lokalny na przechowywanie danych
@@ -68,3 +68,5 @@ char2idx = {c: i + 1 for i, c in enumerate(CHARS)}  # 0 = blank!
 idx2char = {i + 1: c for i, c in enumerate(CHARS)}
 
 BLANK = 0
+#--format nazw modeli
+VERSION_RE = re.compile(r"v\.?(\d+)(?:\.(\d+))?$")

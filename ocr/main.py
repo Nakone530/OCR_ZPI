@@ -19,10 +19,10 @@ import sys
 import torch
 
 from ocr.config import MODEL_PATH
-from ocr.inference import compute_accuracy, get_active_chars, load_model, predict_image, predict_letter, predict_segments, predict_word, process_folder
+from ocr.inference import compute_accuracy, test_models, test_cache_models, get_active_chars, load_model, predict_image, predict_letter, predict_segments, predict_word, process_folder
 from ocr.output import OCRResult, create_output_handler
 from ocr.trainer import train_model, infinite_train
-from ocr.utils import save_image_to_today_folder
+from ocr.utils import save_image_to_today_folder, list_models, generate_model_ensembles, load_transcription
 from ocr.json_output import (
     build_image_result_json,
     build_word_result_json,
@@ -142,6 +142,11 @@ def build_parser() -> argparse.ArgumentParser:
     mode.add_argument("--annotate", type=str, metavar="PLIK", help="Wycinki: popraw bboxy i zapisz wycinki + adnotacje")
     mode.add_argument("--folder", type=str, metavar="PLIK", help="Rozpoznaj zdjęcia w folderze")
     mode.add_argument("--page", type=str, metavar="PLIK", help="Separacja zdjęcia na wyrazy oraz ich rozpoznanie")
+    mode.add_argument("--ensemble", "-n", type=str, metavar="PLIK", help="Sprawdź kombinacle modeli")
+    parser.add_argument("--trans", "-s", type=str, metavar="PLIK", help="Plik zawierający transkrypcje")
+    # Cache
+    parser.add_argument("--cache_path", type=str)
+    parser.add_argument("--use_cache", action="store_true")
     # Porównanie z referencją
     parser.add_argument("--accuracy", "-a", type=str, default=None, metavar="PLIK",
                         help="Plik z referencyjną transkrypcją; oblicza procentowe podobieństwo wyniku OCR do referencji")
@@ -396,7 +401,90 @@ def main(args=None, info=None, buffor=None):
                 info(f"{str(r['key']) if r['key'] else '-':<12} {r['text']:<20} {'-':<10}")
             else:
                 info(f"{r['key']:<12} {r['text']:<20} {r['confidence']:.2f}%")
-        
+
+    elif args.ensemble:
+        # tryb cache
+        if args.cache_path:
+
+            results = test_cache_models(
+                args.ensemble,
+                args,
+                model_path,
+                device,
+                info,
+                args.cache_path,
+            )
+
+
+        elif args.use_cache:
+
+            results = test_cache_models(
+                args.ensemble,
+                args,
+                model_path,
+                device,
+                info,
+            )
+
+        else:
+            results = test_models(
+                args.ensemble,
+                args,
+                model_path,
+                device,
+                info
+            )
+        transcription = load_transcription(args.trans)
+        rows = []
+
+        for r in results:
+            if "error" in r:
+                rows.append({
+                    "key": None,
+                    "file": r["file"],
+                    "ensemble": None,
+                    "text": f"ERROR: {r['error']}",
+                    "confidence": None
+                })
+                continue
+
+            filename = os.path.basename(r["file"])
+            name, _ = os.path.splitext(filename)
+
+            for e in r["ensembles"]:
+                ensemble_name = e["ensemble"]
+
+                ref = transcription.get(name)
+
+                if ref is not None:
+                    acc = compute_accuracy(e["text"], ref)
+                else:
+                    acc = None
+
+                rows.append({
+                    "key": name,
+                    "file": r["file"],
+                    "ensemble": ensemble_name,
+                    "text": e["text"],
+                    "confidence": e["confidence"],
+                    "accuracy": acc
+                })
+
+        rows.sort(key=lambda r: (r["key"] if r["key"] else "", r["ensemble"] or ""))
+
+        info(f"\n{'NAME':<12} {'ENSEMBLE':<30} {'TEXT':<20} {'CONF':<10} {'ACC':<10}")
+        info("-" * 95)
+
+        for r in rows:
+            key = str(r["key"]) if r["key"] else "-"
+            ensemble = r["ensemble"] if r["ensemble"] else "-"
+
+            if r["confidence"] is None:
+                info(f"{key:<12} {ensemble:<30} {r['text']:<20} {'-':<10} {'-':<10}")
+            else:
+                acc_str = f"{r['accuracy']:.2f}%" if r["accuracy"] is not None else "-"
+                info(f"{key:<12} {ensemble:<30} {r['text']:<20} {r['confidence']:.2f}% {acc_str:<10}")
+                
     elif args.image:
         _require_file(args.image, info)
         info(f"\nRozpoznawanie: {args.image}")

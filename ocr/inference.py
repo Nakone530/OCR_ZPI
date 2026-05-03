@@ -42,6 +42,12 @@ from .utils import (
     _set_active_chars,
     _label_for_idx,
     load_model,
+    generate_model_ensembles,
+    load_cache,
+    resolve_cache_path,
+    version_str,
+    to_serializable,
+    
 )
 from .display import visualize_prediction, show_image
 from . import info
@@ -453,7 +459,7 @@ def process_folder(folder_path, args, models_dir, device, info):
                 "file": file_path,
                 "text": final_text,
                 "confidence": best_conf,
-                "bbox": bbox,              # <<< DODANE
+                "bbox": bbox,
                 "per_model": per_model
             })
 
@@ -498,6 +504,218 @@ def predict_letter_multi(image_path, models, device, args, info):
         results[name] = res
 
     return results
+
+
+#--- Testowanie wielu kombinacji modeli
+
+
+def test_models(folder_path, args, models_dir, device, info):
+
+    if not os.path.isdir(folder_path):
+        raise ValueError(f"To nie jest katalog: {folder_path}")
+    
+    models_dir = os.path.dirname(models_dir)
+    models = list_models(models_dir)
+    ensembles = generate_model_ensembles(models, min_size=3)
+
+    loaded_models = load_models(models_dir, models, device, info)
+
+
+    bbox_data = _load_bbox_data(folder_path)
+    bbox_index = 0
+
+    results = []
+
+    for filename in os.listdir(folder_path):
+        if not filename.lower().endswith(".png"):
+            continue
+    
+        file_path = os.path.join(folder_path, filename)
+    
+        try:
+            info(f"\nRozpoznawanie: {file_path}")
+
+            ensemble_results = run_ensembles_inference(
+                file_path,
+                ensembles,
+                loaded_models,
+                device,
+                args,
+                info
+            )
+
+            bbox = None
+            if bbox_data and bbox_index < len(bbox_data):
+                bbox = bbox_data[bbox_index].get("bbox")
+            bbox_index += 1
+
+            results.append({
+                "file": file_path,
+                "ensembles": ensemble_results,
+                "bbox": bbox
+            })
+
+        except Exception as e:
+            results.append({
+                "file": file_path,
+                "error": str(e)
+            })
+    return results
+
+
+
+def test_cache_models(folder_path, args, models_dir, device, info, cache_path="./cache"):
+            
+    if not os.path.isdir(folder_path):
+        raise ValueError(f"To nie jest katalog: {folder_path}")
+    
+    models_dir = os.path.dirname(models_dir)
+    models = list_models(models_dir)
+    ensembles = generate_model_ensembles(models)
+
+    loaded_models = load_models(models_dir, models, device, info)
+
+
+    bbox_data = _load_bbox_data(folder_path)
+    bbox_index = 0
+
+    results = []
+
+    for filename in os.listdir(folder_path):
+        if not filename.lower().endswith(".png"):
+            continue
+    
+        file_path = os.path.join(folder_path, filename)
+    
+        try:
+            info(f"\nRozpoznawanie: {file_path}")
+            if cache_path == "./cache" :
+                cache = build_cache(
+                args.ensemble,
+                loaded_models,
+                device,
+                args,
+                info
+            )
+            else :
+                cache = load_cache(cache_path)
+            ensemble_results = run_ensembles_cache(cache, ensembles)
+
+            bbox = None
+            if bbox_data and bbox_index < len(bbox_data):
+                bbox = bbox_data[bbox_index].get("bbox")
+            bbox_index += 1
+
+            results.append({
+                "file": file_path,
+                "ensembles": ensemble_results,
+                "bbox": bbox
+            })
+
+        except Exception as e:
+            results.append({
+                "file": file_path,
+                "error": str(e)
+            })
+    return results
+
+
+def run_ensembles_inference(file_path, ensembles, loaded_models, device, args, info):
+    ensemble_outputs = []
+
+    for ensemble in ensembles:
+        info(f"Ensemble: {ensemble}")
+
+        subset = {m: loaded_models[m] for m in ensemble}
+
+        per_model = predict_letter_multi(
+            file_path,
+            subset,
+            device,
+            args,
+            info
+        )
+
+        # używamy pierwszego modelu jako default (albo możesz zmienić logikę)
+        default_model = ensemble[0]
+
+        final_text = aggregate(per_model, default_model)
+
+        best_conf = max(r["confidence"] for r in per_model.values())
+
+        ensemble_outputs.append({
+            "ensemble": ensemble,
+            "text": final_text,
+            "confidence": best_conf,
+            "per_model": per_model
+        })
+
+    return ensemble_outputs
+
+
+def run_ensembles_cache(cache, ensembles):
+    results = []
+
+    for name, full_per_model in cache.items():
+        ensemble_outputs = []
+
+        for ensemble in ensembles:
+            subset = {m: full_per_model[m] for m in ensemble}
+
+            default_model = max(
+                subset.items(),
+                key=lambda x: x[1]["confidence"]
+            )[0]
+
+            final_text = aggregate(subset, default_model)
+
+            best_conf = max(r["confidence"] for r in subset.values())
+
+            ensemble_outputs.append({
+                "ensemble": ensemble,
+                "text": final_text,
+                "confidence": best_conf
+            })
+
+        results.append({
+            "file": name,
+            "ensembles": ensemble_outputs
+        })
+
+    return results
+
+
+#--- budowanie cache---
+def build_cache(folder_path, loaded_models, device, args, info):
+    cache_dir = "./cache"
+    os.makedirs(cache_dir, exist_ok=True)
+
+    cache_path = resolve_cache_path()
+    cache = {}
+
+    for filename in os.listdir(folder_path):
+        if not filename.lower().endswith(".png"):
+            continue
+
+        file_path = os.path.join(folder_path, filename)
+        name, _ = os.path.splitext(filename)
+
+        info(f"CACHE: {file_path}")
+
+        per_model = predict_letter_multi(
+            file_path,
+            loaded_models,
+            device,
+            args,
+            info
+        )
+
+        cache[name] = to_serializable(per_model)
+
+    with open(cache_path, "w", encoding="utf-8") as f:
+        json.dump(cache, f, ensure_ascii=False, indent=2)
+
+    return cache
 # ── Predykcja pojedynczej litery ───────────────────────────────────────────────
 def predict_letter(
     image_path: str,

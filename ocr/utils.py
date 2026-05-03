@@ -79,7 +79,8 @@ def get_inf_transform(args) -> transforms.Compose:
         >>> tensor = transform(pil_image)
     """
     pack = [ResizeWithAspect(),
-            RandomOtsu(Otsu()),]
+            RandomOtsu(Otsu()),
+            TightCrop(),]
     if getattr(args, "denoise", False):
         pack.append(trans_denoise_bil())
 

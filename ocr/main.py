@@ -368,6 +368,7 @@ def main(args=None, info=None, buffor=None):
     elif args.folder:
         results = process_folder(args.folder, args, model_path, device, info)
         rows = []
+        layout_words = []
         for r in results:
             if "error" in r:
                 rows.append({
@@ -387,6 +388,13 @@ def main(args=None, info=None, buffor=None):
                 "text": r["text"],
                 "confidence": r["confidence"]
             })
+            
+            # Dodaj do listy dla wyświetlania rozmieszczenia
+            layout_words.append({
+                "text": r["text"],
+                "confidence": r["confidence"],
+                "bbox": r.get("bbox")
+            })
         rows.sort(key=lambda r: r["key"] if r["key"] else "")
         info(f"\n{'NAME':<12} {'TEXT':<20} {'CONF':<10}")
         info("-" * 45)
@@ -396,6 +404,9 @@ def main(args=None, info=None, buffor=None):
                 info(f"{str(r['key']) if r['key'] else '-':<12} {r['text']:<20} {'-':<10}")
             else:
                 info(f"{r['key']:<12} {r['text']:<20} {r['confidence']:.2f}%")
+        
+        # Wyświetl w rozmieszczeniu
+        display_text_layout(layout_words, info)
         
     elif args.image:
         _require_file(args.image, info)

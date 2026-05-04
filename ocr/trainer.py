@@ -433,7 +433,7 @@ def init_or_load_model(num_classes, model_path=None, info=None):
 
     GLOBAL_MODEL = SimpleCNN(num_classes=num_classes).to(GLOBAL_DEVICE)
     GLOBAL_CRITERION = nn.CTCLoss(zero_infinity=True)
-    GLOBAL_OPTIMIZER = torch.optim.Adam(GLOBAL_MODEL.parameters(), lr=0.001)
+    GLOBAL_OPTIMIZER = torch.optim.Adam(GLOBAL_MODEL.parameters(), lr=0.0001)
 
     if model_path and os.path.exists(model_path):
         info(f"Wczytywanie modelu z: {model_path}")

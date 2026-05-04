@@ -717,6 +717,7 @@ def edit_boxes_interactive(image, boxes):
     print("kółko myszy lub z/c - przybliżanie/oddalanie")
     print("PPM + przeciąganie - przesuwanie widoku (pan)")
     print("x lub Delete - usuń aktualny box")
+    print("a - automatycznie wykryj boxy ponownie")
     print("ENTER - zatwierdź, q - anuluj edycję")
 
     window_name = "Korekta bounding boxow"
@@ -859,6 +860,19 @@ def edit_boxes_interactive(image, boxes):
         if key == ord("p") and boxes:
             selected_idx = (selected_idx - 1) % len(boxes)
             state["selected_idx"] = selected_idx
+            continue
+
+        if key == ord("a"):
+            print("\nPonowna automatyczna detekcja boxow...")
+            auto_boxes = detect_word_boxes_auto(image)
+            if auto_boxes:
+                boxes.clear()
+                boxes.extend(auto_boxes)
+                selected_idx = 0
+                state["selected_idx"] = 0
+                print(f"Wykryto {len(boxes)} boxow automatycznie.")
+            else:
+                print("Nie wykryto boxow - pozostawiono obecne.")
             continue
 
         if key == ord("b"):

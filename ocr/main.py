@@ -317,149 +317,85 @@ def main(args=None, info=None, buffor=None):
         if output_dir:
             info(f"Adnotacje zapisane w: {output_dir}")
 
-            results = process_folder(output_dir, args, model_path, device, info)
-            
-            # Przygotuj dane do wyświetlania w rozmieszczeniu
-            table_rows = []
-            layout_words = []  # słowa z informacją o linii
-            
-            for r in results:
-                if "error" in r:
-                    table_rows.append({
-                        "key": None,
-                        "file": r["file"],
-                        "text": f"ERROR: {r['error']}",
-                        "confidence": None
-                    })
-                    continue
-
-                filename = os.path.basename(r["file"])      # word_061.png
-                name, _ = os.path.splitext(filename)        # word_061
-
+        results = process_folder(output_dir, args, model_path, device, info)
+        
+        # Przygotuj dane do wyświetlania w rozmieszczeniu
+        table_rows = []
+        layout_words = []  # słowa z informacją o linii
+        
+        for r in results:
+            if "error" in r:
                 table_rows.append({
-                    "key": name,                            # klucz sortowania
+                    "key": None,
                     "file": r["file"],
-                    "text": r["text"],
-                    "confidence": r["confidence"]
+                    "text": f"ERROR: {r['error']}",
+                    "confidence": None
                 })
-                
-                # Dodaj do listy dla wyświetlania rozmieszczenia
-                layout_words.append({
-                    "text": r["text"],
-                    "confidence": r["confidence"],
-                    "bbox": r.get("bbox")
-                })
-            
-            table_rows.sort(key=lambda r: r["key"] if r["key"] else "")
-            
-            # Wyświetl tabelę
-            info(f"\n{'NAME':<12} {'TEXT':<20} {'CONF':<10}")
-            info("-" * 45)
+                continue
 
-            for r in table_rows:
-                if r["confidence"] is None:
-                    info(f"{str(r['key']) if r['key'] else '-':<12} {r['text']:<20} {'-':<10}")
-                else:
-                    info(f"{r['key']:<12} {r['text']:<20} {r['confidence']:.2f}%")
+            filename = os.path.basename(r["file"])      # word_061.png
+            name, _ = os.path.splitext(filename)        # word_061
+
+            table_rows.append({
+                "key": name,                            # klucz sortowania
+                "file": r["file"],
+                "text": r["text"],
+                "confidence": r["confidence"]
+            })
             
-            # Wyświetl w rozmieszczeniu
-            display_text_layout(layout_words, info)
-        else:
-            info(" Błąd: nie udało się przetwórić strony. Sprawdź, czy obraz jest prawidłowy.")
+            # Dodaj do listy dla wyświetlania rozmieszczenia
+            layout_words.append({
+                "text": r["text"],
+                "confidence": r["confidence"],
+                "bbox": r.get("bbox")
+            })
+        
+        table_rows.sort(key=lambda r: r["key"] if r["key"] else "")
+        
+        # Wyświetl tabelę
+        info(f"\n{'NAME':<12} {'TEXT':<20} {'CONF':<10}")
+        info("-" * 45)
+
+        for r in table_rows:
+            if r["confidence"] is None:
+                info(f"{str(r['key']) if r['key'] else '-':<12} {r['text']:<20} {'-':<10}")
+            else:
+                info(f"{r['key']:<12} {r['text']:<20} {r['confidence']:.2f}%")
+        
+        # Wyświetl w rozmieszczeniu
+        display_text_layout(layout_words, info)
 
     elif args.folder:
-        # Obsługiwane rozszerzenia plików graficznych
-        supported_formats = {'.png', '.jpg', '.jpeg', '.bmp', '.gif', '.tiff', '.webp'}
-        image_files = []
-        
-        # Zbierz wszystkie obrazy z folderu
-        for filename in sorted(os.listdir(args.folder)):
-            if any(filename.lower().endswith(fmt) for fmt in supported_formats):
-                full_path = os.path.join(args.folder, filename)
-                if os.path.isfile(full_path):
-                    image_files.append(full_path)
-        
-        if not image_files:
-            info(f"Błąd: Nie znaleziono obrazów w folderze {args.folder}")
-        else:
-            from ocr.bbox_annotator import process_letter
-            
-            # Wyczyść folder annotation_dir przed przetwarzaniem
-            import shutil
-            if os.path.exists(args.annotation_dir):
-                try:
-                    shutil.rmtree(args.annotation_dir)
-                    info(f"Wyczyszczono folder: {args.annotation_dir}")
-                except Exception as e:
-                    info(f"Ostrzeżenie: Nie udało się wyczyścić folderu {args.annotation_dir}: {e}")
-            
-            # Przetwórz każdy obraz
-            for image_file in image_files:
-                info(f"\n{'='*60}")
-                info(f"Przetwarzanie: {os.path.basename(image_file)}")
-                info(f"{'='*60}")
-                
-                try:
-                    # Obejście dla polskich znaków w ścieżce - skopiuj do temp folderu
-                    import tempfile
-                    import shutil
-                    temp_dir = tempfile.gettempdir()
-                    temp_image_path = os.path.join(temp_dir, f"ocr_temp_{os.path.basename(image_file)}")
-                    shutil.copy2(image_file, temp_image_path)
-                    
-                    # Segmentuj obraz (bez edycji bboxów - non_interactive=True)
-                    output_dir = process_letter(
-                        image_path=temp_image_path,
-                        base_dir=args.annotation_dir,
-                        enable_box_edit=not args.no_edit,
-                        non_interactive=args.non_interactive,
-                    )
-                    
-                    # Usuń tymczasowy plik
-                    try:
-                        os.remove(temp_image_path)
-                    except:
-                        pass
-                    
-                    if output_dir:
-                        # Przetwórz segmenty
-                        results = process_folder(output_dir, args, model_path, device, info)
-                        
-                        # Zbierz wyniki dla rozmieszczenia i tabeli
-                        layout_words = []
-                        table_rows = []
-                        
-                        for r in results:
-                            if "error" not in r:
-                                filename_only = os.path.basename(r["file"])
-                                name, _ = os.path.splitext(filename_only)
-                                
-                                layout_words.append({
-                                    "text": r["text"],
-                                    "confidence": r["confidence"],
-                                    "bbox": r.get("bbox")
-                                })
-                                
-                                table_rows.append({
-                                    "name": name,
-                                    "text": r["text"],
-                                    "confidence": r["confidence"]
-                                })
-                        
-                        # Wyświetl tabelę
-                        if table_rows:
-                            info(f"\n{'NAME':<12} {'TEXT':<20} {'CONF':<10}")
-                            info("-" * 45)
-                            for row in table_rows:
-                                info(f"{row['name']:<12} {row['text']:<20} {row['confidence']:.2f}%")
-                        
-                        # Wyświetl rozmieszczenie dla tego obrazu
-                        display_text_layout(layout_words, info)
-                
-                except Exception as e:
-                    info(f"Błąd przy przetwarzaniu {image_file}: {e}")
-                    import traceback
-                    info(traceback.format_exc())
+        results = process_folder(args.folder, args, model_path, device, info)
+        rows = []
+        for r in results:
+            if "error" in r:
+                rows.append({
+                    "key": None,
+                    "file": r["file"],
+                    "text": f"ERROR: {r['error']}",
+                    "confidence": None
+                })
+                continue
+
+            filename = os.path.basename(r["file"])      # word_061.png
+            name, _ = os.path.splitext(filename)        # word_061
+
+            rows.append({
+                "key": name,                            # klucz sortowania
+                "file": r["file"],
+                "text": r["text"],
+                "confidence": r["confidence"]
+            })
+        rows.sort(key=lambda r: r["key"] if r["key"] else "")
+        info(f"\n{'NAME':<12} {'TEXT':<20} {'CONF':<10}")
+        info("-" * 45)
+
+        for r in rows:
+            if r["confidence"] is None:
+                info(f"{str(r['key']) if r['key'] else '-':<12} {r['text']:<20} {'-':<10}")
+            else:
+                info(f"{r['key']:<12} {r['text']:<20} {r['confidence']:.2f}%")
         
     elif args.image:
         _require_file(args.image, info)

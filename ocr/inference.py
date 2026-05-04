@@ -418,6 +418,8 @@ def process_folder(folder_path, args, models_dir, device, info):
     bbox_data = _load_bbox_data(folder_path)
     bbox_index = 0
     
+    results = []
+    
     # Obsługiwane rozszerzenia plików graficznych
     supported_formats = {'.png', '.jpg', '.jpeg', '.bmp', '.gif', '.tiff', '.webp'}
     

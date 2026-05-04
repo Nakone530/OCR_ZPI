@@ -610,5 +610,9 @@ def aggregate(results, default_model):
     if top_count >= 2:
         return top_text
 
-    # fallback: default model
-    return results[default_model]["text"]
+    # fallback: default model or first available model
+    if default_model in results:
+        return results[default_model]["text"]
+    else:
+        # If default model not in results, use the most voted text
+        return top_text

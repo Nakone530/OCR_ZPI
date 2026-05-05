@@ -19,7 +19,7 @@ import sys
 import torch
 
 from ocr.config import MODEL_PATH
-from ocr.inference import compute_accuracy, test_models, test_cache_models, get_active_chars, load_model, predict_image, predict_letter, predict_segments, predict_word, process_folder
+from ocr.inference import run_ensemble_generation, compute_accuracy, test_models, test_cache_models, get_active_chars, load_model, predict_image, predict_letter, predict_segments, predict_word, process_folder
 from ocr.output import OCRResult, create_output_handler
 from ocr.trainer import train_model, infinite_train
 from ocr.utils import save_image_to_today_folder, list_models, generate_model_ensembles, load_transcription, save_results_csv
@@ -403,6 +403,7 @@ def main(args=None, info=None, buffor=None):
                 info(f"{r['key']:<12} {r['text']:<20} {r['confidence']:.2f}%")
 
     elif args.ensemble:
+        mn = run_ensemble_generation(model_path)
         # tryb cache
         if args.cache_path:
 
@@ -412,6 +413,7 @@ def main(args=None, info=None, buffor=None):
                 model_path,
                 device,
                 info,
+                mn,
                 args.cache_path,
             )
 
@@ -424,6 +426,7 @@ def main(args=None, info=None, buffor=None):
                 model_path,
                 device,
                 info,
+                mn,
             )
 
         else:
@@ -432,7 +435,8 @@ def main(args=None, info=None, buffor=None):
                 args,
                 model_path,
                 device,
-                info
+                info,
+                mn,
             )
         transcription = load_transcription(args.trans)
         rows = []
@@ -444,7 +448,8 @@ def main(args=None, info=None, buffor=None):
                     "file": r["file"],
                     "ensemble": None,
                     "text": f"ERROR: {r['error']}",
-                    "confidence": None
+                    "confidence": None,
+                    "accuracy": None
                 })
                 continue
 

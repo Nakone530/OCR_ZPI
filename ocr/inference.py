@@ -509,16 +509,26 @@ def predict_letter_multi(image_path, models, device, args, info):
 
 
 #--- Testowanie wielu kombinacji modeli
+def run_ensemble_generation(models_dir):
+    
 
+    models_dir = os.path.dirname(models_dir)
+    models = list_models(models_dir)
+    min_mn = int(input("Podaj min mn: ").strip())
+    max_mn = int(input("Podaj max mn: ").strip())
 
-def test_models(folder_path, args, models_dir, device, info):
+    if min_mn > max_mn:
+        raise ValueError("min_mn nie może być większe niż max_mn")
+
+    return generate_model_ensembles(models, min_mn, max_mn)
+
+def test_models(folder_path, args, models_dir, device, info, ensembles):
 
     if not os.path.isdir(folder_path):
         raise ValueError(f"To nie jest katalog: {folder_path}")
     
     models_dir = os.path.dirname(models_dir)
     models = list_models(models_dir)
-    ensembles = generate_model_ensembles(models, min_size=3)
 
     loaded_models = load_models(models_dir, models, device, info)
 
@@ -565,15 +575,13 @@ def test_models(folder_path, args, models_dir, device, info):
 
 
 
-def test_cache_models(folder_path, args, models_dir, device, info, cache_path="./cache"):
-            
+def test_cache_models(folder_path, args, models_dir, device, info, ensembles, cache_path="./cache"):
+
     if not os.path.isdir(folder_path):
         raise ValueError(f"To nie jest katalog: {folder_path}")
     
     models_dir = os.path.dirname(models_dir)
     models = list_models(models_dir)
-    ensembles = generate_model_ensembles(models)
-
     loaded_models = load_models(models_dir, models, device, info)
 
 
@@ -581,9 +589,9 @@ def test_cache_models(folder_path, args, models_dir, device, info, cache_path=".
     bbox_index = 0
 
     results = []
-    file_num = 0
     filename = "1"
     file_path = os.path.join(folder_path, filename)
+    file_num = 0
     try:
         info(f"\nRozpoznawanie: {file_path}")
         if cache_path == "./cache" :
@@ -597,7 +605,7 @@ def test_cache_models(folder_path, args, models_dir, device, info, cache_path=".
         else :
             cache = load_cache(cache_path)
                 
-        ensemble_results = run_ensembles_cache(cache, ensembles, (file_num/len(os.listdir(folder_path))))
+        ensemble_results = run_ensembles_cache(cache, ensembles)
 
         bbox = None
         if bbox_data and bbox_index < len(bbox_data):
@@ -615,6 +623,7 @@ def test_cache_models(folder_path, args, models_dir, device, info, cache_path=".
             "file": file_path,
             "error": str(e)
         })
+    
     file_num = file_num +1
     return results
 
@@ -652,21 +661,19 @@ def run_ensembles_inference(file_path, ensembles, loaded_models, device, args, i
     return ensemble_outputs
 
 
-def run_ensembles_cache(cache, ensembles, q):
+def run_ensembles_cache(cache, ensembles):
     results = []
     total_files = len(cache)
     total_ensembles = len(ensembles)
     total_steps = total_files * total_ensembles
 
     step = 0
-    num_file = 0
-    total_comp = math.ceil(q * 10000)/100
     for name, full_per_model in cache.items():
         ensemble_outputs = []
 
         for ensemble in ensembles:
             step_comp = math.ceil((step/total_steps) * 10000)/100
-            info(f"Total : {total_comp:.2f}%, Step: {step_comp:.2f}% Ensemble: {ensemble},")
+            info(f"Progress: {step_comp:.2f}% Ensemble: {ensemble},")
             subset = {m: full_per_model[m] for m in ensemble}
 
             default_model = max(
@@ -688,7 +695,6 @@ def run_ensembles_cache(cache, ensembles, q):
             "file": name,
             "ensembles": ensemble_outputs
         })
-        num_file = num_file + 1
     return results
 
 

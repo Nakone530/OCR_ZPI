@@ -636,7 +636,8 @@ def aggregate(results, default_model):
     return results[default_model]["text"]
 
 
-def generate_model_ensembles(models, min_size=3, max_size=5):
+
+def generate_model_ensembles(models, min_size=8, max_size=8):
     if max_size is None:
         max_size = len(models)
 
@@ -717,12 +718,17 @@ def to_serializable(obj):
 
 
 def save_results_csv(rows, path="results.csv"):
-    with open(path, "w", newline="", encoding="utf-8") as f:
+    file_exists = os.path.exists(path)
+
+    with open(path, "a", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(
             f,
             fieldnames=["key", "file", "ensemble", "text", "confidence", "accuracy"]
         )
-        writer.writeheader()
+
+        # zapis nagłówka tylko jeśli plik nowy
+        if not file_exists:
+            writer.writeheader()
 
         for r in rows:
             writer.writerow({

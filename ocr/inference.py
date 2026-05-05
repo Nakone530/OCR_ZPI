@@ -18,9 +18,11 @@ import cv2
 import numpy as np
 import torch
 import torch.nn as nn
+import math
 import matplotlib
 matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
+
 
 
 from PIL import Image
@@ -554,7 +556,6 @@ def test_models(folder_path, args, models_dir, device, info):
                 "ensembles": ensemble_results,
                 "bbox": bbox
             })
-
         except Exception as e:
             results.append({
                 "file": file_path,
@@ -580,11 +581,11 @@ def test_cache_models(folder_path, args, models_dir, device, info, cache_path=".
     bbox_index = 0
 
     results = []
-
+    file_num = 0
     for filename in os.listdir(folder_path):
         if not filename.lower().endswith(".png"):
             continue
-    
+        
         file_path = os.path.join(folder_path, filename)
     
         try:
@@ -599,24 +600,26 @@ def test_cache_models(folder_path, args, models_dir, device, info, cache_path=".
             )
             else :
                 cache = load_cache(cache_path)
-            ensemble_results = run_ensembles_cache(cache, ensembles)
+                
+            ensemble_results = run_ensembles_cache(cache, ensembles, (file_num/len(os.listdir(folder_path))))
 
             bbox = None
             if bbox_data and bbox_index < len(bbox_data):
                 bbox = bbox_data[bbox_index].get("bbox")
             bbox_index += 1
-
-            results.append({
-                "file": file_path,
-                "ensembles": ensemble_results,
-                "bbox": bbox
-            })
+            for e in ensemble_results:
+                results.append({
+                    "file": e["file"],
+                    "ensembles": e["ensembles"],
+                    "bbox": bbox
+                })
 
         except Exception as e:
             results.append({
                 "file": file_path,
                 "error": str(e)
             })
+        file_num = file_num +1
     return results
 
 
@@ -653,13 +656,21 @@ def run_ensembles_inference(file_path, ensembles, loaded_models, device, args, i
     return ensemble_outputs
 
 
-def run_ensembles_cache(cache, ensembles):
+def run_ensembles_cache(cache, ensembles, q):
     results = []
+    total_files = len(cache)
+    total_ensembles = len(ensembles)
+    total_steps = total_files * total_ensembles
 
+    step = 0
+    num_file = 0
+    total_comp = math.ceil(q * 10000)/100
     for name, full_per_model in cache.items():
         ensemble_outputs = []
 
         for ensemble in ensembles:
+            step_comp = math.ceil((step/total_steps) * 10000)/100
+            info(f"Total : {total_comp:.2f}%, Step: {step_comp:.2f}% Ensemble: {ensemble},")
             subset = {m: full_per_model[m] for m in ensemble}
 
             default_model = max(
@@ -676,12 +687,12 @@ def run_ensembles_cache(cache, ensembles):
                 "text": final_text,
                 "confidence": best_conf
             })
-
+            step = step + 1
         results.append({
             "file": name,
             "ensembles": ensemble_outputs
         })
-
+        num_file = num_file + 1
     return results
 
 
@@ -1101,3 +1112,6 @@ def show_before_after(pil_img, tensor_img):
     plt.axis("off")
 
     plt.show()
+
+
+

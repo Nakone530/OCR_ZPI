@@ -29,7 +29,7 @@ import torch
 import torch.nn as nn
 from torchvision import transforms
 import torchvision.transforms.functional as F
-
+import csv
 from datetime import datetime
 from typing import Any
 from datetime import date
@@ -620,19 +620,19 @@ def aggregate(results, default_model):
 
     for model_name, res in results.items():
         text = res["text"]
+
         conf = res["confidence"]
+        if hasattr(conf, "item"):  # torch / numpy
+            conf = conf.item()
 
         votes[text] += 1
         confidence_sum[text] = confidence_sum.get(text, 0) + conf
 
-    # majority
     top_text, top_count = votes.most_common(1)[0]
 
-    # czy jest consensus?
     if top_count >= 2:
         return top_text
 
-    # fallback: default model
     return results[default_model]["text"]
 
 
@@ -714,3 +714,22 @@ def to_serializable(obj):
         return [to_serializable(v) for v in obj]
 
     return obj
+
+
+def save_results_csv(rows, path="results.csv"):
+    with open(path, "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(
+            f,
+            fieldnames=["key", "file", "ensemble", "text", "confidence", "accuracy"]
+        )
+        writer.writeheader()
+
+        for r in rows:
+            writer.writerow({
+                "key": r["key"],
+                "file": r["file"],
+                "ensemble": "+".join(r["ensemble"]) if isinstance(r["ensemble"], list) else r["ensemble"],
+                "text": r["text"],
+                "confidence": r["confidence"],
+                "accuracy": r["accuracy"]
+            })

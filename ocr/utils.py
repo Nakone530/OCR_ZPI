@@ -637,7 +637,7 @@ def aggregate(results, default_model):
 
 
 
-def generate_model_ensembles(models, min_size=8, max_size=8):
+def generate_model_ensembles(models, min_size=3, max_size=5):
     if max_size is None:
         max_size = len(models)
 

@@ -582,44 +582,40 @@ def test_cache_models(folder_path, args, models_dir, device, info, cache_path=".
 
     results = []
     file_num = 0
-    for filename in os.listdir(folder_path):
-        if not filename.lower().endswith(".png"):
-            continue
-        
-        file_path = os.path.join(folder_path, filename)
-    
-        try:
-            info(f"\nRozpoznawanie: {file_path}")
-            if cache_path == "./cache" :
-                cache = build_cache(
-                args.ensemble,
-                loaded_models,
-                device,
-                args,
-                info
-            )
-            else :
-                cache = load_cache(cache_path)
+    filename = "1"
+    file_path = os.path.join(folder_path, filename)
+    try:
+        info(f"\nRozpoznawanie: {file_path}")
+        if cache_path == "./cache" :
+            cache = build_cache(
+            args.ensemble,
+            loaded_models,
+            device,
+            args,
+            info
+        )
+        else :
+            cache = load_cache(cache_path)
                 
-            ensemble_results = run_ensembles_cache(cache, ensembles, (file_num/len(os.listdir(folder_path))))
+        ensemble_results = run_ensembles_cache(cache, ensembles, (file_num/len(os.listdir(folder_path))))
 
-            bbox = None
-            if bbox_data and bbox_index < len(bbox_data):
-                bbox = bbox_data[bbox_index].get("bbox")
-            bbox_index += 1
-            for e in ensemble_results:
-                results.append({
-                    "file": e["file"],
-                    "ensembles": e["ensembles"],
-                    "bbox": bbox
-                })
-
-        except Exception as e:
+        bbox = None
+        if bbox_data and bbox_index < len(bbox_data):
+            bbox = bbox_data[bbox_index].get("bbox")
+        bbox_index += 1
+        for e in ensemble_results:
             results.append({
-                "file": file_path,
-                "error": str(e)
+                "file": e["file"],
+                "ensembles": e["ensembles"],
+                "bbox": bbox
             })
-        file_num = file_num +1
+
+    except Exception as e:
+        results.append({
+            "file": file_path,
+            "error": str(e)
+        })
+    file_num = file_num +1
     return results
 
 

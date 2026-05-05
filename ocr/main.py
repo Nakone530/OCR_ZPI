@@ -22,7 +22,7 @@ from ocr.config import MODEL_PATH
 from ocr.inference import compute_accuracy, test_models, test_cache_models, get_active_chars, load_model, predict_image, predict_letter, predict_segments, predict_word, process_folder
 from ocr.output import OCRResult, create_output_handler
 from ocr.trainer import train_model, infinite_train
-from ocr.utils import save_image_to_today_folder, list_models, generate_model_ensembles, load_transcription
+from ocr.utils import save_image_to_today_folder, list_models, generate_model_ensembles, load_transcription, save_results_csv
 from ocr.json_output import (
     build_image_result_json,
     build_word_result_json,
@@ -471,20 +471,26 @@ def main(args=None, info=None, buffor=None):
                 })
 
         rows.sort(key=lambda r: (r["key"] if r["key"] else "", r["ensemble"] or ""))
-
+        save_results_csv(rows)
         info(f"\n{'NAME':<12} {'ENSEMBLE':<30} {'TEXT':<20} {'CONF':<10} {'ACC':<10}")
         info("-" * 95)
-
+        buffer = []
         for r in rows:
             key = str(r["key"]) if r["key"] else "-"
             ensemble = r["ensemble"] if r["ensemble"] else "-"
-
+            ensemble_str = "+".join(ensemble)
             if r["confidence"] is None:
-                info(f"{key:<12} {ensemble:<30} {r['text']:<20} {'-':<10} {'-':<10}")
+                buffer.append(f"{key:<12} {ensemble_str:<30} {r['text']:<20} {'-':<10} {'-':<10}")
             else:
                 acc_str = f"{r['accuracy']:.2f}%" if r["accuracy"] is not None else "-"
-                info(f"{key:<12} {ensemble:<30} {r['text']:<20} {r['confidence']:.2f}% {acc_str:<10}")
-                
+                buffer.append(f"{key} {ensemble_str} {r['text']} {r['confidence']:.2f}% {acc_str}")
+            
+            if len(buffer) >= 1000:
+                info("\n".join(buffer))
+                buffer.clear()
+
+        info("\n".join(buffer))
+        
     elif args.image:
         _require_file(args.image, info)
         info(f"\nRozpoznawanie: {args.image}")

@@ -53,7 +53,7 @@ def analyze_ensembles(file_path: str):
     print("summary done")
     best_ensemble = summary_fast.iloc[0]
     print("best chosen")
-    top_ensembles_raw = summary_fast.head(10)["ensemble"]
+    top_ensembles_raw = summary_fast.head(100)["ensemble"]
     df_top = df[df["ensemble"].isin(top_ensembles_raw)].copy()
     
 

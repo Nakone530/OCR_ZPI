@@ -729,7 +729,6 @@ def save_results_csv(rows, path="results.csv"):
                 "key",
                 "file",
                 "ensemble",
-                "ensemble_length",
                 "text",
                 "confidence",
                 "accuracy"
@@ -740,19 +739,11 @@ def save_results_csv(rows, path="results.csv"):
             writer.writeheader()
 
         for r in rows:
-            ensemble = r["ensemble"]
-            if isinstance(ensemble, list):
-                ensemble_str = "+".join(ensemble)
-                ensemble_len = len(ensemble)
-            else:
-                ensemble_str = ensemble
-                ensemble_len = len(ensemble.split("+"))
 
             writer.writerow({
                 "key": r["key"],
                 "file": r["file"],
-                "ensemble": ensemble_str,
-                "ensemble_size": ensemble_len,
+                "ensemble": r["ensemble"],
                 "text": r["text"],
                 "confidence": r["confidence"],
                 "accuracy": r["accuracy"]

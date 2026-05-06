@@ -643,11 +643,11 @@ def generate_model_ensembles(models, min_size=3, max_size=5, mode=1):
 
     max_size = min(max_size, len(models))
 
-    if mode == 1
+    if mode == 1 :
         for r in range(min_size, max_size + 1):
             for combo in itertools.combinations(models, r):
                 yield combo
-    elif mode == 2
+    elif mode == 2 :
         for r in range(min_size, max_size + 1):
             for combo in itertools.permutations(models, r):
                 yield combo

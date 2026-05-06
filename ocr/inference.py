@@ -521,15 +521,15 @@ def run_ensemble_generation(models_dir):
     if min_mn > max_mn:
         raise ValueError("min_mn nie może być większe niż max_mn")
 
-    mode = int(input("Wybierz rodzaj selekcji (1-kombinacje, 2-wariacje)")
-    if mode == 1          
-        n = sum(math.perm(len(models), r) for r in range(min_mn, max_mn + 1))
-    elif mode == 2
+    mode = int(input("Wybierz rodzaj selekcji (1-kombinacje, 2-permutacje)"))
+    if mode == 1 :
         n = sum(math.comb(len(models), r) for r in range(min_mn, max_mn + 1))
-    else
+    elif mode == 2 :
+        n = sum(math.perm(len(models), r) for r in range(min_mn, max_mn + 1))
+    else :
         info("zły wybór, wybranie default -- kombinacje")
 
-    return generate_model_ensembles(models, min_mn, max_mn), n, mode
+    return generate_model_ensembles(models, min_mn, max_mn, mode), n
 
 def test_models(folder_path, args, models_dir, device, info, ensembles, mn):
 

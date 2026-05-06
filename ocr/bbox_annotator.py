@@ -29,6 +29,65 @@ def clamp_box(box, width, height, min_size=4):
     return [x1, y1, x2, y2]
 
 
+def get_bbox_dimensions(box):
+    x1, y1, x2, y2 = box
+    width = x2 - x1
+    height = y2 - y1
+    return width, height
+
+
+def analyze_bbox_lengths(boxes):
+    if not boxes:
+        return None
+    
+    lengths = []
+    for box_data in boxes:
+        box = box_data["box"]
+        w, h = get_bbox_dimensions(box)
+        lengths.append(w)
+    
+    lengths = np.array(lengths, dtype=np.float32)
+    
+    stats = {
+        "count": len(lengths),
+        "min": float(np.min(lengths)),
+        "max": float(np.max(lengths)),
+        "mean": float(np.mean(lengths)),
+        "median": float(np.median(lengths)),
+        "std": float(np.std(lengths)),
+        "p25": float(np.percentile(lengths, 25)),
+        "p50": float(np.percentile(lengths, 50)),
+        "p75": float(np.percentile(lengths, 75)),
+        "p90": float(np.percentile(lengths, 90)),
+    }
+    
+    return stats
+
+
+def categorize_bbox_by_length(box, thresholds=None):
+    w, h = get_bbox_dimensions(box)
+    
+    if thresholds is None:
+        thresholds = {"short": 50, "medium": 120}
+    
+    if w < thresholds["short"]:
+        return "short"
+    elif w < thresholds["medium"]:
+        return "medium"
+    else:
+        return "long"
+
+
+def add_length_to_boxes(boxes):
+    for box_data in boxes:
+        box = box_data["box"]
+        w, h = get_bbox_dimensions(box)
+        box_data["width"] = w
+        box_data["height"] = h
+        box_data["length_category"] = categorize_bbox_by_length(box)
+    return boxes
+
+
 
 
 def sort_boxes_reading_order(boxes):
@@ -675,11 +734,25 @@ def load_boxes_from_annotations(folder_path, img_w, img_h):
                 continue
 
             x1, y1, x2, y2 = [int(v) for v in bbox]
-            loaded_boxes.append(
-                {
-                    "box": clamp_box([x1, y1, x2, y2], img_w, img_h),
-                }
-            )
+            box_data = {
+                "box": clamp_box([x1, y1, x2, y2], img_w, img_h),
+            }
+            
+            # Wczytaj dodatkowe informacje o wymiarach jeśli istnieją
+            if "width" in row and "height" in row:
+                box_data["width"] = row["width"]
+                box_data["height"] = row["height"]
+            else:
+                w, h = get_bbox_dimensions(box_data["box"])
+                box_data["width"] = w
+                box_data["height"] = h
+            
+            if "length_category" in row:
+                box_data["length_category"] = row["length_category"]
+            else:
+                box_data["length_category"] = categorize_bbox_by_length(box_data["box"])
+            
+            loaded_boxes.append(box_data)
 
     return loaded_boxes if loaded_boxes else None
 
@@ -1009,6 +1082,17 @@ def process_letter(image_path, base_dir="inference", enable_box_edit=True, non_i
         print("Brak boxów do zapisania. Dodaj bboxy i spróbuj ponownie.")
         return None
 
+    edited_boxes = add_length_to_boxes(edited_boxes)
+    
+    # Analiza długości bboxów
+    length_stats = analyze_bbox_lengths(edited_boxes)
+    if length_stats:
+        print(f"\nStatystyki długości bboxów:")
+        print(f"  Liczba: {length_stats['count']}")
+        print(f"  Min: {length_stats['min']:.1f}, Max: {length_stats['max']:.1f}")
+        print(f"  Średnia: {length_stats['mean']:.1f}, Mediana: {length_stats['median']:.1f}")
+        print(f"  P25: {length_stats['p25']:.1f}, P50: {length_stats['p50']:.1f}, P75: {length_stats['p75']:.1f}")
+
     latest_dir_for_save = get_latest_output_dir(base_dir, letter_name)
 
     if latest_dir_for_save:
@@ -1063,12 +1147,19 @@ def process_letter(image_path, base_dir="inference", enable_box_edit=True, non_i
         save_path = os.path.join(output_dir, file_name)
         cv2.imwrite(save_path, crop_img, [cv2.IMWRITE_PNG_COMPRESSION, 1])
 
-        print(f"{file_name} | bbox=({xmin},{ymin},{xmax},{ymax})")
+        width = box_data.get("width", xmax - xmin)
+        height = box_data.get("height", ymax - ymin)
+        length_cat = box_data.get("length_category", "unknown")
+        
+        print(f"{file_name} | bbox=({xmin},{ymin},{xmax},{ymax}) | w={width}, h={height}, cat={length_cat}")
         
         # Zapisz bbox do jsonl
         bbox_entry = {
             "file_name": file_name,
-            "bbox_xyxy": [xmin, ymin, xmax, ymax]
+            "bbox_xyxy": [xmin, ymin, xmax, ymax],
+            "width": int(width),
+            "height": int(height),
+            "length_category": length_cat
         }
         jsonl_file.write(json.dumps(bbox_entry, ensure_ascii=False) + "\n")
         

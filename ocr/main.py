@@ -142,6 +142,7 @@ def build_parser() -> argparse.ArgumentParser:
     mode.add_argument("--annotate", type=str, metavar="PLIK", help="Wycinki: popraw bboxy i zapisz wycinki + adnotacje")
     mode.add_argument("--folder", type=str, metavar="PLIK", help="Rozpoznaj zdjęcia w folderze")
     mode.add_argument("--page", type=str, metavar="PLIK", help="Separacja zdjęcia na wyrazy oraz ich rozpoznanie")
+    mode.add_argument("--crnn", type=str, metavar="PLIK", help="Rozpoznawanie CRNN (tekst z obrazu)")
     # Porównanie z referencją
     parser.add_argument("--accuracy", "-a", type=str, default=None, metavar="PLIK",
                         help="Plik z referencyjną transkrypcją; oblicza procentowe podobieństwo wyniku OCR do referencji")

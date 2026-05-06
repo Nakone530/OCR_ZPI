@@ -85,6 +85,7 @@ GLOBAL_EPOCH = 0
 GLOBAL_BEST_ACC = 0.0
 GLOBAL_VAL_ACCURACY = 0.0
 
+_GLOBAL_MAJOR_VERSION = None
 # -- flagi kontrolne dla nieskończonego treningu
 TRAINING_PAUSED = False
 TRAINING_STOP = False
@@ -185,6 +186,28 @@ def collate_fn(batch):
 
 
 # -- Trening
+
+def get_runtime_major_version(folder):
+    global _GLOBAL_MAJOR_VERSION
+
+    if _GLOBAL_MAJOR_VERSION is not None:
+        return _GLOBAL_MAJOR_VERSION
+
+    pattern = re.compile(r"v(\d+)\.")
+    majors = []
+
+    if os.path.exists(folder):
+        for name in os.listdir(folder):
+            match = pattern.match(name)
+            if match:
+                majors.append(int(match.group(1)))
+
+    if not majors:
+        _GLOBAL_MAJOR_VERSION = 1
+    else:
+        _GLOBAL_MAJOR_VERSION = max(majors) + 1
+
+    return _GLOBAL_MAJOR_VERSION
 
 checkpoint_path = "checkpoint.pth"
 current_state = {}
@@ -675,17 +698,22 @@ def train_model(epochs=10, batch_size=32, model_path=None, info=None, args=None,
     info("=" * 60)
 
 def save_checkpoint_model(model, epoch, ratio):
-    folder = "models"
-    folder = os.path.join(folder, f"v6.{int(ratio*10) - 4}")
+    f_models = folder = "models"
+    major = get_runtime_major_version(f_models)
+    
+    folder = os.path.join(folder, f"v{major}")
     os.makedirs(folder, exist_ok=True)
-
-    mPath = os.path.join(folder, f"model_epoch{epoch}.pth")
+    
+    subfolder = os.path.join(folder, f"v{major}.{int(ratio*10) - 4}")
+    os.makedirs(subfolder, exist_ok=True)
+    mPath = os.path.join(subfolder, f"model.pth")
+    
     torch.save(model.state_dict(), mPath)
-    dPath = os.path.join(folder, f"model_v6.{int(ratio*10) - 4}_epoch{epoch}.txt")
+    dPath = os.path.join(subfolder, f"model_v{major}.{int(ratio*10) - 4}_epoch{epoch}.txt")
     with open(dPath, "w", encoding="utf-8") as f:
         f.write(f"epoch: {epoch}\n")
         f.write(f"ratio: {ratio}\n")
-        f.write(f"model_version: v6.{int(ratio*10) - 4}\n")
+        f.write(f"model_version: v{major}.{int(ratio*10) - 4}\n")
         
 def multi_train(
     preset_names: Optional[List[str]] = None,

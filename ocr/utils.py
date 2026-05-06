@@ -637,18 +637,20 @@ def aggregate(results, default_model):
 
 
 
-def generate_model_ensembles(models, min_size=3, max_size=5):
+def generate_model_ensembles(models, min_size=3, max_size=5, mode=1):
     if max_size is None:
         max_size = len(models)
 
     max_size = min(max_size, len(models))
 
-    ensembles = []
-
-    for r in range(min_size, max_size + 1):
-        ensembles.extend(itertools.combinations(models, r))
-
-    return ensembles
+    if mode == 1
+        for r in range(min_size, max_size + 1):
+            for combo in itertools.combinations(models, r):
+                yield combo
+    elif mode == 2
+        for r in range(min_size, max_size + 1):
+            for combo in itertools.permutations(models, r):
+                yield combo
 
 #---cache----------
 def parse_version(name: str):
@@ -723,18 +725,34 @@ def save_results_csv(rows, path="results.csv"):
     with open(path, "a", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(
             f,
-            fieldnames=["key", "file", "ensemble", "text", "confidence", "accuracy"]
+            fieldnames=[
+                "key",
+                "file",
+                "ensemble",
+                "ensemble_length",
+                "text",
+                "confidence",
+                "accuracy"
+            ]
         )
 
-        # zapis nagłówka tylko jeśli plik nowy
         if not file_exists:
             writer.writeheader()
 
         for r in rows:
+            ensemble = r["ensemble"]
+            if isinstance(ensemble, list):
+                ensemble_str = "+".join(ensemble)
+                ensemble_len = len(ensemble)
+            else:
+                ensemble_str = ensemble
+                ensemble_len = len(ensemble.split("+"))
+
             writer.writerow({
                 "key": r["key"],
                 "file": r["file"],
-                "ensemble": "+".join(r["ensemble"]) if isinstance(r["ensemble"], list) else r["ensemble"],
+                "ensemble": ensemble_str,
+                "ensemble_size": ensemble_len,
                 "text": r["text"],
                 "confidence": r["confidence"],
                 "accuracy": r["accuracy"]

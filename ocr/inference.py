@@ -12,6 +12,7 @@ import difflib
 import os
 import re
 import json
+import time
 from datetime import datetime
 from pathlib import Path
 import cv2
@@ -520,9 +521,17 @@ def run_ensemble_generation(models_dir):
     if min_mn > max_mn:
         raise ValueError("min_mn nie może być większe niż max_mn")
 
-    return generate_model_ensembles(models, min_mn, max_mn)
+    mode = int(input("Wybierz rodzaj selekcji (1-kombinacje, 2-wariacje)")
+    if mode == 1          
+        n = sum(math.perm(len(models), r) for r in range(min_mn, max_mn + 1))
+    elif mode == 2
+        n = sum(math.comb(len(models), r) for r in range(min_mn, max_mn + 1))
+    else
+        info("zły wybór, wybranie default -- kombinacje")
 
-def test_models(folder_path, args, models_dir, device, info, ensembles):
+    return generate_model_ensembles(models, min_mn, max_mn), n, mode
+
+def test_models(folder_path, args, models_dir, device, info, ensembles, mn):
 
     if not os.path.isdir(folder_path):
         raise ValueError(f"To nie jest katalog: {folder_path}")
@@ -553,7 +562,8 @@ def test_models(folder_path, args, models_dir, device, info, ensembles):
                 loaded_models,
                 device,
                 args,
-                info
+                info,
+                mn
             )
 
             bbox = None
@@ -575,7 +585,7 @@ def test_models(folder_path, args, models_dir, device, info, ensembles):
 
 
 
-def test_cache_models(folder_path, args, models_dir, device, info, ensembles, cache_path="./cache"):
+def test_cache_models(folder_path, args, models_dir, device, info, ensembles, mn, cache_path="./cache"):
 
     if not os.path.isdir(folder_path):
         raise ValueError(f"To nie jest katalog: {folder_path}")
@@ -605,7 +615,7 @@ def test_cache_models(folder_path, args, models_dir, device, info, ensembles, ca
         else :
             cache = load_cache(cache_path)
                 
-        ensemble_results = run_ensembles_cache(cache, ensembles)
+        ensemble_results = run_ensembles_cache(cache, ensembles, mn)
 
         bbox = None
         if bbox_data and bbox_index < len(bbox_data):
@@ -628,7 +638,7 @@ def test_cache_models(folder_path, args, models_dir, device, info, ensembles, ca
     return results
 
 
-def run_ensembles_inference(file_path, ensembles, loaded_models, device, args, info):
+def run_ensembles_inference(file_path, ensembles, loaded_models, device, args, info, mn):
     ensemble_outputs = []
 
     for ensemble in ensembles:
@@ -661,19 +671,18 @@ def run_ensembles_inference(file_path, ensembles, loaded_models, device, args, i
     return ensemble_outputs
 
 
-def run_ensembles_cache(cache, ensembles):
-    results = []
+def run_ensembles_cache(cache, ensembles, mn):
+    results = {name: [] for name in cache.keys()}
+    n = list_models(os.path.dirname(MODEL_PATH))
     total_files = len(cache)
-    total_ensembles = len(ensembles)
-    total_steps = total_files * total_ensembles
-
+    total_steps = total_files * mn
     step = 0
-    for name, full_per_model in cache.items():
-        ensemble_outputs = []
 
-        for ensemble in ensembles:
+    for ensemble in ensembles: 
+        for name, full_per_model in cache.items():
             step_comp = math.ceil((step/total_steps) * 10000)/100
             info(f"Progress: {step_comp:.2f}% Ensemble: {ensemble},")
+            
             subset = {m: full_per_model[m] for m in ensemble}
 
             default_model = max(
@@ -682,20 +691,19 @@ def run_ensembles_cache(cache, ensembles):
             )[0]
 
             final_text = aggregate(subset, default_model)
-
             best_conf = max(r["confidence"] for r in subset.values())
 
-            ensemble_outputs.append({
+            results[name].append({
                 "ensemble": ensemble,
                 "text": final_text,
                 "confidence": best_conf
             })
-            step = step + 1
-        results.append({
-            "file": name,
-            "ensembles": ensemble_outputs
-        })
-    return results
+
+            step += 1
+    return [
+        {"file": name, "ensembles": ens}
+        for name, ens in results.items()
+    ]
 
 
 #--- budowanie cache---

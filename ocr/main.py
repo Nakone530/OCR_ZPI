@@ -403,7 +403,7 @@ def main(args=None, info=None, buffor=None):
                 info(f"{r['key']:<12} {r['text']:<20} {r['confidence']:.2f}%")
 
     elif args.ensemble:
-        mn = run_ensemble_generation(model_path)
+        gen, mn = run_ensemble_generation(model_path)
         # tryb cache
         if args.cache_path:
 
@@ -413,6 +413,7 @@ def main(args=None, info=None, buffor=None):
                 model_path,
                 device,
                 info,
+                gen,
                 mn,
                 args.cache_path,
             )
@@ -426,6 +427,7 @@ def main(args=None, info=None, buffor=None):
                 model_path,
                 device,
                 info,
+                gen,
                 mn,
             )
 
@@ -436,6 +438,7 @@ def main(args=None, info=None, buffor=None):
                 model_path,
                 device,
                 info,
+                gen,
                 mn,
             )
         transcription = load_transcription(args.trans)

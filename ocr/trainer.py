@@ -17,7 +17,9 @@ import signal
 import threading
 import time
 import gc
+from dataclasses import dataclass, field
 from datetime import datetime
+from typing import List, Optional
 import json
 import numpy as np
 import torch
@@ -34,6 +36,43 @@ from .utils import get_train_transform, load_all_datasets
 from .model_archive import ModelArchiver
 from .OCRDataset import OCRDataset
 from . import info
+
+
+# ── Konfiguracje treningowe ───────────────────────────────────────────────────
+
+@dataclass
+class TrainingConfig:
+    """Konfiguracja jednego przebiegu treningowego."""
+    name: str
+    description: str
+    epochs: Optional[int] = None        # None = dziedziczy z CLI --epochs
+    batch_size: Optional[int] = None    # None = dziedziczy z CLI --batch-size
+    denoise_prob: float = 0.3           # prawdopodobieństwo RandomDenoise (0.0-1.0)
+    max_padding: int = 20               # maks. padding w pikselach (RandomPadding)
+    model_path: Optional[str] = None    # ścieżka zapisu (None = models/model_<name>.pth)
+    resume_path: Optional[str] = None   # ścieżka checkpointu do wznowienia
+
+
+TRAINING_PRESETS: dict = {
+    "baseline": TrainingConfig(
+        name="baseline",
+        description="Model bazowy – brak modyfikacji transformacji",
+        denoise_prob=0.0,
+        max_padding=20,
+    ),
+    "denoise": TrainingConfig(
+        name="denoise",
+        description="Trening z odszumianiem – RandomDenoise zawsze aktywny (prob=1.0)",
+        denoise_prob=1.0,
+        max_padding=20,
+    ),
+    "padding": TrainingConfig(
+        name="padding",
+        description="Trening z ulepszonym paddingiem – RandomPadding do 40px",
+        denoise_prob=0.0,
+        max_padding=40,
+    ),
+}
 
 
 # -- globalne
@@ -401,8 +440,8 @@ def save_best_model(path, info=None):
     return path
 
 
-def capture_best_model(info=None):
-    """Przechwytuje aktualny stan modelu jako najlepszy."""
+def capture_best_model(info=None, path=None):
+    """Przechwytuje aktualny stan modelu jako najlepszy i zapisuje go pod wskazaną ścieżką."""
     global BEST_MODEL_STATE, GLOBAL_MODEL, GLOBAL_OPTIMIZER, GLOBAL_EPOCH, GLOBAL_BEST_ACC, GLOBAL_CLASS_NAMES, GLOBAL_VAL_ACCURACY
 
     if info is None:
@@ -419,7 +458,7 @@ def capture_best_model(info=None):
         "class_names": GLOBAL_CLASS_NAMES,
         "val_char_accuracy": GLOBAL_VAL_ACCURACY,
     }
-    save_best_model(MODEL_PATH, info)
+    save_best_model(path or MODEL_PATH, info)
 
 
 def init_or_load_model(num_classes, model_path=None, info=None):
@@ -450,17 +489,33 @@ def init_or_load_model(num_classes, model_path=None, info=None):
             GLOBAL_MODEL.load_state_dict(checkpoint)
 
 
-def train_model(epochs=10, batch_size=32, model_path=None, info=None, args=None):
+def train_model(epochs=10, batch_size=32, model_path=None, info=None, args=None,
+                config: Optional['TrainingConfig'] = None, save_path: Optional[str] = None):
+    """
+    Trenuje model OCR.
+
+    Args:
+        config: TrainingConfig z parametrami transformacji (denoise_prob, max_padding).
+                Gdy None – używane są wartości domyślne.
+        save_path: ścieżka zapisu wytrenowanego modelu.
+                   Gdy None – używana jest stała MODEL_PATH.
+    """
     global GLOBAL_MODEL, GLOBAL_OPTIMIZER, GLOBAL_CRITERION
     global GLOBAL_DEVICE, GLOBAL_EPOCH, GLOBAL_BEST_ACC, GLOBAL_CLASS_NAMES, GLOBAL_VAL_ACCURACY
 
     if info is None:
         info = print
 
+    effective_save_path = save_path or MODEL_PATH
+
+    # Parametry transformacji z konfiguracji lub wartości domyślne
+    denoise_prob = config.denoise_prob if config is not None else 0.3
+    max_padding = config.max_padding if config is not None else 20
+
     # Odczyt dokładności istniejącego modelu i kopia zapasowa
-    prev_accuracy = get_stored_accuracy(MODEL_PATH)
-    backup_path = MODEL_PATH + ".backup"
-    _make_backup_as(MODEL_PATH, backup_path)
+    prev_accuracy = get_stored_accuracy(effective_save_path)
+    backup_path = effective_save_path + ".backup"
+    _make_backup_as(effective_save_path, backup_path)
     if prev_accuracy >= 0:
         info(f"Poprzednia dokładność modelu: {prev_accuracy:.2f}%")
     else:
@@ -471,8 +526,8 @@ def train_model(epochs=10, batch_size=32, model_path=None, info=None, args=None)
 
     dataset = OCRDataset(
         json_data=data,
-        images_dir=None,  # już niepotrzebne
-        transform=get_train_transform(args)
+        images_dir=None,
+        transform=get_train_transform(args, denoise_prob=denoise_prob, max_padding=max_padding)
     )
     
     info(f"4. Dataset załadowany: {len(dataset)} obrazów")
@@ -591,14 +646,14 @@ def train_model(epochs=10, batch_size=32, model_path=None, info=None, args=None)
 
     if prev_accuracy < 0:
         info("Pierwszy model – zapisuję jako punkt odniesienia.")
-        capture_best_model(info)
+        capture_best_model(info, path=effective_save_path)
     elif new_accuracy >= prev_accuracy:
         info(f"Poprawa: {prev_accuracy:.2f}% -> {new_accuracy:.2f}% – zapisuję nowy model.")
-        capture_best_model(info)
+        capture_best_model(info, path=effective_save_path)
     else:
         info(f"Brak poprawy: {prev_accuracy:.2f}% -> {new_accuracy:.2f}% – przywracam poprzedni model.")
         if os.path.exists(backup_path):
-            shutil.copy2(backup_path, MODEL_PATH)
+            shutil.copy2(backup_path, effective_save_path)
 
     # Usuń plik backup
     if os.path.exists(backup_path):
@@ -611,6 +666,107 @@ def train_model(epochs=10, batch_size=32, model_path=None, info=None, args=None)
     info(f"  Dokładność znakowa (val): {GLOBAL_VAL_ACCURACY:.2f}%")
     info(f"  Całkowity czas treningu: {total_training_time:.1f}s")
     info("=" * 60)
+
+
+def multi_train(
+    preset_names: Optional[List[str]] = None,
+    epochs: int = 10,
+    batch_size: int = 32,
+    info=None,
+):
+    """
+    Uruchamia wiele konfiguracji treningowych kolejno po sobie.
+
+    Args:
+        preset_names: lista nazw presetów z TRAINING_PRESETS; None lub [] = wszystkie
+        epochs: domyślna liczba epok (używana gdy preset nie nadpisuje)
+        batch_size: domyślny rozmiar batcha (używany gdy preset nie nadpisuje)
+        info: funkcja logowania
+
+    Przykład użycia w CLI:
+        python -m ocr.main --multi-train                 # wszystkie presety
+        python -m ocr.main --multi-train baseline denoise
+    """
+    global GLOBAL_MODEL, GLOBAL_EPOCH, GLOBAL_BEST_ACC, GLOBAL_VAL_ACCURACY, BEST_MODEL_STATE
+
+    if info is None:
+        info = print
+
+    if not preset_names:
+        configs = list(TRAINING_PRESETS.values())
+    else:
+        unknown = [n for n in preset_names if n not in TRAINING_PRESETS]
+        if unknown:
+            info(f"Nieznane presety: {', '.join(unknown)}")
+            info(f"Dostępne: {', '.join(TRAINING_PRESETS)}")
+            return
+        configs = [TRAINING_PRESETS[n] for n in preset_names]
+
+    total = len(configs)
+    info("\n" + "=" * 60)
+    info(f"  MULTI-TRENING – {total} konfiguracji w kolejce")
+    info("=" * 60)
+    for i, cfg in enumerate(configs, 1):
+        info(f"  {i}. [{cfg.name}] {cfg.description}")
+    info("=" * 60 + "\n")
+
+    results = []
+    overall_start = time.time()
+
+    for i, config in enumerate(configs, 1):
+        info("\n" + "=" * 60)
+        info(f"  [{i}/{total}] START: {config.name}")
+        info(f"  {config.description}")
+        info("=" * 60 + "\n")
+
+        # Resetuj globalny stan modelu – każdy preset zaczyna od zera
+        GLOBAL_MODEL = None
+        GLOBAL_EPOCH = 0
+        GLOBAL_BEST_ACC = 0.0
+        GLOBAL_VAL_ACCURACY = 0.0
+        BEST_MODEL_STATE = None
+
+        cfg_epochs = config.epochs if config.epochs is not None else epochs
+        cfg_batch_size = config.batch_size if config.batch_size is not None else batch_size
+        save_path = config.model_path or f"./models/model_{config.name}.pth"
+
+        run_start = time.time()
+        status = "OK"
+        try:
+            train_model(
+                epochs=cfg_epochs,
+                batch_size=cfg_batch_size,
+                model_path=config.resume_path,
+                info=info,
+                config=config,
+                save_path=save_path,
+            )
+        except Exception as exc:
+            status = "BŁĄD"
+            info(f"Błąd podczas treningu '{config.name}': {exc}")
+            import traceback
+            info(traceback.format_exc())
+
+        run_time = time.time() - run_start
+        results.append((config.name, status, GLOBAL_VAL_ACCURACY, save_path, run_time))
+        info(f"\n  [{i}/{total}] KONIEC: {config.name} | {status} | czas: {run_time:.1f}s\n")
+
+    total_time = time.time() - overall_start
+    info("\n" + "=" * 60)
+    info("  PODSUMOWANIE MULTI-TRENINGU")
+    info("=" * 60)
+    info(f"  {'PRESET':<14} {'STATUS':<8} {'DOKŁADNOŚĆ':>12}  ŚCIEŻKA")
+    info("  " + "-" * 58)
+    for name, status, acc, path, _ in results:
+        info(f"  {name:<14} {status:<8} {acc:>10.2f}%  {path}")
+    info("=" * 60)
+    info(f"  Łączny czas: {total_time:.1f}s")
+    info("=" * 60 + "\n")
+
+
+def get_preset_names() -> List[str]:
+    """Zwraca listę dostępnych nazw presetów treningowych."""
+    return list(TRAINING_PRESETS.keys())
 
 
 def show_infinite_menu(info=None):

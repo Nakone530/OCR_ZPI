@@ -87,29 +87,19 @@ def get_inf_transform(args) -> transforms.Compose:
     return transforms.Compose(pack)
 
 
-def get_train_transform(args) -> transforms.Compose:
+def get_train_transform(args=None, denoise_prob: float = 0.3, max_padding: int = 20) -> transforms.Compose:
     """
     Zwraca pipeline transformacji obrazu do trenowania modelu (z augmentacją danych).
-    
-    Pipeline zawiera:
-      - Losowa rotacja obrazu o maksymalnie 10 stopni (augmentacja)
-      - Konwersja do skali szarości (1 kanał)
-      - Zmiana rozmiaru do IMAGE_SIZE x IMAGE_SIZE
-      - Konwersja do tensora PyTorch
-      - Normalizacja wartości pikseli (mean=0.5, std=0.5)
-    
-    Zwraca:
-        transforms.Compose: Złożona transformacja z augmentacją
-                            do użycia podczas trenowania modelu.
-    
-    Przykład:
-        >>> train_transform = get_train_transform()
-        >>> tensor = train_transform(pil_image)
+
+    Args:
+        args: nieużywany, zachowany dla kompatybilności wstecznej
+        denoise_prob: prawdopodobieństwo losowego odszumiania (0.0 = wyłączone, 1.0 = zawsze)
+        max_padding: maksymalny padding w pikselach dla RandomPadding
     """
     pack = [
         transforms.RandomRotation(5),
-        RandomDenoise(),
-        RandomPadding(),
+        RandomDenoise(p=denoise_prob),
+        RandomPadding(max_pad=max_padding),
         ResizeWithAspect(),
         RandomOtsu(Otsu())
     ]

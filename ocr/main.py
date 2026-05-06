@@ -21,7 +21,7 @@ import torch
 from ocr.config import MODEL_PATH
 from ocr.inference import compute_accuracy, get_active_chars, load_model, predict_image, predict_letter, predict_segments, predict_word, process_folder
 from ocr.output import OCRResult, create_output_handler
-from ocr.trainer import train_model, infinite_train
+from ocr.trainer import train_model, infinite_train, multi_train, TRAINING_PRESETS, get_preset_names
 from ocr.utils import save_image_to_today_folder
 from ocr.json_output import (
     build_image_result_json,
@@ -135,6 +135,17 @@ def build_parser() -> argparse.ArgumentParser:
     mode.add_argument("--prepare", "-p", action="store_true", help="Pobierz i przygotuj dane")
     mode.add_argument("--train", "-t", action="store_true", help="Trenuj model (okreslona liczba epok)")
     mode.add_argument("--infinite", action="store_true", help="Nieskonczony trening do przerwania (Ctrl+C)")
+    mode.add_argument(
+        "--multi-train",
+        nargs="*",
+        metavar="PRESET",
+        dest="multi_train",
+        help=(
+            "Multi-trening: uruchamia kilka konfiguracji kolejno. "
+            f"Dostepne presety: {', '.join(TRAINING_PRESETS)}. "
+            "Bez argumentow = wszystkie presety."
+        ),
+    )
     mode.add_argument("--image", "-i", type=str, metavar="PLIK", help="Rozpoznaj pojedyncza litere")
     mode.add_argument("--word", "-w", type=str, metavar="PLIK", help="Rozpoznaj wyraz (jedna linia)")
     mode.add_argument("--lines", "-l", type=str, metavar="PLIK", help="Rozpoznaj tekst wieloliniowy")
@@ -278,6 +289,15 @@ def main(args=None, info=None, buffor=None):
     # ── Trening ──
     if args.train:
         train_model(epochs=args.epochs, batch_size=args.batch_size, model_path=args.resume, info=info, args=args)
+
+    elif args.multi_train is not None:
+        preset_names = args.multi_train or None  # [] -> None oznacza "wszystkie"
+        multi_train(
+            preset_names=preset_names,
+            epochs=args.epochs,
+            batch_size=args.batch_size,
+            info=info,
+        )
 
     elif args.infinite:
         info("\nUruchamianie nieskonczonego treningu...")

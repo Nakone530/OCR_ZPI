@@ -79,7 +79,8 @@ def get_inf_transform(args) -> transforms.Compose:
         >>> tensor = transform(pil_image)
     """
     pack = [ResizeWithAspect(),
-            RandomOtsu(Otsu()),]
+            RandomOtsu(Otsu()),
+            TightCrop(),]
     if getattr(args, "denoise", False):
         pack.append(trans_denoise_bil())
 
@@ -111,7 +112,8 @@ def get_train_transform(args) -> transforms.Compose:
         RandomDenoise(),
         RandomPadding(),
         ResizeWithAspect(),
-        RandomOtsu(Otsu())
+        RandomOtsu(Otsu()),
+        TightCrop(),
     ]
     pack.extend(base_transform())
     return transforms.Compose(pack)
@@ -176,6 +178,28 @@ class RandomOtsu:
         if random.random() < self.p:
             return self.otsu(img)
         return img
+
+class TightCrop:
+    def __call__(self, img):
+        # zakładamy PIL Image lub tensor -> konwersja do numpy
+        img_np = np.array(img)
+
+        if img_np.ndim == 3:  # RGB → grayscale
+            img_np = img_np.mean(axis=2)
+
+        # maska nie-tła (próg można dostosować)
+        mask = img_np < 250  # dla jasnego tła
+
+        coords = np.argwhere(mask)
+
+        if coords.size == 0:
+            return img  # fallback
+
+        y0, x0 = coords.min(axis=0)
+        y1, x1 = coords.max(axis=0) + 1
+
+        cropped = img.crop((x0, y0, x1, y1))
+        return cropped
     
 def preprocess_letter(img: np.ndarray) -> np.ndarray:
     """
@@ -553,13 +577,24 @@ def load_model(model_path: str = MODEL_PATH, device: torch.device = None, info=N
     return model
 
 #------Zarządzanie modelami------------
-def list_models(models_dir: str):
+def list_models(models_dir: str, version: str | None = None):
     models = [
         name for name in os.listdir(models_dir)
         if os.path.isdir(os.path.join(models_dir, name))
     ]
+
+    if version:
+        models = [
+            m for m in models
+            if m.startswith(f"v{version}")
+        ]
+
     models.sort()
     return models
+
+def select_version():
+    version = input("Wybierz wersję (ENTER = wszystkie): ").strip()
+    return version if version else None
 
 def select_models(models):
     print("\nDostępne modele:")

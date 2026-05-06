@@ -728,7 +728,10 @@ def multi_train(
 
         cfg_epochs = config.epochs if config.epochs is not None else epochs
         cfg_batch_size = config.batch_size if config.batch_size is not None else batch_size
-        save_path = config.model_path or f"./models/model_{config.name}.pth"
+        base_dir = config.model_path or "./models"
+        base_name = f"model_{config.name}"
+
+        save_path = get_versioned_model_path(base_dir, base_name)
 
         run_start = time.time()
         status = "OK"
@@ -763,6 +766,26 @@ def multi_train(
     info(f"  Łączny czas: {total_time:.1f}s")
     info("=" * 60 + "\n")
 
+def get_versioned_model_path(base_dir, base_name):
+    pattern = re.compile(rf"{re.escape(base_name)}_v(\d+)\.pth$")
+    
+    existing_versions = []
+
+    if not os.path.exists(base_dir):
+        os.makedirs(base_dir)
+
+    for f in os.listdir(base_dir):
+        match = pattern.match(f)
+        if match:
+            existing_versions.append(int(match.group(1)))
+
+    if not existing_versions:
+        version = 1
+    else:
+        version = max(existing_versions) + 1
+
+    filename = f"{base_name}_v{version}.pth"
+    return os.path.join(base_dir, filename)
 
 def get_preset_names() -> List[str]:
     """Zwraca listę dostępnych nazw presetów treningowych."""

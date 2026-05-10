@@ -132,7 +132,6 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     mode = parser.add_mutually_exclusive_group()
-    mode.add_argument("--prepare", "-p", action="store_true", help="Pobierz i przygotuj dane")
     mode.add_argument("--train", "-t", action="store_true", help="Trenuj model (okreslona liczba epok)")
     mode.add_argument("--infinite", action="store_true", help="Nieskonczony trening do przerwania (Ctrl+C)")
     mode.add_argument("--image", "-i", type=str, metavar="PLIK", help="Rozpoznaj pojedyncza litere")
@@ -143,13 +142,13 @@ def build_parser() -> argparse.ArgumentParser:
     mode.add_argument("--folder", type=str, metavar="PLIK", help="Rozpoznaj zdjęcia w folderze")
     mode.add_argument("--page", type=str, metavar="PLIK", help="Separacja zdjęcia na wyrazy oraz ich rozpoznanie")
     mode.add_argument("--ensemble", "-n", type=str, metavar="PLIK", help="Sprawdź kombinacle modeli")
-    parser.add_argument("--trans", "-s", type=str, metavar="PLIK", help="Plik zawierający transkrypcje")
+    parser.add_argument("--trans", "-s", type=str, metavar="PLIK", help="Plik zawierający transkrypcje, do użycia z -n")
     # Cache
     parser.add_argument("--cache_path", type=str)
     parser.add_argument("--use_cache", action="store_true")
     # Porównanie z referencją
     parser.add_argument("--accuracy", "-a", type=str, default=None, metavar="PLIK",
-                        help="Plik z referencyjną transkrypcją; oblicza procentowe podobieństwo wyniku OCR do referencji")
+                        help="Plik z referencyjną transkrypcją; oblicza procentowe podobieństwo wyniku do referencji")
 
     parser.add_argument("--epochs", "-e", type=int, default=10, help="Liczba epok (domyslnie: 10)")
     parser.add_argument("--batch-size", "-b", type=int, default=32, help="Rozmiar batcha (domyslnie: 32)")
@@ -168,20 +167,6 @@ def build_parser() -> argparse.ArgumentParser:
         choices=["nlm-color", "median", "bilateral", "gaussian"],
         help="Metoda odszumiania (domyslnie: nlm-color)",
     )
-    parser.add_argument("--h", type=int, default=10, help="Sila NLM - luminancja")
-    parser.add_argument("--hColor", type=int, default=10, help="Sila NLM - kolor")
-    parser.add_argument("--ksize", type=int, default=3, help="Rozmiar jadra dla median/gaussian (3,5,7...)")
-
-    parser.add_argument("--ws-fg-ratio", type=float, default=0.45)
-    parser.add_argument("--ws-split-aspect", type=float, default=1.15)
-    parser.add_argument("--ws-min-comp-area", type=int, default=30)
-    parser.add_argument("--ws-split-min-area", type=int, default=250)
-    parser.add_argument("--ws-min-box-w", type=int, default=3)
-    parser.add_argument("--ws-min-box-h", type=int, default=5)
-    parser.add_argument("--ws-min-box-area", type=int, default=20)
-    parser.add_argument("--ws-merge-gap", type=int, default=4)
-    parser.add_argument("--ws-merge-height-ratio", type=float, default=1.8)
-    parser.add_argument("--ws-merge-vert-dist", type=int, default=4)
 
     parser.add_argument("--model-path", type=str, default=None, metavar="PLIK", help="Sciezka do wytrenowanego modelu")
     parser.add_argument("--annotation-dir", type=str, default="inference", metavar="KATALOG", help="Katalog wyjsciowy dla trybu --annotate")

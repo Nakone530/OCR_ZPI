@@ -709,10 +709,8 @@ def infinite_train(batch_size=32, model_path=None, checkpoint_interval=5, info=N
     # Reset flag
     TRAINING_PAUSED = False
     TRAINING_STOP = False
-    GLOBAL_BEST_ACC = float('inf')  # reset na nieskończoność dla loss (chcemy minimalizować)
+    GLOBAL_BEST_ACC = float('inf')
     
-    # UWAGA: signal.signal() nie może być używany w wątku!
-    # Dlatego nie ustawiamy handlera - nieskończony trening będzie działać bez Ctrl+C
     
     try:
         info("1. Ładowanie datasetu...")

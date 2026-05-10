@@ -1,0 +1,254 @@
+id	crop_file	xmin	ymin	xmax	ymax	text	suggested_text	prediction_score	prob	source_image
+0	word_000.png	109	656	326	725	wczoraj	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+1	word_001.png	359	647	578	714	odwołać	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+2	word_002.png	596	652	784	717	kazałem	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+3	word_003.png	804	654	1016	717	odebrawszy	72 / ^ -	0.000000	0.147329	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+4	word_004.png	1045	632	1152	725	Twój	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+5	word_005.png	100	741	217	792	list	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+6	word_006.png	275	750	319	792	a	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+7	word_007.png	317	719	594	808	fortepian	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+8	word_008.png	603	719	750	806	jaki	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+9	word_009.png	752	725	873	792	głos	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+10	word_010.png	884	730	953	779	ma	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+11	word_011.png	964	714	1150	792	jeszcze	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+12	word_012.png	103	821	172	888	nie	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+13	word_013.png	192	801	333	871	wiem	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+14	word_014.png	350	801	408	875	bo	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+15	word_015.png	419	799	790	892	nie odpakowany	~a<l 14	0.000000	0.202794	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+16	word_016.png	804	792	984	868	dopiero	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+17	word_017.png	980	781	1130	877	jutro	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+18	word_018.png	85	900	163	953	ma	4 H^	0.000000	0.094075	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+19	word_019.png	185	884	295	975	być	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+20	word_020.png	317	897	413	955	ten	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+21	word_021.png	429	882	609	942	wielki	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+22	word_022.png	618	875	859	967	wypadek	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+23	word_023.png	882	855	958	915	Co	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+24	word_024.png	960	864	1009	931	się	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+25	word_025.png	1040	877	1074	917	z	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+26	word_026.png	1063	882	1228	942	poszukiwaniem	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+27	word_027.png	87	960	275	1018	waniem	44 ' 1 ! 7	0.000000	0.373808	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+28	word_028.png	304	975	379	1011	na	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+29	word_029.png	400	958	585	1020	rulażu	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+30	word_030.png	603	964	746	1034	tycze	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+31	word_031.png	770	958	853	1029	daj	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+32	word_032.png	871	946	1040	1031	pokój	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+33	word_033.png	1051	953	1130	1007	bo	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+34	word_034.png	78	1027	286	1092	nie warto	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+35	word_035.png	317	1022	408	1100	się	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+36	word_036.png	433	1025	612	1100	kłócić	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+37	word_037.png	681	1031	904	1094	Zrobiłeś	7 7 1	0.000000	0.413783	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+38	word_038.png	884	1031	1013	1114	jak	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+39	word_039.png	1027	1036	1214	1109	mogłeś	" ;Y,	0.000000	0.153059	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+40	word_040.png	76	1092	307	1179	najlepiej	7 0; , 4 4 F	0.000000	0.222698	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+41	word_041.png	328	1118	469	1192	parę	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+42	word_042.png	487	1105	652	1185	kropel	9€	0.000000	0.018281	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+43	word_043.png	674	1109	766	1199	złej	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+44	word_044.png	795	1105	953	1174	krwi	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+45	word_045.png	980	1109	1018	1159	i	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+46	word_046.png	1031	1105	1183	1167	kilka	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+47	word_047.png	71	1181	194	1248	dni	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+48	word_048.png	203	1188	467	1248	straconych	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+49	word_049.png	498	1208	576	1234	na	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+50	word_050.png	576	1181	891	1248	oczekiwaniu	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+51	word_051.png	913	1188	1163	1239	nie warte	ue ch 4 4	0.000000	0.080082	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+52	word_052.png	78	1248	214	1344	tylko	; {4	0.000000	0.123104	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+53	word_053.png	241	1275	342	1319	nos	1 1	0.000000	0.168293	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+54	word_054.png	346	1246	596	1344	porządnie	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+55	word_055.png	614	1252	730	1308	sobie	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+56	word_056.png	748	1252	902	1319	utrzeć	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+57	word_057.png	904	1263	987	1319	po	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+58	word_058.png	991	1239	1199	1315	skończonej	77 /2// <	0.000000	0.354602	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+59	word_059.png	78	1326	257	1415	sprawie	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+60	word_060.png	348	1319	449	1400	Więc	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+61	word_061.png	472	1323	727	1413	zapomnij	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+62	word_062.png	743	1308	797	1368	i	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+63	word_063.png	795	1321	913	1377	moje	{ 11	0.000000	0.533360	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+64	word_064.png	942	1308	1201	1362	komisa	f , ,1 /1 / [ ^	0.000000	0.083641	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+65	word_065.png	76	1397	192	1458	Twją	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+66	word_066.png	223	1411	408	1478	sprawę	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+67	word_067.png	491	1382	640	1458	Drugi	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+68	word_068.png	652	1404	763	1442	raz	7	0.000000	0.355135	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+69	word_069.png	777	1386	855	1446	da	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+70	word_070.png	866	1371	938	1446	Pan	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+71	word_071.png	953	1373	1036	1458	Bóg	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+72	word_072.png	1051	1366	1214	1444	doczekać	4 <	0.000000	0.838290	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+73	word_073.png	78	1462	224	1551	lepiej	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+74	word_074.png	241	1467	402	1538	będzie	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+75	word_075.png	467	1440	580	1534	Późno	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+76	word_076.png	589	1478	645	1520	w	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+77	word_077.png	650	1478	759	1540	nocy	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+78	word_078.png	772	1471	828	1520	ci	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+79	word_079.png	830	1458	958	1529	piszę	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+80	word_080.png	969	1455	1040	1507	te	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+81	word_081.png	1049	1453	1199	1516	kilka	4.;	0.000000	0.097704	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+82	word_082.png	63	1545	199	1641	słów	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+83	word_083.png	194	1547	384	1643	Jeszcze	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+84	word_084.png	402	1542	473	1607	Ci	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+85	word_085.png	473	1545	578	1605	raz	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+86	word_086.png	592	1529	855	1605	dziękuje	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+87	word_087.png	871	1509	1031	1603	dziękuje	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+88	word_088.png	1049	1534	1150	1574	za	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+89	word_089.png	87	1630	225	1712	Twoje	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+90	word_090.png	250	1612	504	1712	sprawunki	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+91	word_091.png	527	1598	734	1683	którym	4	0.000000	0.972435	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+92	word_092.png	761	1589	982	1652	nie koniec	3 } { / { 11 ' {	0.000000	0.228265	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+93	word_093.png	1000	1589	1069	1645	bo	4	0.000000	0.582577	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+94	word_094.png	1089	1583	1223	1654	teraz	7 (	0.000000	0.619099	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+95	word_095.png	98	1710	248	1777	afera	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+96	word_096.png	279	1685	545	1765	Troupenasa	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+97	word_097.png	576	1688	650	1732	Ci	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+98	word_098.png	648	1671	763	1749	będzie	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+99	word_099.png	780	1658	945	1733	wisieć	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+100	word_100.png	959	1681	1037	1724	na	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+101	word_101.png	1042	1658	1186	1729	karku	'i / H { (	0.000000	0.116292	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+102	word_102.png	85	1766	254	1850	O tym	7 ) 44	0.000000	0.204860	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+103	word_103.png	268	1762	336	1836	Ci	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+104	word_104.png	336	1745	580	1840	obszerniej	11 )*} _	0.000000	0.099188	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+105	word_105.png	602	1737	765	1846	kiedyś	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+106	word_106.png	773	1751	1023	1850	napiszę	1	0.000000	0.111011	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+107	word_107.png	1035	1755	1083	1809	a	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+108	word_108.png	1097	1733	1180	1836	dziś	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+109	word_109.png	1284	609	1467	717	dobrej	44	0.000000	0.148959	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+110	word_110.png	1500	636	1623	719	nocy	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+111	word_111.png	1645	629	1737	699	ci	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+112	word_112.png	1741	609	1906	717	życzę	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+113	word_113.png	1911	625	1962	690	i	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+114	word_114.png	1971	634	2107	692	niech	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+115	word_115.png	2109	632	2167	685	ci	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+116	word_116.png	2185	614	2277	701	się	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+117	word_117.png	1259	708	1368	766	śni	) ,4	0.000000	0.159137	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+118	word_118.png	1386	694	1482	770	śni	4 > ]	0.000000	0.274832	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+119	word_119.png	1482	699	1603	775	jak	/> 4	0.000000	0.181535	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+120	word_120.png	1607	694	1830	786	Jasiowi	1 ! r '~7	0.000000	0.167842	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+121	word_121.png	1842	701	1940	766	żem	2 447	0.000000	0.416077	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+122	word_122.png	1951	694	2143	768	umarł	44 77} 4 1	0.000000	0.055352	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+123	word_123.png	2118	699	2301	786	tylko	{a	0.000000	0.131626	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+124	word_124.png	1257	772	1373	824	niech	4; ,'4 ^ 4	0.000000	0.278098	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+125	word_125.png	1397	779	1460	826	Ci	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+126	word_126.png	1480	779	1555	844	się	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+127	word_127.png	1583	766	1656	821	śni	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+128	word_128.png	1670	772	1730	833	że	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+129	word_129.png	1746	781	1819	837	się	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+130	word_130.png	1837	779	1955	844	rodzę	2 7	0.000000	0.126213	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+131	word_131.png	1967	775	2085	839	albo	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+132	word_132.png	2103	777	2188	828	coś	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+133	word_133.png	2181	777	2384	850	podobnego	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+134	word_134.png	1310	842	1393	893	W	1/	0.000000	0.164607	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+135	word_135.png	1353	844	1525	926	istocie	29 A+< ^<	0.000000	0.051898	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+136	word_136.png	1551	844	1699	891	teraz	f 'r	0.000000	0.292989	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+137	word_137.png	1701	848	1797	904	tak	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+138	word_138.png	1804	833	1982	924	łagodny	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+139	word_139.png	1984	839	2125	920	czynię	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+140	word_140.png	2136	839	2217	917	się	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+141	word_141.png	2223	846	2359	926	jak	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+142	word_142.png	1263	904	1411	971	dziecko	4 <	0.000000	0.189249	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+143	word_143.png	1426	922	1482	955	w	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+144	word_144.png	1467	909	1728	991	pieluchach	{< 4	0.000000	0.497562	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+145	word_145.png	1755	911	1797	958	i	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+146	word_146.png	1810	906	1913	993	żeby	-	0.000000	0.570922	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+147	word_147.png	1940	911	2011	964	mię	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+148	word_148.png	2027	900	2130	953	kto	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+149	word_149.png	2145	922	2210	958	na	2	0.000000	0.273911	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+150	word_150.png	2203	902	2400	980	paskach	44,	0.000000	0.185562	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+151	word_151.png	1250	978	1404	1036	chciał	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+152	word_152.png	1417	964	1551	1038	wodzić	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+153	word_153.png	1576	971	1708	1036	bardzo	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+154	word_154.png	1730	973	1848	1054	bym	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+155	word_155.png	1866	964	1962	1038	się	'(	0.000000	0.214733	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+156	word_156.png	1958	962	2136	1034	cieszył	24 / 7	0.000000	0.486182	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+157	word_157.png	2123	969	2203	1020	nb.	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+158	word_158.png	2214	982	2277	1016	z	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+159	word_159.png	1243	1045	1393	1112	bardzo	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+160	word_160.png	1429	1038	1580	1087	dobrze	4 - 1 (	0.000000	0.304223	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+161	word_161.png	1596	1040	1851	1100	owatowaną	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+162	word_162.png	1875	1040	2031	1103	czapką	2 2	0.000000	0.926126	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+163	word_163.png	2040	1045	2103	1076	na	3/41	0.000000	0.129068	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+164	word_164.png	2114	1027	2308	1100	łepecie	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+165	word_165.png	1248	1109	1417	1199	bobym	{ 1 "	0.000000	0.414223	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+166	word_166.png	1446	1103	1511	1176	się	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+167	word_167.png	1536	1103	1654	1176	czuję	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+168	word_168.png	1672	1112	1710	1152	co	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+169	word_169.png	1732	1114	1951	1161	moment	41 7 11 = 8 7 1 [	0.000000	0.134392	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+170	word_170.png	1953	1089	2179	1183	potykał	1 ~1 7 4 }	0.000000	0.351364	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+171	word_171.png	2176	1109	2223	1167	i	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+172	word_172.png	1234	1172	1549	1268	przewracał	'7c4v 744	0.000000	0.365515	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+173	word_173.png	1565	1159	1855	1240	Na nieszczęście	4464 1 / 2(	0.000000	0.088830	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+174	word_174.png	1866	1170	2042	1225	zamiast	4 , n'/ 4	0.000000	0.250264	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+175	word_175.png	2042	1161	2255	1232	pasków	9 )	0.000000	0.191034	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+176	word_176.png	1243	1272	1471	1339	zapewne	~1 / 2 41 € 8 "	0.000000	0.121517	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+177	word_177.png	1489	1252	1578	1301	mię	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+178	word_178.png	1592	1239	1748	1313	czekają	197 < 4a74	0.000000	0.029228	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+179	word_179.png	1768	1230	1942	1295	szczudła	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+180	word_180.png	1953	1232	2123	1297	czy kule	4 {Y 4   &	0.000000	0.289470	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+181	word_181.png	2123	1221	2275	1297	jeżeli	1 2	0.000000	0.890700	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+182	word_182.png	2266	1210	2330	1286	się	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+183	word_183.png	1223	1326	1313	1386	ku	d n	0.000000	0.072286	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+184	word_184.png	1333	1315	1509	1373	starości	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+185	word_185.png	1509	1315	1746	1377	dzisiejszym	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+186	word_186.png	1768	1299	1942	1364	krokiem	17 7 + 7}4 '	0.000000	0.181714	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+187	word_187.png	1960	1301	2123	1366	dostanę	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+188	word_188.png	2170	1301	2346	1377	Niegdyś	7/,<	0.000000	0.303859	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+189	word_189.png	1239	1388	1362	1446	śniło	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+190	word_190.png	1371	1386	1473	1446	mi	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+191	word_191.png	1475	1377	1531	1455	się	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+192	word_192.png	1554	1380	1647	1438	żem	2 2 4	0.000000	0.450638	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+193	word_193.png	1670	1373	1817	1438	umarł	1 1 27 Va	0.000000	0.074143	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+194	word_194.png	1821	1393	1864	1426	w	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+195	word_195.png	1886	1371	2092	1446	szpitalu	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+196	word_196.png	2107	1366	2145	1420	i	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+197	word_197.png	2152	1364	2315	1422	tak mi	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+198	word_198.png	1232	1458	1310	1520	to	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+199	word_199.png	1335	1451	1380	1500	w	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+200	word_200.png	1366	1449	1538	1545	głowie	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+201	word_201.png	1554	1438	1761	1511	utkwiło	4 11	0.000000	0.539303	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+202	word_202.png	1757	1440	1828	1502	ż	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+203	word_203.png	1830	1446	1931	1493	zdaje	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+204	word_204.png	1946	1442	2036	1489	mi	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+205	word_205.png	2034	1453	2109	1509	się	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+206	word_206.png	2112	1431	2174	1489	że	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+207	word_207.png	2183	1446	2342	1512	wczoraj	14	0.000000	0.636470	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+208	word_208.png	1241	1520	1380	1603	Jeżeli	J; 4	0.000000	0.271774	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+209	word_209.png	1400	1520	1551	1576	mnie	4 1 ] 1 1 L ~	0.000000	0.119846	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+210	word_210.png	1540	1513	1804	1596	przeżyjesz	1 2 1 / ) / 7	0.000000	0.100041	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+211	word_211.png	1830	1500	2005	1551	dowiesz	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+212	word_212.png	2016	1496	2094	1565	się	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+213	word_213.png	2094	1507	2159	1574	czy	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+214	word_214.png	2174	1502	2219	1545	w	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+215	word_215.png	2226	1498	2308	1578	sny	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+216	word_216.png	1232	1586	1412	1666	wierzyć	4/ { { 7/ 7 }	0.000000	0.425046	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+217	word_217.png	1427	1586	1571	1658	trzeba	41	0.000000	0.224985	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+218	word_218.png	1602	1566	1758	1635	temu	1 } > [ {	0.000000	0.203481	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+219	word_219.png	1769	1553	1910	1628	kilka	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+220	word_220.png	1925	1563	2028	1620	lat	4 /	0.000000	0.553213	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+221	word_221.png	2038	1576	2095	1617	co	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+222	word_222.png	2102	1561	2251	1622	innego	2 } 1 > <	0.000000	0.371115	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+223	word_223.png	2267	1556	2351	1612	mi	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+224	word_224.png	1217	1653	1312	1730	się	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+225	word_225.png	1322	1643	1448	1717	śniło	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+226	word_226.png	1450	1656	1533	1717	ale	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+227	word_227.png	1540	1645	1620	1717	się	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+228	word_228.png	1630	1638	1874	1717	nie wyśniło	2,, 1 917	0.000000	0.020311	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+229	word_229.png	1902	1630	2000	1710	I	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+230	word_230.png	1992	1625	2123	1676	teraz	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+231	word_231.png	2120	1615	2210	1679	śnię	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+232	word_232.png	2213	1630	2285	1666	na	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+233	word_233.png	2282	1620	2398	1692	jawie	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+234	word_234.png	1240	1710	1589	1792	szałki-opałki	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+235	word_235.png	1602	1699	1694	1784	jak	41/1	0.000000	0.443810	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+236	word_236.png	1705	1699	1764	1758	to	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+237	word_237.png	1756	1684	1997	1782	powiadają	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+238	word_238.png	2023	1684	2197	1761	dlatego	4 /,'	0.000000	0.555355	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+239	word_239.png	2221	1681	2280	1733	ci	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+240	word_240.png	2287	1681	2398	1735	takie	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+241	word_241.png	1235	1782	1476	1874	głupstwa	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+242	word_242.png	1473	1776	1617	1856	piszę	477 / : (	0.000000	0.277090	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+243	word_243.png	1648	1761	1928	1828	Nieprawda?	1 > 7	0.000000	0.263028	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+244	word_244.png	1959	1743	2110	1830	Przyślij	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+245	word_245.png	2131	1761	2185	1817	mi	4	0.000000	0.308137	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+246	word_246.png	2200	1740	2390	1830	rychło	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+247	word_247.png	1260	1864	1384	1920	list	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+248	word_248.png	1396	1879	1425	1915	z	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+249	word_249.png	1432	1853	1561	1915	domu	81	0.000000	0.097065	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+250	word_250.png	1640	1841	1697	1902	i	[manual]	0.000000	1.000000	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+251	word_251.png	1697	1838	1851	1925	kochaj	A{ ^	0.000000	0.382582	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg
+252	word_252.png	1864	1833	2036	1917	starego	1' 4 4{4 {	0.000000	0.339250	C:\OCR_ZPI\Chopin\List Fryderyka Chopina do Juliana Fontany12.jpg

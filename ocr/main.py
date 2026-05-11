@@ -27,6 +27,7 @@ from ocr.json_output import (
     build_image_result_json,
     build_word_result_json,
     build_lines_result_json,
+    build_page_result_json,
     build_multi_result_json,
     dump_json,
     write_json,
@@ -355,7 +356,15 @@ def main(args=None, info=None, buffor=None):
         
         # Wyświetl w rozmieszczeniu
         display_text_layout(layout_words, info)
-
+        if args.json:
+            saved_copy_path = save_image_to_today_folder(args.page, info)
+            payload = build_page_result_json(
+                image_path=args.page,
+                saved_copy_path=args.page,
+                rows=table_rows,
+                device=str(device),
+            )
+            info(dump_json(payload, pretty=args.json_pretty))
     elif args.folder:
         results = process_folder(args.folder, args, model_path, device, info)
         rows = []
@@ -387,6 +396,15 @@ def main(args=None, info=None, buffor=None):
                 info(f"{str(r['key']) if r['key'] else '-':<12} {r['text']:<20} {'-':<10}")
             else:
                 info(f"{r['key']:<12} {r['text']:<20} {r['confidence']:.2f}%")
+
+        if args.json:
+            payload = build_page_result_json(
+                image_path=args.lines,
+                saved_copy_path=args.folder,
+                rows=rows,
+                device=str(device),
+            )
+            info(dump_json(payload, pretty=args.json_pretty))
 
     elif args.ensemble:
         gen, mn = run_ensemble_generation(model_path)

@@ -494,22 +494,6 @@ def save_image_to_temp_folder(image: Any, order: str) -> str:
 ACTIVE_CHARS = list(CHARS)
 
 
-def _map_chars74k_sample_to_char(sample_name: str) -> str:
-    """Mapuje nazwę SampleXXX z Chars74K na znak (A-Z, a-z, 0-9) gdy to możliwe."""
-    match = re.fullmatch(r"Sample(\d+)", sample_name)
-    if not match:
-        return sample_name
-
-    idx = int(match.group(1))
-    if 1 <= idx <= 10:
-        return str(idx - 1)
-    if 11 <= idx <= 36:
-        return chr(ord("A") + (idx - 11))
-    if 37 <= idx <= 62:
-        return chr(ord("a") + (idx - 37))
-    return sample_name
-
-
 def get_active_chars() -> list[str]:
     """Zwraca aktualne mapowanie indeks->znak używane przez model."""
     return list(ACTIVE_CHARS)
@@ -518,12 +502,7 @@ def get_active_chars() -> list[str]:
 def _set_active_chars(checkpoint: object | None = None) -> None:
     """Ustawia mapowanie indeks->znak na podstawie checkpointa lub domyślnej konfiguracji."""
     global ACTIVE_CHARS
-    if isinstance(checkpoint, dict) and "class_names" in checkpoint:
-        class_names = checkpoint.get("class_names")
-        if isinstance(class_names, list) and class_names:
-            ACTIVE_CHARS = [_map_chars74k_sample_to_char(str(name)) for name in class_names]
-            info(f"Wczytano mapowanie klas z checkpointa ({len(ACTIVE_CHARS)} klas)")
-            return
+
 
     ACTIVE_CHARS = list(CHARS)
 

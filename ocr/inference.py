@@ -39,7 +39,6 @@ from .utils import (
     select_models,
     load_models,
     aggregate,
-    _map_chars74k_sample_to_char,
     get_active_chars,
     _set_active_chars,
     _label_for_idx,

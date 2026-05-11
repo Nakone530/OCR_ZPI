@@ -2,7 +2,6 @@
 Moduł trenowania modelu OCR.
 
 Odpowiedzialności:
-  - pobieranie i rozpakowywanie datasetu Chars74K
   - trening sieci MainModel z walidacją
   - zapis najlepszego modelu na dysk
   - nieskończony trening z możliwością przerwania i kontynuacji
@@ -26,7 +25,7 @@ import torch.nn.functional as F
 from torchvision import datasets
 
 from .config import (
-    DATA_DIR, ARCHIVE_PATH, EXTRACTED_DIR, MODEL_PATH, CHECKPOINT_PATH,
+    DATA_DIR, MODEL_PATH, CHECKPOINT_PATH,
     MODEL_ARCHIVE_DIR, MODEL_ARCHIVE_KEEP_COUNT, IMAGES_DIR, CHARS, char2idx, idx2char, DATA_ROOT_DIR
 )
 from .model import MainModel

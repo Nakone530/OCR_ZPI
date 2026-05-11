@@ -37,12 +37,13 @@ EXTRACTED_DIR = os.path.join(DATA_DIR, "English", "Fnt")
 
 IMAGES_DIR = "./ttData"
 # ── Model ─────────────────────────────────────────────────────────────────────
+# Ścieżka do folderu modeli
+MODEL_DIR = "./models"
 # Ścieżka do zapisanego wytrenowanego modelu
-MODEL_PATH = "./models/model_ocr.pth"
-OCR_MODEL_PATH = "./models/model_ocr_old.pth"
+MODEL_PATH = os.path.join(MODEL_DIR, "model_ocr.pth")
+OCR_MODEL_PATH = os.path.join(MODEL_DIR, "model_ocr_old.pth")
 # Ścieżka do checkpointu (do wznawiania treningu)
-CHECKPOINT_PATH = "./models/checkpoint.pth"
-
+CHECKPOINT_PATH = os.path.join(MODEL_DIR, "checkpoint.pth")
 # Ścieżka do archiwum starych modeli
 MODEL_ARCHIVE_DIR = "./model_archive"
 
@@ -50,8 +51,8 @@ MODEL_ARCHIVE_DIR = "./model_archive"
 MODEL_ARCHIVE_KEEP_COUNT = 10
 
 # ── Obraz ─────────────────────────────────────────────────────────────────────
-# Rozmiar obrazu wejściowego dla modelu CNN (szerokość i wysokość)
-IMAGE_SIZE = 28
+# Rozmiar obrazu wejściowego dla modelu CNN OCR (szerokość i wysokość)
+IMAGE_SIZE = 24
 
 # Wartości średnie do normalizacji obrazu (format ImageNet)
 MEAN = [0.5, 0.5, 0.5]

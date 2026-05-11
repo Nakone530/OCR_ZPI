@@ -3,7 +3,7 @@ Moduł trenowania modelu OCR.
 
 Odpowiedzialności:
   - pobieranie i rozpakowywanie datasetu Chars74K
-  - trening sieci SimpleCNN z walidacją
+  - trening sieci MainModel z walidacją
   - zapis najlepszego modelu na dysk
   - nieskończony trening z możliwością przerwania i kontynuacji
 """
@@ -29,7 +29,7 @@ from .config import (
     DATA_DIR, ARCHIVE_PATH, EXTRACTED_DIR, MODEL_PATH, CHECKPOINT_PATH,
     MODEL_ARCHIVE_DIR, MODEL_ARCHIVE_KEEP_COUNT, IMAGES_DIR, CHARS, char2idx, idx2char, DATA_ROOT_DIR
 )
-from .model import SimpleCNN
+from .model import MainModel
 from .utils import get_train_transform, load_all_datasets
 from .model_archive import ModelArchiver
 from .OCRDataset import OCRDataset
@@ -431,7 +431,7 @@ def init_or_load_model(num_classes, model_path=None, info=None):
 
     GLOBAL_DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    GLOBAL_MODEL = SimpleCNN(num_classes=num_classes).to(GLOBAL_DEVICE)
+    GLOBAL_MODEL = MainModel(num_classes=num_classes).to(GLOBAL_DEVICE)
     GLOBAL_CRITERION = nn.CTCLoss(zero_infinity=True)
     GLOBAL_OPTIMIZER = torch.optim.Adam(GLOBAL_MODEL.parameters(), lr=0.0001)
 

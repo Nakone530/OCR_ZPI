@@ -37,12 +37,29 @@ from datetime import date
 from pathlib import Path
 import matplotlib.pyplot as plt
 import itertools
-from .config import IMAGE_SIZE, MEAN, STD, CHARS, MODEL_PATH, NUM_CLASSES, char2idx, idx2char, VERSION_RE
-from .model import SimpleCNN
+from .config import IMAGE_SIZE, MEAN, STD, CHARS, AuxCHARS, MODEL_PATH, NUM_CLASSES, char2idx, idx2char, VERSION_RE
+from .model import MainModel, AuxModel
 from . import info
 
 
 # ── Transformacje ──────────────────────────────────────────────────────────────
+
+def aux_transform():
+    """
+    pipeline transformacji obrazu do inferencji (bez augmentacji danych).
+    
+    Pipeline zawiera:
+      - Konwersja do skali szarości (1 kanał)
+      - Zmiana rozmiaru do IMAGE_SIZE x IMAGE_SIZE
+      - Konwersja do tensora PyTorch
+      - Normalizacja wartości pikseli (mean=0.5, std=0.5)
+    """
+    return transforms.Compose([
+        transforms.Grayscale(num_output_channels=1),
+        transforms.Resize((24, 24)),
+        transforms.ToTensor(),
+        transforms.Normalize((0.5,), (0.5,)),
+    ])
 
 def base_transform():
     """
@@ -186,7 +203,7 @@ def preprocess_letter(img: np.ndarray) -> np.ndarray:
       1. Dodaje biały padding (10px) wokół obrazu
       2. Tworzy kwadratowy canvas o rozmiarze max(wysokość, szerokość)
       3. Centruje literę na canvasie z białym tłem
-      4. Skaluje wynikowy obraz do rozmiaru 28x28 pikseli
+      4. Skaluje wynikowy obraz do rozmiaru 24x24 pikseli
     
     Argumenty:
         img (np.ndarray): Obraz litery w skali szarości jako tablica numpy.
@@ -198,7 +215,7 @@ def preprocess_letter(img: np.ndarray) -> np.ndarray:
     Przykład:
         >>> letter = preprocess_letter(letter_array)
         >>> letter.shape
-        (28, 28)
+        (24, 24)
     """
     pad = 10
     img = np.pad(img, pad, mode='constant', constant_values=255)
@@ -213,7 +230,7 @@ def preprocess_letter(img: np.ndarray) -> np.ndarray:
     
     new_img[y_offset:y_offset+h, x_offset:x_offset+w] = img
     
-    new_img = cv2.resize(new_img, (28, 28))
+    new_img = cv2.resize(new_img, (24, 24))
     return new_img
 
 # ── Odszumianie ────────────────────────────────────────────────────────────────
@@ -518,7 +535,7 @@ def _label_for_idx(idx: int) -> str:
 
 #print(matplotlib.get_backend())
 
-def load_model(model_path: str = MODEL_PATH, device: torch.device = None, info=None) -> nn.Module:
+def load_model(model_path: str = MODEL_PATH, device: torch.device = None, info=None, model_type = 1) -> nn.Module:
     if info is None:
         info = print
 
@@ -538,15 +555,19 @@ def load_model(model_path: str = MODEL_PATH, device: torch.device = None, info=N
         else:
             state_dict = checkpoint
             info("Wczytano state_dict")
-
-        model = SimpleCNN(num_classes=len(CHARS) + 1)
-
+        if(model_type == 1):
+            model = MainModel(num_classes=len(CHARS) + 1)
+        else:
+            model = AuxModel(num_classes=len(AuxCHARS))
         model.load_state_dict(state_dict)
         info("Model wczytany!")
 
     else:
         info(f"UWAGA: Nie znaleziono modelu {model_path}")
-        model = SimpleCNN(num_classes=len(CHARS) + 1)
+        if(model_type == 1):
+            model = MainModel(num_classes=len(CHARS) + 1)
+        else:
+            model = AuxModel(num_classes=len(AuxCHARS))
 
     model.to(device)
     model.eval()

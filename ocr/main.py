@@ -18,7 +18,7 @@ import sys
 
 import torch
 
-from ocr.config import MODEL_PATH
+from ocr.config import MODEL_PATH, OCR_MODEL_PATH
 from ocr.inference import run_ensemble_generation, compute_accuracy, test_models, test_cache_models, get_active_chars, load_model, predict_image, predict_letter, predict_segments, predict_word, process_folder
 from ocr.output import OCRResult, create_output_handler
 from ocr.trainer import train_model, infinite_train
@@ -258,6 +258,7 @@ def main(args=None, info=None, buffor=None):
         buffor = []
 
     model_path = getattr(args, "model_path", None) or MODEL_PATH
+    ocr_path = getattr(args, "model_path", None) or OCR_MODEL_PATH
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     info(f"Uzywane urzadzenie: {device}")
@@ -488,57 +489,37 @@ def main(args=None, info=None, buffor=None):
         _require_file(args.image, info)
         info(f"\nRozpoznawanie: {args.image}")
 
-        saved_copy_path = save_image_to_today_folder(args.image, info)
-        model = load_model(model_path, device, info)
+        model = load_model(ocr_path, device, info, 2)
 
-        result = predict_image(args.image, model, device, args)
-        text = result["text"]
-        confidence = result["confidence"]
-        probs = result["probs"]
+        predicted_char, confidence, probs = predict_image(args.image, model, device, args)
+        active_labels = get_active_chars()
+
 
         output_handler = create_output_handler(args, source_image=args.image)
-        output_handler.output(
-            OCRResult(text=text, confidence=confidence, probs=probs, mode="single", class_labels=get_active_chars()),
-            info,
-        )
+        result = OCRResult(predicted_char, confidence, probs, mode="single")
+        output_handler.output(result, info)
 
         if args.debug:
-            visualize_prediction(args.image, text, confidence, args, info)
+            visualize_prediction(args.image, predicted_char, confidence, args, info)
 
         if args.json:
             payload = build_image_result_json(
                 image_path=args.image,
                 saved_copy_path=saved_copy_path,
-                predicted_char=text,
+                predicted_char=predicted_char,
                 confidence=confidence,
                 probs=probs,
                 device=str(device),
             )
             info(dump_json(payload, pretty=args.json_pretty))
-            out_path = args.json_path or (os.path.splitext(saved_copy_path)[0] + ".json")
+            out_path = args.json_path
+            if out_path is None:
+                out_path = os.path.splitext(saved_copy_path)[0] + ".json"
             write_json(out_path, payload, pretty=args.json_pretty)
         else:
-            info(f"TEXT: {text}")
-            info(f"CONFIDENCE: {confidence:.2f}%")
+            print_single_result(predicted_char, confidence, info)
+            print_top5(probs, info)
 
-        if args.accuracy:
-            _print_accuracy(text, args.accuracy, info)
-
-    # ── CRNN ──
-    elif args.crnn:
-        _require_file(args.crnn, info)
-        info(f"\nRozpoznawanie CRNN: {args.crnn}")
-        save_image_to_today_folder(args.crnn, info)
-
-        model = load_model(model_path, device, info)
-        result = predict_image(args.crnn, model, device, args)
-        text = result["text"]
-        confidence = result["confidence"]
-
-        info(f"Rozpoznany tekst: '{text}' ({confidence:.1f}%)")
-        if args.json:
-            payload = {"file": args.crnn, "text": text, "confidence": confidence}
-            info(dump_json(payload, pretty=args.json_pretty))
 
     # ── Wyraz ──
     elif args.word:
@@ -546,7 +527,7 @@ def main(args=None, info=None, buffor=None):
         info(f"\nRozpoznawanie wyrazu: {args.word}")
         saved_copy_path = save_image_to_today_folder(args.word, info)
 
-        model = load_model(model_path, device, info)
+        model = load_model(ocr_path, device, info, 2)
         word, avg_word_confidence, class_confidence = predict_word(args.word, model, device, args)
         if args.json:
             payload = build_word_result_json(
@@ -572,7 +553,7 @@ def main(args=None, info=None, buffor=None):
         info(f"\nRozpoznawanie tekstu: {args.lines}")
 
         saved_copy_path = save_image_to_today_folder(args.lines, info)
-        model = load_model(model_path, device, info)
+        model = load_model(ocr_path, device, info, 2)
         text, words_with_confidence, class_confidence = predict_segments(args.lines, model, device, args)
 
         if args.json:

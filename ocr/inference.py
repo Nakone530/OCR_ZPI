@@ -29,7 +29,6 @@ import matplotlib.pyplot as plt
 from PIL import Image
 
 from .config import CHARS, MODEL_PATH, NUM_CLASSES, char2idx, idx2char
-from .model import SimpleCNN
 from .utils import (
     get_inf_transform,
     load_and_optionally_denoise,
@@ -50,6 +49,7 @@ from .utils import (
     resolve_cache_path,
     version_str,
     to_serializable,
+    aux_transform,
     
 )
 from .display import visualize_prediction, show_image
@@ -299,7 +299,7 @@ def _segment_letters(gray: np.ndarray, args=None) -> list[tuple[int, int, int, i
     return boxes
 
 
-def _classify_letter(letter_gray: np.ndarray, model: nn.Module, device: torch.device, more) -> str:
+def _classify_letter(letter_gray: np.ndarray, model: nn.Module, device: torch.device, more, args) -> str:
     """
     Klasyfikuje pojedynczy wycięty fragment obrazu jako znak.
     
@@ -323,7 +323,7 @@ def _classify_letter(letter_gray: np.ndarray, model: nn.Module, device: torch.de
         >>> char, conf, probs = _classify_letter(letter_img, model, device, True)
     """
     pil = Image.fromarray(letter_gray).resize((28, 28)).convert("L")
-    tensor = get_inf_transform()(pil).unsqueeze(0).to(device)
+    tensor = aux_transform()(pil).unsqueeze(0).to(device)
     probs = torch.softmax(model(tensor), dim=1)
     confidence, predicted = torch.max(probs, 1)
     if(more):
@@ -830,56 +830,61 @@ def predict_image(
     model: nn.Module,
     device: torch.device,
     args,
-) -> dict:
-    """Rozpoznaje tekst modelem CRNN+CTC. Zwraca dict {text, confidence, per_char_confidences, probs}."""
+) -> tuple[str, float, torch.Tensor]:
+    """
+    Rozpoznaje pojedynczy znak na zdjęciu.
+    
+    Funkcja ładuje obraz, przycina do bounding boxa znaku,
+    przetwarza i klasyfikuje przy użyciu modelu CNN.
+    
+    Argumenty:
+        image_path (str): Ścieżka do obrazu ze znakiem.
+        model (nn.Module): Wytrenowany model CNN.
+        device (torch.device): Urządzenie (CPU/CUDA) do obliczeń.
+        args: Obiekt argparse.Namespace z parametrami odszumiania.
+    
+    Zwraca:
+        tuple[str, float, torch.Tensor]: Krotka zawierająca:
+            - predicted_char (str): Rozpoznany znak (np. "A")
+            - confidence (float): Pewność predykcji w procentach (0-100)
+            - probs (torch.Tensor): Tensor prawdopodobieństw dla wszystkich klas
+    
+    Przykład:
+        >>> char, conf, probs = predict_image("letter.png", model, device, args)
+        >>> print(f"Rozpoznano: {char} z pewnością {conf:.1f}%")
+    """
     image = load_and_optionally_denoise(image_path, args, mode="L")
     img_array = np.array(image)
     debug = _is_debug_enabled(args)
-
+    
     debug_crops: list[tuple[np.ndarray, str]] = []
 
     model.eval()
     with torch.no_grad():
         original_shape = img_array.shape
-        img_array = _tight_crop(img_array)
+        #img_array = _tight_crop(img_array)
         cropped_shape = img_array.shape
-
-        pil = Image.fromarray(img_array).convert("L")
-        tensor = get_inf_transform(args)(pil).unsqueeze(0).to(device)
-        preprocessed_shape = tensor.shape
-
-        outputs = model(tensor)  # (T, B, C)
-        log_probs = outputs.log_softmax(2)
-        probs = log_probs.exp()
-        preds = log_probs.argmax(2)[:, 0].cpu().numpy()
-
-        chars = []
-        confidences = []
-        prev = 0  # blank
-        for t in range(len(preds)):
-            p = preds[t]
-            if p != prev and p != 0:
-                chars.append(idx2char[p])
-                confidences.append(probs[t, 0, p].item())
-            prev = p
-
-        text = "".join(chars)
-        confidence = float(np.mean(confidences) * 100) if confidences else 0.0
-        probs_out = probs[0, 0]
+        
+        #img_array = preprocess_letter(img_array)
+        preprocessed_shape = img_array.shape
+        
+        letter = _classify_letter(img_array, model, device, 1, args)
 
     if debug:
+        predicted_char, confidence, probs = letter
+        debug_crops.append((img_array.copy(), f"1_{predicted_char}_{confidence:.1f}"))
         info(
             "[DEBUG][image] kształty obrazu: "
             f"oryginał={original_shape}, po_crop={cropped_shape}, "
             f"po_preprocess={preprocessed_shape}"
         )
-        info(f"[DEBUG][image] predykcja CRNN: '{text}' ({confidence:.1f}%)")
-        debug_crops.append((img_array.copy(), f"{text}_{confidence:.1f}"))
+        info(
+            f"[DEBUG][image] klasyfikacja: '{predicted_char}' ({confidence:.1f}%), "
+            f"top3: {_format_topk_probs(probs, k=3)}"
+        )
         _finalize_debug_crops(debug_crops, args, image_path, mode_tag="image")
 
-    return {"text": text, "confidence": confidence, "per_char_confidences": confidences, "probs": probs_out}
-
-
+    return letter
 
 # ── Predykcja wyrazu (jedna linia) ────────────────────────────────────────────
 
@@ -938,7 +943,7 @@ def predict_word(
 
             letter_img = preprocess_letter(letter_img)
 
-            predicted_char, confidence, probs = _classify_letter(letter_img, model, device, 1)
+            predicted_char, confidence, probs = _classify_letter(letter_img, model, device, 1, args)
             word += predicted_char
             letter_confidences.append(confidence)
             class_conf_samples.setdefault(predicted_char, []).append(confidence)
@@ -1050,7 +1055,7 @@ def predict_segments(
                     continue
 
                 letter_img = preprocess_letter(letter_img)
-                predicted_char, confidence, probs = _classify_letter(letter_img, model, device, 1)
+                predicted_char, confidence, probs = _classify_letter(letter_img, model, device, 1, args)
                 line_text += predicted_char
                 current_word_chars.append(predicted_char)
                 current_word_confs.append(confidence)

@@ -39,7 +39,7 @@ IMAGES_DIR = "./ttData"
 # ── Model ─────────────────────────────────────────────────────────────────────
 # Ścieżka do zapisanego wytrenowanego modelu
 MODEL_PATH = "./models/model_ocr.pth"
-
+OCR_MODEL_PATH = "./models/model_ocr_old.pth"
 # Ścieżka do checkpointu (do wznawiania treningu)
 CHECKPOINT_PATH = "./models/checkpoint.pth"
 
@@ -59,9 +59,10 @@ MEAN = [0.5, 0.5, 0.5]
 # Odchylenia standardowe do normalizacji obrazu (format ImageNet)
 STD  = [0.5, 0.5, 0.5]
 
-# ── Klasy (46: A-z - alfabet bez znaków polskich) ──────────────────────────────────────
-# Zestaw znaków obsługiwanych przez model OCR (wielkie litery A-z)
+# ── Klasy ( A-z - alfabet ze znakami polskimi) ──────────────────────────────────────
+# Zestaw znaków obsługiwanych przez model (wielkie litery A-z)
 CHARS = "ABCDEFGHIJKLMNOPRSTUWYZĄĆĘŁŃÓŚŹŻabcdefghijklmnoprstuwyząćęłńóśźż"
+AuxCHARS = "ABCDEFGHIJKLMNOPRSTUWYZabcderghijklmnoprstuwyz"
 NUM_CLASSES = len(CHARS)
 
 char2idx = {c: i + 1 for i, c in enumerate(CHARS)}  # 0 = blank!

@@ -86,6 +86,7 @@ GLOBAL_BEST_ACC = 0.0
 GLOBAL_VAL_ACCURACY = 0.0
 
 _GLOBAL_MAJOR_VERSION = None
+_GLOBAL_MINOR_VERSION = None
 # -- flagi kontrolne dla nieskończonego treningu
 TRAINING_PAUSED = False
 TRAINING_STOP = False
@@ -191,6 +192,7 @@ def get_runtime_major_version(folder):
     global _GLOBAL_MAJOR_VERSION
 
     if _GLOBAL_MAJOR_VERSION is not None:
+        print("IT ISSSSSSS")
         return _GLOBAL_MAJOR_VERSION
 
     pattern = re.compile(r"v(\d+)\.")
@@ -208,6 +210,36 @@ def get_runtime_major_version(folder):
         _GLOBAL_MAJOR_VERSION = max(majors) + 1
 
     return _GLOBAL_MAJOR_VERSION
+
+
+
+def get_runtime_minor_version(folder, major):
+    global _GLOBAL_MINOR_VERSION
+
+    if _GLOBAL_MINOR_VERSION is not None:
+        return _GLOBAL_MINOR_VERSION
+
+    pattern = re.compile(
+        rf"v{major}\.(\d+)"
+    )
+
+    minors = []
+
+    if os.path.exists(folder):
+
+        for name in os.listdir(folder):
+
+            match = pattern.match(name)
+
+            if match:
+                minors.append(int(match.group(1)))
+
+    if not minors:
+        _GLOBAL_MINOR_VERSION = 1
+    else:
+        _GLOBAL_MINOR_VERSION = max(minors) + 1
+
+    return _GLOBAL_MINOR_VERSION
 
 checkpoint_path = "checkpoint.pth"
 current_state = {}
@@ -700,8 +732,8 @@ def train_model(epochs=10, batch_size=32, model_path=None, info=None, args=None,
 def save_checkpoint_model(model, epoch, ratio):
     f_models = folder = "models"
     major = get_runtime_major_version(f_models)
-    
-    folder = os.path.join(folder, f"v{major}")
+    minor = get_runtime_minor_version(f_models, major)
+    folder = os.path.join(folder, f"v{major}.{minor}")
     os.makedirs(folder, exist_ok=True)
     
     subfolder = os.path.join(folder, f"v{major}.{int(ratio*10) - 4}")
@@ -734,7 +766,7 @@ def multi_train(
         python -m ocr.main --multi-train                 # wszystkie presety
         python -m ocr.main --multi-train baseline denoise
     """
-    global GLOBAL_MODEL, GLOBAL_EPOCH, GLOBAL_BEST_ACC, GLOBAL_VAL_ACCURACY, BEST_MODEL_STATE
+    global GLOBAL_MODEL, GLOBAL_EPOCH, GLOBAL_BEST_ACC, GLOBAL_VAL_ACCURACY, BEST_MODEL_STATE, _GLOBAL_MAJOR_VERSION, _GLOBAL_MINOR_VERSION
 
     if info is None:
         info = print
@@ -772,14 +804,15 @@ def multi_train(
         GLOBAL_BEST_ACC = 0.0
         GLOBAL_VAL_ACCURACY = 0.0
         BEST_MODEL_STATE = None
-
+        _GLOBAL_MAJOR_VERSION = None
+        _GLOBAL_MINOR_VERSION = None
+        
         cfg_epochs = config.epochs if config.epochs is not None else epochs
         cfg_batch_size = config.batch_size if config.batch_size is not None else batch_size
         base_dir = config.model_path or "./models"
         base_name = f"model_{config.name}"
 
         save_path = get_versioned_model_path(base_dir, base_name)
-
         run_start = time.time()
         status = "OK"
         try:

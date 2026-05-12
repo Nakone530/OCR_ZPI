@@ -22,7 +22,7 @@ from ocr.config import MODEL_PATH
 from ocr.inference import compute_accuracy, get_active_chars, load_model, predict_image, predict_letter, predict_segments, predict_word, process_folder
 from ocr.output import OCRResult, create_output_handler
 from ocr.trainer import train_model, infinite_train, multi_train, TRAINING_PRESETS, get_preset_names
-from ocr.utils import save_image_to_today_folder
+from ocr.utils import save_image_to_today_folder, DictCorrect
 from ocr.json_output import (
     build_image_result_json,
     build_word_result_json,
@@ -416,6 +416,13 @@ def main(args=None, info=None, buffor=None):
                 info(f"{str(r['key']) if r['key'] else '-':<12} {r['text']:<20} {'-':<10}")
             else:
                 info(f"{r['key']:<12} {r['text']:<20} {r['confidence']:.2f}%")
+        info("----Po poprawie----")
+        for r in rows:
+            autocorTXT = DictCorrect(r['text'])
+            info(f"{str(r['key']) if r['key'] else '-':<12} {autocorTXT:<20} {'-':<10}")
+
+
+
         
     elif args.image:
         _require_file(args.image, info)

@@ -679,6 +679,14 @@ def save_checkpoint_model(model, epoch, ratio):
     folder = os.path.join(folder, f"v6.{int(ratio*10) - 4}")
     os.makedirs(folder, exist_ok=True)
 
+    mPath = os.path.join(folder, f"model_epoch{epoch}.pth")
+    torch.save(model.state_dict(), mPath)
+    dPath = os.path.join(folder, f"model_v6.{int(ratio*10) - 4}_epoch{epoch}.txt")
+    with open(dPath, "w", encoding="utf-8") as f:
+        f.write(f"epoch: {epoch}\n")
+        f.write(f"ratio: {ratio}\n")
+        f.write(f"model_version: v6.{int(ratio*10) - 4}\n")
+        
 def multi_train(
     preset_names: Optional[List[str]] = None,
     epochs: int = 10,
@@ -802,13 +810,6 @@ def get_preset_names() -> List[str]:
     """Zwraca listę dostępnych nazw presetów treningowych."""
     return list(TRAINING_PRESETS.keys())
 
-    mPath = os.path.join(folder, f"model_epoch{epoch}.pth")
-    torch.save(model.state_dict(), mPath)
-    dPath = os.path.join(folder, f"model_v6.{int(ratio*10) - 4}_epoch{epoch}.txt")
-    with open(dPath, "w", encoding="utf-8") as f:
-        f.write(f"epoch: {epoch}\n")
-        f.write(f"ratio: {ratio}\n")
-        f.write(f"model_version: v6.{int(ratio*10) - 4}\n")
     
     
 def show_infinite_menu(info=None):

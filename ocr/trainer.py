@@ -57,10 +57,10 @@ TRAINING_PRESETS: dict = {
         name="baseline",
         description="Model bazowy – brak modyfikacji transformacji",
         denoise_prob=0.0,
-        max_padding=20,
+        max_padding=0,
     ),
-    "denoise": TrainingConfig(
-        name="denoise",
+    "p_denoise": TrainingConfig(
+        name="p_denoise",
         description="Trening z odszumianiem – RandomDenoise zawsze aktywny (prob=1.0)",
         denoise_prob=1.0,
         max_padding=20,
@@ -70,6 +70,24 @@ TRAINING_PRESETS: dict = {
         description="Trening z ulepszonym paddingiem – RandomPadding do 40px",
         denoise_prob=0.0,
         max_padding=40,
+    ),
+    "denoise": TrainingConfig(
+        name="denoise",
+        description="Trening z odszumianiem – RandomDenoise zawsze aktywny (prob=1.0), bez paddingu",
+        denoise_prob=0.0,
+        max_padding=40,
+    ),
+    "padding": TrainingConfig(
+        name="padding",
+        description="Trening z umiarkowanym paddingiem i denoise",
+        denoise_prob=0.5,
+        max_padding=30,
+    ),
+    "p_baseline": TrainingConfig(
+        name="p_baseline",
+        description="Model bazowy – brak modyfikacji transformacji poza lekkim paddingiem",
+        denoise_prob=0.0,
+        max_padding=20,
     ),
 }
 

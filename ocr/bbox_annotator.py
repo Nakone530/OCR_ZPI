@@ -54,7 +54,7 @@ def sort_boxes_reading_order(boxes):
         )
 
     median_h = float(np.median(np.array(heights, dtype=np.float32))) if heights else 12.0
-    base_tol = max(10.0, 0.60 * median_h)
+    base_tol = max(4.0, 0.35 * median_h)
 
     prepared.sort(key=lambda d: (d["cy"], d["x1"]))
     lines = []
@@ -65,14 +65,14 @@ def sort_boxes_reading_order(boxes):
 
         for idx, line in enumerate(lines):
             line_h = max(1.0, line["y2"] - line["y1"])
-            tol = max(base_tol, 0.45 * max(entry["h"], line_h))
+            tol = max(base_tol, 0.30 * max(entry["h"], line_h))
             dist = abs(entry["cy"] - line["cy"])
 
             overlap_h = max(0.0, min(entry["y2"], line["y2"]) - max(entry["y1"], line["y1"]))
             min_h = max(1.0, min(float(entry["h"]), line_h))
             overlap_ratio = overlap_h / min_h
 
-            if dist <= tol or overlap_ratio >= 0.20:
+            if dist <= tol or overlap_ratio >= 0.65:
                 if dist < best_dist:
                     best_dist = dist
                     best_idx = idx
@@ -104,13 +104,13 @@ def sort_boxes_reading_order(boxes):
         prev = merged[-1]
         prev_h = max(1.0, prev["y2"] - prev["y1"])
         line_h = max(1.0, line["y2"] - line["y1"])
-        join_tol = max(8.0, 0.40 * max(prev_h, line_h), 0.35 * median_h)
+        join_tol = max(4.0, 0.20 * max(prev_h, line_h), 0.20 * median_h)
         center_dist = abs(line["cy"] - prev["cy"])
 
         overlap_h = max(0.0, min(line["y2"], prev["y2"]) - max(line["y1"], prev["y1"]))
         overlap_ratio = overlap_h / max(1.0, min(prev_h, line_h))
 
-        if center_dist <= join_tol or overlap_ratio >= 0.30:
+        if center_dist <= join_tol or overlap_ratio >= 0.75:
             prev["items"].extend(line["items"])
             n_prev = float(len(prev["items"]))
             n_line = float(len(line["items"]))
@@ -129,6 +129,22 @@ def sort_boxes_reading_order(boxes):
     return ordered
 
 
+def preprocess_for_detection(image, clip_limit=2.0, tile_grid_size=(6, 6)):
+    """
+    Przygotowuje obraz do lepszej detekcji - tylko kontrast (CLAHE),
+    bez odszumiania które powoduje rozmycie.
+    Uwaga: detect_word_boxes_auto ma w\u0142asny preprocessing wewn\u0105trz,
+    wi\u0119c ta funkcja jest u\u017cywana g\u0142ównie dla detect_word_boxes_auto
+    przy ponownej detekcji (klawisz 'a' w edytorze).
+    """
+    if image is None or image.size == 0:
+        return image
+
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if image.ndim == 3 else image.copy()
+    clahe = cv2.createCLAHE(clipLimit=clip_limit, tileGridSize=tile_grid_size)
+    return clahe.apply(gray)
+
+
 def detect_word_boxes_auto(image):
     if image is None or image.size == 0:
         return []
@@ -136,36 +152,45 @@ def detect_word_boxes_auto(image):
     height, width = image.shape[:2]
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if image.ndim == 3 else image.copy()
 
-    # Odporniejsze przygotowanie maski tekstu.
-    clahe = cv2.createCLAHE(clipLimit=2.5, tileGridSize=(8, 8))
+    # Skalowalne przygotowanie maski tekstu - parametry dopasowane do wielkosci obrazu.
+    tile_size = max(4, min(16, min(height, width) // 80))
+    clahe = cv2.createCLAHE(clipLimit=2.5, tileGridSize=(tile_size, tile_size))
     enhanced = clahe.apply(gray)
     blurred = cv2.GaussianBlur(enhanced, (3, 3), 0)
 
+    # Binaryzacja Otsu z adaptacyjnym progowania dla cieni/niejednolitego tla
     _, binary_otsu = cv2.threshold(blurred, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
-    block_size = max(21, (min(height, width) // 16) | 1)
-    binary_adapt = cv2.adaptiveThreshold(
-        blurred,
-        255,
-        cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-        cv2.THRESH_BINARY_INV,
-        block_size,
-        9,
-    )
-    binary_inv = cv2.bitwise_and(binary_otsu, binary_adapt)
-    fg_ratio = float(np.count_nonzero(binary_inv)) / float(binary_inv.size)
-    if fg_ratio < 0.003 or fg_ratio > 0.40:
-        binary_inv = binary_otsu
 
-    # Oczyszczanie przez odrzucenie bardzo malych komponentow.
+    # Sprawdz czy Otsu daje sensowny wynik - jesli tak to uzyj go samego
+    otsu_fg = float(np.count_nonzero(binary_otsu)) / float(binary_otsu.size)
+    if 0.01 <= otsu_fg <= 0.45:
+        binary_inv = binary_otsu
+    else:
+        # Przy skrajnym wyniku Otsu, uzyj progowania adaptacyjnego
+        block_size = max(21, (min(height, width) // 20) | 1)
+        binary_inv = cv2.adaptiveThreshold(
+            blurred, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+            cv2.THRESH_BINARY_INV, block_size, 6,
+        )
+
+    # Oczyszczanie - odrzucenie bardzo malych komponentow (szum)
     num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(binary_inv, connectivity=8)
+    component_sizes = [int(stats[i, cv2.CC_STAT_AREA]) for i in range(1, num_labels)]
+    if not component_sizes:
+        return []
+
+    median_comp_area = float(np.median(component_sizes))
+    min_fg_area = max(3, int(round(median_comp_area * 0.08)))
+
     clean = np.zeros_like(binary_inv)
-    min_fg_area = max(5, (width * height) // 130000)
     for label in range(1, num_labels):
         area = int(stats[label, cv2.CC_STAT_AREA])
         if area >= min_fg_area:
             clean[labels == label] = 255
 
-    open_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (2, 2))
+    # Delikatne otwarcie morfologiczne - rozmiar jadra skaluje sie z obrazem
+    k_size = max(1, min(height, width) // 800)
+    open_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (k_size + 1, k_size + 1))
     clean = cv2.morphologyEx(clean, cv2.MORPH_OPEN, open_kernel, iterations=1)
 
     def vertical_overlap_ratio(a, b):
@@ -175,8 +200,8 @@ def detect_word_boxes_auto(image):
 
     def refine_box_to_foreground(mask, box, px, py):
         x1, y1, x2, y2 = box
-        ex = max(2, int(round(px * 1.5)))
-        ey = max(2, int(round(py * 1.5)))
+        ex = max(1, int(round(px)))
+        ey = max(1, int(round(py)))
         rx1 = max(0, x1 - ex)
         ry1 = max(0, y1 - ey)
         rx2 = min(width, x2 + ex)
@@ -231,7 +256,7 @@ def detect_word_boxes_auto(image):
     effective_w = min(median_w, max(10.0, 0.08 * float(width)))
 
     # Grupowanie komponentow w linie.
-    line_tol = max(6.0, 0.55 * median_h)
+    line_tol = max(4.0, 0.30 * median_h)
     components.sort(key=lambda c: (c["cy"], c["x1"]))
     lines = []
 
@@ -241,7 +266,7 @@ def detect_word_boxes_auto(image):
         for idx, line in enumerate(lines):
             ref = line["ref"]
             dist = abs(char["cy"] - line["cy"])
-            if dist <= line_tol or vertical_overlap_ratio(char, ref) >= 0.25:
+            if dist <= line_tol or vertical_overlap_ratio(char, ref) >= 0.65:
                 if dist < best_dist:
                     best_dist = dist
                     best_line_idx = idx
@@ -272,8 +297,8 @@ def detect_word_boxes_auto(image):
     # Wycinanie wyrazow w kazdej linii.
     word_boxes = []
     lines.sort(key=lambda l: l["cy"])
-    pad_x = max(1, int(round(0.1 * effective_w)))
-    pad_y = max(1, int(round(0.1 * median_h)))
+    pad_x = max(1, int(round(0.05 * effective_w)))
+    pad_y = max(1, int(round(0.05 * median_h)))
     min_word_w = max(6, int(round(0.75 * effective_w)))
     min_word_h = max(6, int(round(0.55 * median_h)))
 
@@ -295,7 +320,7 @@ def detect_word_boxes_auto(image):
         lx2 = max(c["x2"] for c in items)
         ly2 = max(c["y2"] for c in items)
 
-        line_pad_y = max(1, int(round(0.18 * median_h)))
+        line_pad_y = max(1, int(round(0.10 * median_h)))
         ly1 = max(0, ly1 - line_pad_y)
         ly2 = min(height, ly2 + line_pad_y)
 
@@ -342,7 +367,7 @@ def detect_word_boxes_auto(image):
         if (roi.shape[1] - left) >= min_word_w:
             segments.append((left, roi.shape[1]))
 
-        # Fallback: podzial po duzych odstepach miedzy komponentami.
+        # Fallback: podzial po odstepach miedzy komponentami.
         if len(segments) <= 1 and len(items) > 1:
             comp_gap = []
             for i in range(1, len(items)):
@@ -1040,8 +1065,6 @@ def process_letter(image_path, base_dir="inference", enable_box_edit=True, non_i
         os.makedirs(output_dir, exist_ok=True)
         print(f"Utworzono podfolder dla listu: {output_dir}")
 
-    counter = 0
-
     source_image_copy = os.path.join(output_dir, "source_image.jpg")
     cv2.imwrite(source_image_copy, img_cv2, [cv2.IMWRITE_JPEG_QUALITY, 95])
     print(f"Zapisano oryginalne zdjęcie: {source_image_copy}")
@@ -1059,9 +1082,15 @@ def process_letter(image_path, base_dir="inference", enable_box_edit=True, non_i
         if crop_img.size == 0:
             continue
 
+        # Konwersja do skali szarości dla zgodności z OCR
+        if crop_img.ndim == 3:
+            crop_gray = cv2.cvtColor(crop_img, cv2.COLOR_BGR2GRAY)
+        else:
+            crop_gray = crop_img.copy()
+
         file_name = f"word_{counter:03d}.png"
         save_path = os.path.join(output_dir, file_name)
-        cv2.imwrite(save_path, crop_img, [cv2.IMWRITE_PNG_COMPRESSION, 1])
+        cv2.imwrite(save_path, crop_gray, [cv2.IMWRITE_PNG_COMPRESSION, 1])
 
         print(f"{file_name} | bbox=({xmin},{ymin},{xmax},{ymax})")
         

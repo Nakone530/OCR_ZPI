@@ -375,16 +375,19 @@ def main(args=None, info=None, buffor=None):
                 info(f"{r['key']:<12} {r['text']:<20} {r['confidence']:.2f}%")
         
         # Wyświetl w rozmieszczeniu
-        display_text_layout(layout_words, info)
+        #display_text_layout(layout_words, info)
         if args.json:
             saved_copy_path = save_image_to_today_folder(args.page, info)
             payload = build_page_result_json(
                 image_path=args.page,
-                saved_copy_path=args.page,
+                saved_copy_path=saved_copy_path,
                 rows=table_rows,
                 device=str(device),
             )
-            info(dump_json(payload, pretty=args.json_pretty))
+            jsFile, _ = os.path.splitext(os.path.basename(saved_copy_path))
+            jsFile = jsFile + ".json"
+            jsPath = os.path.join(os.path.dirname(saved_copy_path), jsFile)
+            write_json(jsPath, payload, pretty=args.json_pretty)
     elif args.folder:
         results = process_folder(args.folder, args, model_path, device, info)
         rows = []

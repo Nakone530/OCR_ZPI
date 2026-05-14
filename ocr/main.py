@@ -365,14 +365,17 @@ def main(args=None, info=None, buffor=None):
         table_rows.sort(key=lambda r: r["key"] if r["key"] else "")
         
         # Wyświetl tabelę
-        info(f"\n{'NAME':<12} {'TEXT':<20} {'CONF':<10}")
-        info("-" * 45)
+        info(f"\n{'NAME':<12} {'TEXT':<20} {'CONF':<10} {'AUTOCORRECT':<20}")
+        info("-" * 60)
 
         for r in table_rows:
             if r["confidence"] is None:
-                info(f"{str(r['key']) if r['key'] else '-':<12} {r['text']:<20} {'-':<10}")
+                autocorTXT = DictCorrect(r['text'])
+                info(f"{str(r['key']) if r['key'] else '-':<12} {autocorTXT:<20} {'-':<10}")
             else:
-                info(f"{r['key']:<12} {r['text']:<20} {r['confidence']:.2f}%")
+                autocorTXT = DictCorrect(r['text'])
+                info(f"{r['key']:<12} {r['text']:<20} {r['confidence']/100:<10.2%} {autocorTXT:<20} {'-':<10}")
+
         
         # Wyświetl w rozmieszczeniu
         #display_text_layout(layout_words, info)
@@ -411,10 +414,9 @@ def main(args=None, info=None, buffor=None):
                 "confidence": r["confidence"]
             })
         rows.sort(key=lambda r: r["key"] if r["key"] else "")
-        info(f"\n{'NAME':<12} {'TEXT':<20} {'CONF':<10}")
+        info(f"\n{'NAME':<12} {'TEXT':<20} {'CONF':<10} {'AUTOCORRECT':<20}")
         info("-" * 45)
 
-        info("----Po poprawie----")
         for r in rows:
             if r["confidence"] is None:
                 autocorTXT = DictCorrect(r['text'])

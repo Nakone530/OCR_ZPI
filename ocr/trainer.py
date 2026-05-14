@@ -327,7 +327,7 @@ def handler(signum, frame, info=None):
             info("Wznawianie")
             train_model(10, 32, CHECKPOINT_PATH)
         elif choice == "2":
-            info("Zapisywanie najlepszego (obecnie nie do końca działa, zapisuje ostatni stan)")
+            info("Zapisywanie najlepszego")
             save_model(MODEL_PATH, info)
         elif choice == "3":
             info("Zamykanie programu...")

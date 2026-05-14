@@ -11,7 +11,7 @@ from .config import NUM_CLASSES
 class MainModel(nn.Module):
     """sieć CRNN do rozpoznawania znaków."""
 
-    def __init__(self, num_classes=62):
+    def __init__(self, num_classes=64):
         super(MainModel, self).__init__()
 
         self.features = nn.Sequential(

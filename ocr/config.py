@@ -10,8 +10,6 @@ Moduł definiuje:
 
 Attributes:
     DATA_DIR (str): Lokalny katalog na dane.
-    ARCHIVE_PATH (str): Ścieżka do pobranego archiwum .tgz.
-    EXTRACTED_DIR (str): Ścieżka do rozpakowanych danych.
     MODEL_PATH (str): Ścieżka do zapisanego modelu (.pth).
     CHECKPOINT_PATH (str): Ścieżka do checkpointu treningu.
     IMAGE_SIZE (int): Rozmiar obrazu wejściowego (28x28 pikseli).
@@ -29,13 +27,9 @@ import re
 DATA_DIR = "./data"
 DATA_ROOT_DIR = "./ttData"
 
-# Ścieżka do pobranego archiwum
-ARCHIVE_PATH = os.path.join(DATA_DIR, "EnglishFnt.tgz")
-
-# Ścieżka do rozpakowanych obrazów datasetu
-EXTRACTED_DIR = os.path.join(DATA_DIR, "English", "Fnt")
-
 IMAGES_DIR = "./ttData"
+
+ÐICT_PATH = "./data/dictionary.json"
 # ── Model ─────────────────────────────────────────────────────────────────────
 # Ścieżka do folderu modeli
 MODEL_DIR = "./models"

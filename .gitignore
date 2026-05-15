@@ -16,9 +16,6 @@ models/checkpoint.pth
 # Foldery z historią rozpoznań (YYYY-MM-DD)
 [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]/
 
-# Dane
-data/*
-
 # tymczasowe dane
 temp/*
 

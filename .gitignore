@@ -4,7 +4,6 @@
 .cursor/
 
 # wyniki i modele
-*.pth
 *.bak
 prediction_result.png
 output.png

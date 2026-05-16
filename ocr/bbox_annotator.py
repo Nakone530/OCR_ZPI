@@ -145,6 +145,20 @@ def preprocess_for_detection(image, clip_limit=2.0, tile_grid_size=(6, 6)):
     return clahe.apply(gray)
 
 
+def build_detection_preview(image):
+    if image is None or image.size == 0:
+        return image
+
+    height, width = image.shape[:2]
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if image.ndim == 3 else image.copy()
+
+    tile_size = max(4, min(16, min(height, width) // 80))
+    clahe = cv2.createCLAHE(clipLimit=2.5, tileGridSize=(tile_size, tile_size))
+    enhanced = clahe.apply(gray)
+    blurred = cv2.GaussianBlur(enhanced, (3, 3), 0)
+    return blurred
+
+
 def tighten_box_to_foreground(image, box, pad=2):
     height, width = image.shape[:2]
     x1, y1, x2, y2 = clamp_box(box, width, height)
@@ -1028,6 +1042,11 @@ def edit_boxes_interactive(image, boxes):
     preview_scale = get_preview_scale(image)
     zoom = 1.0
 
+    preview_original = image
+    preview_preprocessed = build_detection_preview(image)
+    if preview_preprocessed is not None and preview_preprocessed.ndim == 2:
+        preview_preprocessed = cv2.cvtColor(preview_preprocessed, cv2.COLOR_GRAY2BGR)
+
     state = {
         "selected_idx": selected_idx,
         "drag_mode": None,
@@ -1040,6 +1059,7 @@ def edit_boxes_interactive(image, boxes):
         "pan_mode": False,
         "pan_anchor": None,
         "pan_start_offset": None,
+        "view_mode": "original",
     }
 
     print("\nTryb poprawy bboxów:")
@@ -1052,6 +1072,7 @@ def edit_boxes_interactive(image, boxes):
     print("PPM + przeciąganie - przesuwanie widoku (pan)")
     print("x lub Delete - usuń aktualny box")
     print("a - automatycznie wykryj boxy ponownie")
+    print("v - przełącz widok: oryginał / preprocessing")
     print("ENTER - zatwierdź, q - anuluj edycję")
 
     window_name = "Korekta bounding boxow"
@@ -1059,9 +1080,12 @@ def edit_boxes_interactive(image, boxes):
 
     def get_display_image_and_scale():
         display_scale = preview_scale * state["zoom"]
+        base = preview_original if state["view_mode"] == "original" else preview_preprocessed
+        if base is None:
+            base = preview_original
         if display_scale == 1.0:
-            return image, display_scale
-        display_image = cv2.resize(image, None, fx=display_scale, fy=display_scale, interpolation=cv2.INTER_AREA if display_scale < 1.0 else cv2.INTER_CUBIC)
+            return base, display_scale
+        display_image = cv2.resize(base, None, fx=display_scale, fy=display_scale, interpolation=cv2.INTER_AREA if display_scale < 1.0 else cv2.INTER_CUBIC)
         return display_image, display_scale
 
     def get_view_geometry(display_image):
@@ -1207,6 +1231,11 @@ def edit_boxes_interactive(image, boxes):
                 print(f"Wykryto {len(boxes)} boxow automatycznie.")
             else:
                 print("Nie wykryto boxow - pozostawiono obecne.")
+            continue
+
+        if key == ord("v"):
+            state["view_mode"] = "preprocessed" if state["view_mode"] == "original" else "original"
+            print(f"Widok: {state['view_mode']}")
             continue
 
         if key == ord("b"):

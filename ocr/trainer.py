@@ -210,7 +210,6 @@ def get_runtime_major_version(folder):
     global _GLOBAL_MAJOR_VERSION
 
     if _GLOBAL_MAJOR_VERSION is not None:
-        print("IT ISSSSSSS")
         return _GLOBAL_MAJOR_VERSION
 
     pattern = re.compile(r"v(\d+)\.")

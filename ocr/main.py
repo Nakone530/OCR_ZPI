@@ -525,14 +525,11 @@ def main(args=None, info=None, buffor=None):
             if r["confidence"] is None:
                 buffer.append(f"{key:<12} {ensemble_str:<30} {r['text']:<20} {'-':<10} {'-':<10}")
             else:
-                acc_str = f"{r['accuracy']:.2f}%" if r["accuracy"] is not None else "-"
-                buffer.append(f"{key} {ensemble_str} {r['text']} {r['confidence']:.2f}% {acc_str}")
-            
-            if len(buffer) >= 1000:
-                info("\n".join(buffer))
-                buffer.clear()
-
-        info("\n".join(buffer))
+                info(f"{r['key']:<12} {r['text']:<20} {r['confidence']:.2f}%")
+        info("----Po poprawie----")
+        for r in rows:
+            autocorTXT = DictCorrect(r['text'])
+            info(f"{str(r['key']) if r['key'] else '-':<12} {autocorTXT:<20} {'-':<10}")
 
 
 

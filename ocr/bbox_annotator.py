@@ -569,10 +569,10 @@ def detect_word_boxes_auto(image):
     # Wycinanie wyrazow w kazdej linii.
     word_boxes = []
     lines.sort(key=lambda l: l["cy"])
-    pad_x = max(1, int(round(0.02 * effective_w)))
-    pad_y = max(1, int(round(0.02 * median_h)))
-    min_word_w = max(6, int(round(0.75 * effective_w)))
-    min_word_h = max(6, int(round(0.55 * median_h)))
+    pad_x = max(2, int(round(0.15 * effective_w)))
+    pad_y = max(2, int(round(0.2 * median_h)))
+    min_word_w = max(6, int(round(0.2 * effective_w)))
+    min_word_h = max(6, int(round(0.2 * median_h)))
 
     def add_box(gx1, gy1, gx2, gy2):
         if (gx2 - gx1) < min_word_w or (gy2 - gy1) < min_word_h:

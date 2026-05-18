@@ -1,0 +1,3 @@
+v1.1.1 - wersja pierwsza, iteracja pierwsza baseline modelu
+v1.1.2 - wersja pierwsza, iteracja pierwsza denoise modelu
+v1.1.3 - wersja pierwsza, iteracja pierwsza padding modelu 

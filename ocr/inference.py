@@ -12,21 +12,23 @@ import difflib
 import os
 import re
 import json
+import time
 from datetime import datetime
 from pathlib import Path
 import cv2
 import numpy as np
 import torch
 import torch.nn as nn
+import math
 import matplotlib
 matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
 
 
+
 from PIL import Image
 
 from .config import CHARS, MODEL_PATH, NUM_CLASSES, char2idx, idx2char
-from .model import SimpleCNN
 from .utils import (
     get_inf_transform,
     load_and_optionally_denoise,
@@ -37,11 +39,16 @@ from .utils import (
     select_models,
     load_models,
     aggregate,
-    _map_chars74k_sample_to_char,
     get_active_chars,
     _set_active_chars,
     _label_for_idx,
     load_model,
+    generate_model_ensembles,
+    load_cache,
+    resolve_cache_path,
+    version_str,
+    to_serializable,
+    aux_transform,
     select_version,
 )
 from .display import visualize_prediction, show_image
@@ -241,13 +248,6 @@ def _segment_letters(gray: np.ndarray, args=None) -> list[tuple[int, int, int, i
     Segmentuje litery bez opierania się na pustych przerwach pionowych.
     Najpierw CC, a szerokie komponenty próbuje dzielić watershed.
     """
-    ws_fg_ratio = float(getattr(args, "ws_fg_ratio", 0.45))
-    ws_split_aspect = float(getattr(args, "ws_split_aspect", 1.15))
-    ws_min_comp_area = int(getattr(args, "ws_min_comp_area", 30))
-    ws_split_min_area = int(getattr(args, "ws_split_min_area", 250))
-    ws_min_box_w = int(getattr(args, "ws_min_box_w", 3))
-    ws_min_box_h = int(getattr(args, "ws_min_box_h", 5))
-    ws_min_box_area = int(getattr(args, "ws_min_box_area", 20))
 
     blur = cv2.GaussianBlur(gray, (3, 3), 0)
     _, binary_inv = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
@@ -291,7 +291,7 @@ def _segment_letters(gray: np.ndarray, args=None) -> list[tuple[int, int, int, i
     return boxes
 
 
-def _classify_letter(letter_gray: np.ndarray, model: nn.Module, device: torch.device, more) -> str:
+def _classify_letter(letter_gray: np.ndarray, model: nn.Module, device: torch.device, more, args) -> str:
     """
     Klasyfikuje pojedynczy wycięty fragment obrazu jako znak.
     
@@ -315,7 +315,7 @@ def _classify_letter(letter_gray: np.ndarray, model: nn.Module, device: torch.de
         >>> char, conf, probs = _classify_letter(letter_img, model, device, True)
     """
     pil = Image.fromarray(letter_gray).resize((28, 28)).convert("L")
-    tensor = get_inf_transform()(pil).unsqueeze(0).to(device)
+    tensor = aux_transform()(pil).unsqueeze(0).to(device)
     probs = torch.softmax(model(tensor), dim=1)
     confidence, predicted = torch.max(probs, 1)
     if(more):
@@ -455,7 +455,7 @@ def process_folder(folder_path, args, models_dir, device, info):
                 "file": file_path,
                 "text": final_text,
                 "confidence": best_conf,
-                "bbox": bbox,              # <<< DODANE
+                "bbox": bbox,
                 "per_model": per_model
             })
 
@@ -500,6 +500,236 @@ def predict_letter_multi(image_path, models, device, args, info):
         results[name] = res
 
     return results
+
+
+#--- Testowanie wielu kombinacji modeli
+def run_ensemble_generation(models_dir):
+    
+
+    models_dir = os.path.dirname(models_dir)
+    models = list_models(models_dir)
+    min_mn = int(input("Podaj min mn: ").strip())
+    max_mn = int(input("Podaj max mn: ").strip())
+
+    if min_mn > max_mn:
+        raise ValueError("min_mn nie może być większe niż max_mn")
+
+    mode = int(input("Wybierz rodzaj selekcji (1-kombinacje, 2-permutacje)"))
+    if mode == 1 :
+        n = sum(math.comb(len(models), r) for r in range(min_mn, max_mn + 1))
+    elif mode == 2 :
+        n = sum(math.perm(len(models), r) for r in range(min_mn, max_mn + 1))
+    else :
+        info("zły wybór, wybranie default -- kombinacje")
+
+    return generate_model_ensembles(models, min_mn, max_mn, mode), n
+
+def test_models(folder_path, args, models_dir, device, info, ensembles, mn):
+
+    if not os.path.isdir(folder_path):
+        raise ValueError(f"To nie jest katalog: {folder_path}")
+    
+    models_dir = os.path.dirname(models_dir)
+    models = list_models(models_dir)
+
+    loaded_models = load_models(models_dir, models, device, info)
+
+
+    bbox_data = _load_bbox_data(folder_path)
+    bbox_index = 0
+
+    results = []
+
+    for filename in os.listdir(folder_path):
+        if not filename.lower().endswith(".png"):
+            continue
+    
+        file_path = os.path.join(folder_path, filename)
+    
+        try:
+            info(f"\nRozpoznawanie: {file_path}")
+
+            ensemble_results = run_ensembles_inference(
+                file_path,
+                ensembles,
+                loaded_models,
+                device,
+                args,
+                info,
+                mn
+            )
+
+            bbox = None
+            if bbox_data and bbox_index < len(bbox_data):
+                bbox = bbox_data[bbox_index].get("bbox")
+            bbox_index += 1
+
+            results.append({
+                "file": file_path,
+                "ensembles": ensemble_results,
+                "bbox": bbox
+            })
+        except Exception as e:
+            results.append({
+                "file": file_path,
+                "error": str(e)
+            })
+    return results
+
+
+
+def test_cache_models(folder_path, args, models_dir, device, info, ensembles, mn, cache_path="./cache"):
+
+    if not os.path.isdir(folder_path):
+        raise ValueError(f"To nie jest katalog: {folder_path}")
+    
+    models_dir = os.path.dirname(models_dir)
+    models = list_models(models_dir)
+    loaded_models = load_models(models_dir, models, device, info)
+
+
+    bbox_data = _load_bbox_data(folder_path)
+    bbox_index = 0
+
+    results = []
+    filename = "1"
+    file_path = os.path.join(folder_path, filename)
+    file_num = 0
+    try:
+        info(f"\nRozpoznawanie: {file_path}")
+        if cache_path == "./cache" :
+            cache = build_cache(
+            args.ensemble,
+            loaded_models,
+            device,
+            args,
+            info
+        )
+        else :
+            cache = load_cache(cache_path)
+                
+        ensemble_results = run_ensembles_cache(cache, ensembles, mn)
+
+        bbox = None
+        if bbox_data and bbox_index < len(bbox_data):
+            bbox = bbox_data[bbox_index].get("bbox")
+        bbox_index += 1
+        for e in ensemble_results:
+            results.append({
+                "file": e["file"],
+                "ensembles": e["ensembles"],
+                "bbox": bbox
+            })
+
+    except Exception as e:
+        results.append({
+            "file": file_path,
+            "error": str(e)
+        })
+    
+    file_num = file_num +1
+    return results
+
+
+def run_ensembles_inference(file_path, ensembles, loaded_models, device, args, info, mn):
+    ensemble_outputs = []
+
+    for ensemble in ensembles:
+        info(f"Ensemble: {ensemble}")
+
+        subset = {m: loaded_models[m] for m in ensemble}
+
+        per_model = predict_letter_multi(
+            file_path,
+            subset,
+            device,
+            args,
+            info
+        )
+
+        # używamy pierwszego modelu jako default (albo możesz zmienić logikę)
+        default_model = ensemble[0]
+
+        final_text = aggregate(per_model, default_model)
+
+        best_conf = max(r["confidence"] for r in per_model.values())
+
+        ensemble_outputs.append({
+            "ensemble": ensemble,
+            "text": final_text,
+            "confidence": best_conf,
+            "per_model": per_model
+        })
+
+    return ensemble_outputs
+
+
+def run_ensembles_cache(cache, ensembles, mn):
+    results = {name: [] for name in cache.keys()}
+    n = list_models(os.path.dirname(MODEL_PATH))
+    total_files = len(cache)
+    total_steps = total_files * mn
+    step = 0
+
+    for ensemble in ensembles: 
+        for name, full_per_model in cache.items():
+            step_comp = math.ceil((step/total_steps) * 10000)/100
+            info(f"Progress: {step_comp:.2f}% Ensemble: {ensemble},")
+            
+            subset = {m: full_per_model[m] for m in ensemble}
+
+            default_model = max(
+                subset.items(),
+                key=lambda x: x[1]["confidence"]
+            )[0]
+
+            final_text = aggregate(subset, default_model)
+            best_conf = max(r["confidence"] for r in subset.values())
+
+            results[name].append({
+                "ensemble": ensemble,
+                "text": final_text,
+                "confidence": best_conf
+            })
+
+            step += 1
+    return [
+        {"file": name, "ensembles": ens}
+        for name, ens in results.items()
+    ]
+
+
+#--- budowanie cache---
+def build_cache(folder_path, loaded_models, device, args, info):
+    cache_dir = "./cache"
+    os.makedirs(cache_dir, exist_ok=True)
+
+    cache_path = resolve_cache_path()
+    cache = {}
+
+    for filename in os.listdir(folder_path):
+        if not filename.lower().endswith(".png"):
+            continue
+
+        file_path = os.path.join(folder_path, filename)
+        name, _ = os.path.splitext(filename)
+
+        info(f"CACHE: {file_path}")
+
+        per_model = predict_letter_multi(
+            file_path,
+            loaded_models,
+            device,
+            args,
+            info
+        )
+
+        cache[name] = to_serializable(per_model)
+
+    with open(cache_path, "w", encoding="utf-8") as f:
+        json.dump(cache, f, ensure_ascii=False, indent=2)
+
+    return cache
 # ── Predykcja pojedynczej litery ───────────────────────────────────────────────
 def predict_letter(
     image_path: str,
@@ -593,56 +823,61 @@ def predict_image(
     model: nn.Module,
     device: torch.device,
     args,
-) -> dict:
-    """Rozpoznaje tekst modelem CRNN+CTC. Zwraca dict {text, confidence, per_char_confidences, probs}."""
+) -> tuple[str, float, torch.Tensor]:
+    """
+    Rozpoznaje pojedynczy znak na zdjęciu.
+    
+    Funkcja ładuje obraz, przycina do bounding boxa znaku,
+    przetwarza i klasyfikuje przy użyciu modelu CNN.
+    
+    Argumenty:
+        image_path (str): Ścieżka do obrazu ze znakiem.
+        model (nn.Module): Wytrenowany model CNN.
+        device (torch.device): Urządzenie (CPU/CUDA) do obliczeń.
+        args: Obiekt argparse.Namespace z parametrami odszumiania.
+    
+    Zwraca:
+        tuple[str, float, torch.Tensor]: Krotka zawierająca:
+            - predicted_char (str): Rozpoznany znak (np. "A")
+            - confidence (float): Pewność predykcji w procentach (0-100)
+            - probs (torch.Tensor): Tensor prawdopodobieństw dla wszystkich klas
+    
+    Przykład:
+        >>> char, conf, probs = predict_image("letter.png", model, device, args)
+        >>> print(f"Rozpoznano: {char} z pewnością {conf:.1f}%")
+    """
     image = load_and_optionally_denoise(image_path, args, mode="L")
     img_array = np.array(image)
     debug = _is_debug_enabled(args)
-
+    
     debug_crops: list[tuple[np.ndarray, str]] = []
 
     model.eval()
     with torch.no_grad():
         original_shape = img_array.shape
-        img_array = _tight_crop(img_array)
+        #img_array = _tight_crop(img_array)
         cropped_shape = img_array.shape
-
-        pil = Image.fromarray(img_array).convert("L")
-        tensor = get_inf_transform(args)(pil).unsqueeze(0).to(device)
-        preprocessed_shape = tensor.shape
-
-        outputs = model(tensor)  # (T, B, C)
-        log_probs = outputs.log_softmax(2)
-        probs = log_probs.exp()
-        preds = log_probs.argmax(2)[:, 0].cpu().numpy()
-
-        chars = []
-        confidences = []
-        prev = 0  # blank
-        for t in range(len(preds)):
-            p = preds[t]
-            if p != prev and p != 0:
-                chars.append(idx2char[p])
-                confidences.append(probs[t, 0, p].item())
-            prev = p
-
-        text = "".join(chars)
-        confidence = float(np.mean(confidences) * 100) if confidences else 0.0
-        probs_out = probs[0, 0]
+        
+        #img_array = preprocess_letter(img_array)
+        preprocessed_shape = img_array.shape
+        
+        letter = _classify_letter(img_array, model, device, 1, args)
 
     if debug:
+        predicted_char, confidence, probs = letter
+        debug_crops.append((img_array.copy(), f"1_{predicted_char}_{confidence:.1f}"))
         info(
             "[DEBUG][image] kształty obrazu: "
             f"oryginał={original_shape}, po_crop={cropped_shape}, "
             f"po_preprocess={preprocessed_shape}"
         )
-        info(f"[DEBUG][image] predykcja CRNN: '{text}' ({confidence:.1f}%)")
-        debug_crops.append((img_array.copy(), f"{text}_{confidence:.1f}"))
+        info(
+            f"[DEBUG][image] klasyfikacja: '{predicted_char}' ({confidence:.1f}%), "
+            f"top3: {_format_topk_probs(probs, k=3)}"
+        )
         _finalize_debug_crops(debug_crops, args, image_path, mode_tag="image")
 
-    return {"text": text, "confidence": confidence, "per_char_confidences": confidences, "probs": probs_out}
-
-
+    return letter
 
 # ── Predykcja wyrazu (jedna linia) ────────────────────────────────────────────
 
@@ -701,7 +936,7 @@ def predict_word(
 
             letter_img = preprocess_letter(letter_img)
 
-            predicted_char, confidence, probs = _classify_letter(letter_img, model, device, 1)
+            predicted_char, confidence, probs = _classify_letter(letter_img, model, device, 1, args)
             word += predicted_char
             letter_confidences.append(confidence)
             class_conf_samples.setdefault(predicted_char, []).append(confidence)
@@ -813,7 +1048,7 @@ def predict_segments(
                     continue
 
                 letter_img = preprocess_letter(letter_img)
-                predicted_char, confidence, probs = _classify_letter(letter_img, model, device, 1)
+                predicted_char, confidence, probs = _classify_letter(letter_img, model, device, 1, args)
                 line_text += predicted_char
                 current_word_chars.append(predicted_char)
                 current_word_confs.append(confidence)
@@ -885,3 +1120,6 @@ def show_before_after(pil_img, tensor_img):
     plt.axis("off")
 
     plt.show()
+
+
+

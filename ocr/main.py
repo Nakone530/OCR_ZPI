@@ -360,7 +360,8 @@ def main(args=None, info=None, buffor=None):
                 "key": name,                            # klucz sortowania
                 "file": r["file"],
                 "text": r["text"],
-                "confidence": r["confidence"]
+                "confidence": r["confidence"],
+                "letter_vectors": r.get("letter_vectors", []),
             })
             
             # Dodaj do listy dla wyświetlania rozmieszczenia
@@ -377,14 +378,14 @@ def main(args=None, info=None, buffor=None):
         info("-" * 60)
 
         for r in table_rows:
-            if r["confidence"] is None:
-                autocorTXT = DictCorrect(r['text'])
-                info(f"{str(r['key']) if r['key'] else '-':<12} {autocorTXT:<20} {'-':<10}")
+            conf = r['confidence'] if r['confidence'] is not None else 50.0
+            autocorTXT = DictCorrect(r['text'], conf, letter_vectors=r.get('letter_vectors'))
+            if r['confidence'] is None:
+                info(f"{str(r['key']) if r['key'] else '-':<12} {r['text']:<20} {'-':<10} {autocorTXT:<20}")
             else:
-                autocorTXT = DictCorrect(r['text'])
-                info(f"{r['key']:<12} {r['text']:<20} {r['confidence']/100:<10.2%} {autocorTXT:<20} {'-':<10}")
+                info(f"{r['key']:<12} {r['text']:<20} {r['confidence']/100:<10.2%} {autocorTXT:<20}")
 
-        
+
         # Wyświetl w rozmieszczeniu
         #display_text_layout(layout_words, info)
         if args.json:
@@ -430,12 +431,9 @@ def main(args=None, info=None, buffor=None):
                 autocorTXT = DictCorrect(r['text'])
                 info(f"{str(r['key']) if r['key'] else '-':<12} {autocorTXT:<20} {'-':<10}")
             else:
-                autocorTXT = DictCorrect(r['text'])
+                autocorTXT = DictCorrect(r['text'], r['confidence'])
                 info(f"{r['key']:<12} {r['text']:<20} {r['confidence']/100:<10.2%} {autocorTXT:<20} {'-':<10}")
-        
-            
-            
-            
+
         if args.json:
             payload = build_page_result_json(
                 image_path=args.lines,
@@ -536,7 +534,7 @@ def main(args=None, info=None, buffor=None):
                 info(f"{r['key']:<12} {r['text']:<20} {r['confidence']:.2f}%")
         info("----Po poprawie----")
         for r in rows:
-            autocorTXT = DictCorrect(r['text'])
+            autocorTXT = DictCorrect(r['text'], r['confidence'] if r['confidence'] is not None else 100.0)
             info(f"{str(r['key']) if r['key'] else '-':<12} {autocorTXT:<20} {'-':<10}")
 
 

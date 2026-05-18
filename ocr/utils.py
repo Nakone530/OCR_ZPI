@@ -634,6 +634,44 @@ def select_models(models):
     return default_model, ensemble
 
 
+DEFAULT_MODELS = [
+    "v10.2", "v10.3", "v10.4", "v10.5",
+    "v11.1", "v11.2", "v11.3", "v11.4", "v11.5",
+    "v12.2", "v12.4",
+    "v13.3", "v13.5",
+    "v14.4",
+    "v15.2",
+    "v16.5.1", "v16.5.2", "v16.5.3", "v16.5.4", "v16.5.5",
+    "v17.1", "v17.2", "v17.5",
+    "v19.5",
+    "v20.3", "v20.5",
+    "v21.2", "v21.3", "v21.5",
+]
+
+DEFAULT_MODEL = "v21.5"
+
+
+def auto_select_models(models_dir: str, version: str | None = None):
+    all_models = list_models(models_dir)
+
+    if version:
+        candidates = [m for m in all_models if m.startswith(f"v{version}")]
+    else:
+        candidates = [m for m in DEFAULT_MODELS if m in all_models]
+
+    if not candidates:
+        if all_models:
+            candidates = [all_models[-1]]
+        else:
+            return DEFAULT_MODEL, []
+
+    if version:
+        default = candidates[-1]
+    else:
+        default = DEFAULT_MODEL if DEFAULT_MODEL in candidates else candidates[-1]
+
+    return default, candidates
+
 
 def load_models(models_dir, selected_models, device, info):
     loaded = {}

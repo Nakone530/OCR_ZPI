@@ -50,6 +50,7 @@ from .utils import (
     to_serializable,
     aux_transform,
     select_version,
+    auto_select_models,
 )
 from .display import visualize_prediction, show_image
 from . import info
@@ -411,11 +412,16 @@ def process_folder(folder_path, args, models_dir, device, info):
         raise ValueError(f"To nie jest katalog: {folder_path}")
     
     models_dir = os.path.dirname(models_dir)
-    version = select_version()
-    models = list_models(models_dir, version)
-    default_model, selected_models = select_models(models)
+    version = getattr(args, "model_version", None)
+    default_model, selected_models = auto_select_models(models_dir, version)
 
-    loaded_models = load_models(models_dir, selected_models, device, info)
+    if not selected_models:
+        fallback_model = load_model(MODEL_PATH, device, info)
+        default_model = "model_ocr"
+        loaded_models = {default_model: fallback_model}
+    else:
+        info(f"Automatyczny wybór: {len(selected_models)} model(i), default: {default_model}")
+        loaded_models = load_models(models_dir, selected_models, device, info)
 
     bbox_data = _load_bbox_data(folder_path)
     bbox_index = 0

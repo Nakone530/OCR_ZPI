@@ -117,6 +117,7 @@ def build_page_result_json(
             "index": i + 1,
             "key": r["key"],
             "file": r["file"],
+            "prediction": r["text"],
             "text": r["text"],
             "confidence": r["confidence"],
         })
@@ -146,6 +147,7 @@ def build_page_result_json(
             "saved_copy_path": saved_copy_path
         },
         "result": {
+            "prediction": full_text,
             "text": full_text,
             "confidence": avg_confidence,
             "words": words,

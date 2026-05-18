@@ -379,18 +379,45 @@ def main(args=None, info=None, buffor=None):
         
         # Wyświetl w rozmieszczeniu
         #display_text_layout(layout_words, info)
-        if args.json:
-            saved_copy_path = save_image_to_today_folder(args.page, info)
-            payload = build_page_result_json(
-                image_path=args.page,
-                saved_copy_path=saved_copy_path,
-                rows=table_rows,
-                device=str(device),
-            )
-            jsFile, _ = os.path.splitext(os.path.basename(saved_copy_path))
-            jsFile = jsFile + ".json"
-            jsPath = os.path.join(os.path.dirname(saved_copy_path), jsFile)
-            write_json(jsPath, payload, pretty=args.json_pretty)
+        saved_copy_path = os.path.join(output_dir, "source_image.jpg")
+        if not os.path.exists(saved_copy_path):
+            saved_copy_path = None
+        payload = build_page_result_json(
+            image_path=args.page,
+            saved_copy_path=saved_copy_path,
+            rows=table_rows,
+            device=str(device),
+        )
+        jsonl_path = os.path.join(output_dir, "boxes.jsonl")
+        if os.path.exists(jsonl_path):
+            predictions_by_file = {}
+            for r in table_rows:
+                if r["file"] and r["text"] is not None:
+                    predictions_by_file[os.path.basename(r["file"])]= {
+                        "prediction": r["text"],
+                        "confidence": r["confidence"],
+                    }
+
+            updated_lines = []
+            with open(jsonl_path, "r", encoding="utf-8") as jsonl_file:
+                for line in jsonl_file:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        entry = json.loads(line)
+                    except json.JSONDecodeError:
+                        updated_lines.append(line)
+                        continue
+
+                    file_name = entry.get("file_name")
+                    if file_name in predictions_by_file:
+                        entry.update(predictions_by_file[file_name])
+                    updated_lines.append(json.dumps(entry, ensure_ascii=False))
+
+            with open(jsonl_path, "w", encoding="utf-8") as jsonl_file:
+                jsonl_file.write("\n".join(updated_lines))
+                jsonl_file.write("\n")
     elif args.folder:
         results = process_folder(args.folder, args, model_path, device, info)
         rows = []

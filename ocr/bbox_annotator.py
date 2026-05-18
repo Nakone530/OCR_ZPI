@@ -1417,3 +1417,96 @@ def process_letter(image_path, base_dir="inference", enable_box_edit=True, non_i
 
     print(f"\nGotowe! Wszystkie wycinki z '{letter_name}' znajdziesz w: {output_dir}")
     return output_dir
+
+
+def edit_page_predictions(
+    image_path,
+    jsonl_path,
+    predictions_by_file=None,
+    info=None,
+    non_interactive=False,
+):
+    if info is None:
+        info = print
+
+    if not os.path.exists(jsonl_path):
+        info(f"Brak pliku JSONL: {jsonl_path}")
+        return
+
+    img_cv2 = cv2.imread(image_path)
+    if img_cv2 is None:
+        info(f"Blad: nie udalo sie wczytac obrazu '{image_path}'.")
+        return
+
+    entries = []
+    raw_lines = []
+    with open(jsonl_path, "r", encoding="utf-8") as jsonl_file:
+        for line in jsonl_file:
+            line = line.strip()
+            if not line:
+                continue
+            raw_lines.append(line)
+            try:
+                entries.append(json.loads(line))
+            except json.JSONDecodeError:
+                entries.append(None)
+
+    if predictions_by_file:
+        for entry in entries:
+            if not isinstance(entry, dict):
+                continue
+            file_name = entry.get("file_name")
+            if file_name in predictions_by_file:
+                entry.update(predictions_by_file[file_name])
+
+    if non_interactive:
+        with open(jsonl_path, "w", encoding="utf-8") as jsonl_file:
+            for entry in entries:
+                if isinstance(entry, dict):
+                    jsonl_file.write(json.dumps(entry, ensure_ascii=False))
+                    jsonl_file.write("\n")
+        return
+
+    editable = [e for e in entries if isinstance(e, dict) and e.get("bbox_xyxy")]
+    if not editable:
+        info("Brak bboxow do edycji predykcji.")
+        return
+
+    editable.sort(key=lambda e: e.get("file_name") or "")
+
+    window_name = "Edycja predykcji"
+    cv2.namedWindow(window_name, cv2.WINDOW_AUTOSIZE)
+
+    for idx, entry in enumerate(editable, start=1):
+        bbox = entry.get("bbox_xyxy")
+        if not isinstance(bbox, list) or len(bbox) != 4:
+            continue
+
+        x1, y1, x2, y2 = [int(v) for v in bbox]
+        preview = img_cv2.copy()
+        cv2.rectangle(preview, (x1, y1), (x2, y2), (0, 255, 255), 2)
+        label = f"{idx}/{len(editable)}"
+        cv2.putText(preview, label, (x1, max(18, y1 - 8)), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
+
+        current_text = entry.get("prediction") or entry.get("text") or ""
+        if current_text:
+            cv2.putText(preview, current_text, (x1, min(preview.shape[0] - 10, y2 + 20)), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 200, 0), 2)
+
+        cv2.imshow(window_name, preview)
+        cv2.waitKey(1)
+
+        prompt = f"[{idx}/{len(editable)}] {entry.get('file_name')} predykcja='{current_text}'. Nowy tekst (Enter=bez zmian, q=koniec): "
+        new_text = input(prompt).strip()
+        if new_text.lower() in ("q", "quit", "exit"):
+            break
+        if new_text:
+            entry["prediction"] = new_text
+            entry["text"] = new_text
+
+    cv2.destroyWindow(window_name)
+
+    with open(jsonl_path, "w", encoding="utf-8") as jsonl_file:
+        for entry in entries:
+            if isinstance(entry, dict):
+                jsonl_file.write(json.dumps(entry, ensure_ascii=False))
+                jsonl_file.write("\n")

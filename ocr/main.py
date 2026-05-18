@@ -184,6 +184,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--annotation-dir", type=str, default="inference", metavar="KATALOG", help="Katalog wyjsciowy dla trybu --annotate")
     parser.add_argument("--no-edit", action="store_true", help="W trybie --annotate wylacz interaktywna edycje bboxow")
     parser.add_argument("--non-interactive", action="store_true", help="W trybie --annotate pomin pytania input() i zapisz automatycznie")
+    parser.add_argument("--edit", action="store_true", help="W trybie --page wlacz edycje predykcji slow")
 
     parser.add_argument("--output", "-o", type=str, metavar="PLIK", help="Zapisz wynik do pliku (txt/json)")
     parser.add_argument(
@@ -389,7 +390,7 @@ def main(args=None, info=None, buffor=None):
             device=str(device),
         )
         jsonl_path = os.path.join(output_dir, "boxes.jsonl")
-        if os.path.exists(jsonl_path):
+        if args.edit and os.path.exists(jsonl_path):
             predictions_by_file = {}
             for r in table_rows:
                 if r["file"] and r["text"] is not None:
@@ -397,27 +398,15 @@ def main(args=None, info=None, buffor=None):
                         "prediction": r["text"],
                         "confidence": r["confidence"],
                     }
+            from ocr.bbox_annotator import edit_page_predictions
 
-            updated_lines = []
-            with open(jsonl_path, "r", encoding="utf-8") as jsonl_file:
-                for line in jsonl_file:
-                    line = line.strip()
-                    if not line:
-                        continue
-                    try:
-                        entry = json.loads(line)
-                    except json.JSONDecodeError:
-                        updated_lines.append(line)
-                        continue
-
-                    file_name = entry.get("file_name")
-                    if file_name in predictions_by_file:
-                        entry.update(predictions_by_file[file_name])
-                    updated_lines.append(json.dumps(entry, ensure_ascii=False))
-
-            with open(jsonl_path, "w", encoding="utf-8") as jsonl_file:
-                jsonl_file.write("\n".join(updated_lines))
-                jsonl_file.write("\n")
+            edit_page_predictions(
+                image_path=args.page,
+                jsonl_path=jsonl_path,
+                predictions_by_file=predictions_by_file,
+                info=info,
+                non_interactive=args.non_interactive,
+            )
     elif args.folder:
         results = process_folder(args.folder, args, model_path, device, info)
         rows = []

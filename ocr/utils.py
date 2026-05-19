@@ -815,7 +815,7 @@ def save_results_csv(rows, path="results.csv"):
             })
 # ── Embedding-based autokorekta HTR ──────────────────────────────────────────
 
-_EMBED_DIM = 512
+_EMBED_DIM = 2048
 _NGRAM_SIZES = (2, 3)
 
 # Cache słownikowych embeddingów (ładowany raz na sesję)
@@ -1016,7 +1016,7 @@ def DictCorrect(
     text: str,
     confidence: float = 100.0,
     threshold: float = 0.55,
-    top_k: int = 15,
+    top_k: int = 30,
     letter_vectors: list | None = None,
 ) -> str:
     """
@@ -1062,7 +1062,7 @@ def DictCorrect(
         if use_vectors:
             vec_score = _score_candidate_with_vectors(word, letter_vectors)
             if vec_score > -999.0:
-                vec_norm = max(0.0, 1.0 + vec_score / 5.0)
+                vec_norm = math.exp(vec_score)
                 return 0.46 * vec_norm + 0.27 * embed_sim + 0.18 * _rerank_score(word, text, embed_sim) + 0.09 * freq
         return _rerank_score(word, text, embed_sim) + 0.09 * freq
 
@@ -1080,5 +1080,7 @@ def DictCorrect(
     best_score = _combined_score(best_word, best_embed_sim)
 
     if best_score >= effective_threshold:
+        if text and text[0].isupper():
+            best_word = best_word[0].upper() + best_word[1:]
         return best_word
     return text

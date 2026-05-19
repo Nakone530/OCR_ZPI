@@ -408,6 +408,40 @@ def load_all_datasets(root_dir):
                 item["image_path"] = os.path.join(author_path, item["crop_file"])
 
                 all_data.append(item)
+        
+        # Obsługa augmentowanych plików w folderach _aug* obok oryginalnego folderu
+        # Zbierz mapę oryginalnych wpisów dla tego autora: base_name -> item
+        original_map = {}
+        for item in list(all_data):
+            # uwzględnij tylko wpisy z tego autora
+            img_path = item.get("image_path", "")
+            if img_path.startswith(author_path):
+                key = os.path.splitext(item.get("crop_file", ""))[0]
+                if key:
+                    original_map[key] = item
+
+        # Znajdź wszystkie katalogi w root_dir pasujące do author + '_aug'
+        for d in os.listdir(root_dir):
+            if not d.startswith(author + "_aug"):
+                continue
+            aug_path = os.path.join(root_dir, d)
+            if not os.path.isdir(aug_path):
+                continue
+
+            for f in os.listdir(aug_path):
+                if not f.lower().endswith((".png", ".jpg", ".jpeg")):
+                    continue
+                base_name = os.path.splitext(f)[0]
+                if "_aug_" not in base_name:
+                    continue
+                original_base = base_name[: base_name.rfind("_aug_")]
+                orig_item = original_map.get(original_base)
+                if not orig_item:
+                    continue
+                aug_item = orig_item.copy()
+                aug_item["image_path"] = os.path.join(aug_path, f)
+                aug_item["crop_file"] = f
+                all_data.append(aug_item)
 
     return all_data
 

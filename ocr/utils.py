@@ -38,7 +38,7 @@ from datetime import date
 from pathlib import Path
 import matplotlib.pyplot as plt
 import itertools
-from .config import IMAGE_SIZE, MEAN, STD, CHARS, AuxCHARS, MODEL_PATH, NUM_CLASSES, char2idx, idx2char, VERSION_RE, ÐICT_PATH
+from .config import IMAGE_SIZE, MEAN, STD, CHARS, AuxCHARS, MODEL_PATH, NUM_CLASSES, char2idx, idx2char, VERSION_RE, ÐICT_PATH, DATA_ROOT_DIR
 from .model import MainModel, AuxModel
 from . import info
 
@@ -50,6 +50,100 @@ def load_dictionary(json_path: str = ÐICT_PATH) -> list[str]:
         raise ValueError("JSON musi zawierać listę stringów")
 
     return [str(word) for word in data]
+
+
+_TRAINING_TRIGRAMS_CACHE: list[tuple[str, str, str]] | None = None
+
+
+def _load_training_trigrams(root_dir: str = DATA_ROOT_DIR) -> list[tuple[str, str, str]]:
+    """Load (prev, middle, next) trigrams from training boxes.jsonl files."""
+    global _TRAINING_TRIGRAMS_CACHE
+    if _TRAINING_TRIGRAMS_CACHE is not None:
+        return _TRAINING_TRIGRAMS_CACHE
+
+    trigrams: list[tuple[str, str, str]] = []
+    dataset = load_all_datasets(root_dir)
+
+    if not dataset:
+        _TRAINING_TRIGRAMS_CACHE = trigrams
+        return trigrams
+
+    dataset.sort(key=lambda item: (item.get("source_image", ""), item.get("id", 0)))
+
+    prev_row = None
+    curr_row = None
+    for row in dataset:
+        text = (row.get("text") or "").strip()
+        if not text:
+            prev_row = curr_row
+            curr_row = row
+            continue
+
+        if prev_row is not None and curr_row is not None:
+            prev_text = (prev_row.get("text") or "").strip()
+            curr_text = (curr_row.get("text") or "").strip()
+            if prev_text and curr_text:
+                trigrams.append((prev_text, curr_text, text))
+
+        prev_row = curr_row
+        curr_row = row
+
+    _TRAINING_TRIGRAMS_CACHE = trigrams
+    return trigrams
+
+
+def suggest_word_between_from_training(
+    prev_word: str,
+    next_word: str,
+    threshold: float = 0.0,
+    root_dir: str = DATA_ROOT_DIR,
+) -> str:
+    """
+    Suggest a word between two words using training data order.
+
+    Uses trigrams from boxes.jsonl where ids follow reading order.
+    Returns the most frequent middle word for exact (prev, next).
+    If no exact matches, uses similarity to find the closest trigram pair.
+    Returns empty string if best score is below threshold.
+    """
+    prev_word = (prev_word or "").strip()
+    next_word = (next_word or "").strip()
+
+    if not prev_word or not next_word:
+        return ""
+
+    trigrams = _load_training_trigrams(root_dir)
+    if not trigrams:
+        return ""
+
+    prev_lower = prev_word.lower()
+    next_lower = next_word.lower()
+
+    counts: dict[str, int] = {}
+    for prev_text, mid_text, next_text in trigrams:
+        if prev_text.lower() == prev_lower and next_text.lower() == next_lower:
+            counts[mid_text] = counts.get(mid_text, 0) + 1
+
+    if counts:
+        best_word = max(counts.items(), key=lambda item: item[1])[0]
+        return best_word
+
+    best_match = ""
+    best_score = 0.0
+
+    for prev_text, mid_text, next_text in trigrams:
+        score_prev = SequenceMatcher(None, prev_lower, prev_text.lower()).ratio()
+        score_next = SequenceMatcher(None, next_lower, next_text.lower()).ratio()
+        score = (score_prev + score_next) / 2.0
+
+        if score > best_score:
+            best_score = score
+            best_match = mid_text
+
+    if best_score >= threshold:
+        return best_match
+
+    return ""
 # ── Transformacje ──────────────────────────────────────────────────────────────
 
 def aux_transform():
@@ -818,3 +912,45 @@ def DictCorrect(
         return best_match
 
     return text
+
+
+def suggest_word_between(
+    prev_word: str,
+    next_word: str,
+    threshold: float = 0.8,
+    candidates: list[str] | None = None,
+) -> str:
+    """
+    Suggest a word that best fits between two words.
+
+    Scores each candidate by similarity to prev and next word and returns the
+    best match if it meets the threshold. Returns an empty string otherwise.
+    """
+    prev_word = (prev_word or "").strip()
+    next_word = (next_word or "").strip()
+
+    if not prev_word or not next_word:
+        return ""
+
+    dictionary = candidates or load_dictionary()
+
+    best_match = ""
+    best_score = 0.0
+
+    prev_lower = prev_word.lower()
+    next_lower = next_word.lower()
+
+    for word in dictionary:
+        word_lower = word.lower()
+        score_prev = SequenceMatcher(None, prev_lower, word_lower).ratio()
+        score_next = SequenceMatcher(None, word_lower, next_lower).ratio()
+        score = (score_prev + score_next) / 2.0
+
+        if score > best_score:
+            best_score = score
+            best_match = word
+
+    if best_score >= threshold:
+        return best_match
+
+    return ""

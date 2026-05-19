@@ -363,17 +363,54 @@ def main(args=None, info=None, buffor=None):
             })
         
         table_rows.sort(key=lambda r: r["key"] if r["key"] else "")
+
+        def _word_index_from_key(key):
+            if not key:
+                return None
+            if key.startswith("word_"):
+                return key.split("word_")[-1]
+            return key
+
+        indexed_rows = []
+        for r in table_rows:
+            idx = _word_index_from_key(r["key"])
+            indexed_rows.append((idx, r))
+
+        indexed_rows.sort(key=lambda item: item[0] if item[0] is not None else "")
         
         # Wyświetl tabelę
         info(f"\n{'NAME':<12} {'TEXT':<20} {'CONF':<10} {'AUTOCORRECT':<20}")
         info("-" * 60)
 
-        for r in table_rows:
+        from ocr.utils import suggest_word_between_from_training
+
+        def _is_suspicious_word(word: str, confidence: float | None) -> bool:
+            word = (word or "").strip()
+            if not word:
+                return True
+            if not word.isalpha():
+                return True
+            if confidence is not None and confidence < 0.60:
+                return True
+            return False
+
+        for i, (_, r) in enumerate(indexed_rows):
+            prev_text = None
+            next_text = None
+            if i > 0:
+                prev_text = (indexed_rows[i - 1][1].get("text") or "").strip()
+            if i + 1 < len(indexed_rows):
+                next_text = (indexed_rows[i + 1][1].get("text") or "").strip()
             if r["confidence"] is None:
                 autocorTXT = DictCorrect(r['text'])
+                if not r["text"] and prev_text and next_text:
+                    autocorTXT = suggest_word_between_from_training(prev_text, next_text) or autocorTXT
                 info(f"{str(r['key']) if r['key'] else '-':<12} {autocorTXT:<20} {'-':<10}")
             else:
                 autocorTXT = DictCorrect(r['text'])
+                should_fill = _is_suspicious_word(r["text"], r["confidence"] / 100)
+                if should_fill and prev_text and next_text:
+                    autocorTXT = suggest_word_between_from_training(prev_text, next_text) or autocorTXT
                 info(f"{r['key']:<12} {r['text']:<20} {r['confidence']/100:<10.2%} {autocorTXT:<20} {'-':<10}")
 
         

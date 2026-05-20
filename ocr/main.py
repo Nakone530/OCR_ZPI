@@ -11,6 +11,7 @@ Laczy wszystkie moduly:
 """
 
 import argparse
+import gc
 import json
 import logging
 import os
@@ -329,6 +330,7 @@ def main(args=None, info=None, buffor=None):
         if output_dir:
             info(f"Adnotacje zapisane w: {output_dir}")
 
+        gc.collect()
         results = process_folder(output_dir, args, model_path, device, info)
         
         # Przygotuj dane do wyświetlania w rozmieszczeniu

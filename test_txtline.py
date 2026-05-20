@@ -148,6 +148,32 @@ def split_lines_from_roi(roi, x, y, median_height, min_peak_distance=10):
     margin_px = max(1, int(round(0.08 * median_height)))
     return _apply_virtual_margins(boxes, margin_px, img_h=y + roi.shape[0])
 
+
+def _auto_crop_document(gray):
+    _, binary = cv2.threshold(
+        gray,
+        0,
+        255,
+        cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU
+    )
+
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
+    cleaned = cv2.morphologyEx(binary, cv2.MORPH_OPEN, kernel, iterations=1)
+    cleaned = cv2.morphologyEx(cleaned, cv2.MORPH_CLOSE, kernel, iterations=1)
+
+    coords = cv2.findNonZero(cleaned)
+    if coords is None:
+        return gray, (0, 0)
+
+    x, y, w, h = cv2.boundingRect(coords)
+    margin = max(2, int(round(0.01 * max(gray.shape))))
+    x0 = max(0, x - margin)
+    y0 = max(0, y - margin)
+    x1 = min(gray.shape[1], x + w + margin)
+    y1 = min(gray.shape[0], y + h + margin)
+
+    return gray[y0:y1, x0:x1], (x0, y0)
+
 def detect_text_lines(image_path):
     img = cv2.imread(image_path)
 
@@ -155,6 +181,7 @@ def detect_text_lines(image_path):
         raise ValueError(f"Nie można wczytać obrazu: {image_path}")
     
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    gray, crop_offset = _auto_crop_document(gray)
 
     # Binaryzacja
     _, thresh = cv2.threshold(
@@ -241,6 +268,8 @@ def detect_text_lines(image_path):
     output = img.copy()
 
     for i, (x, y, w, h) in enumerate(lines):
+        x += crop_offset[0]
+        y += crop_offset[1]
         # Zielony prostokąt
         cv2.rectangle(
             output,

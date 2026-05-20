@@ -249,6 +249,16 @@ def _segment_letters(gray: np.ndarray, args=None) -> list[tuple[int, int, int, i
     Najpierw CC, a szerokie komponenty próbuje dzielić watershed.
     """
 
+    # Parametry używane do wykrywania i dzielenia komponentów.
+    # Pozwalają na nadpisanie przez `args` (np. z CLI) lub użycie rozsądnych domyślnych.
+    ws_min_comp_area = int(getattr(args, "ws_min_comp_area", 20))
+    ws_min_box_w = int(getattr(args, "ws_min_box_w", 4))
+    ws_min_box_h = int(getattr(args, "ws_min_box_h", 6))
+    ws_split_aspect = float(getattr(args, "ws_split_aspect", 3.0))
+    ws_split_min_area = int(getattr(args, "ws_split_min_area", 150))
+    ws_fg_ratio = float(getattr(args, "ws_fg_ratio", 0.4))
+    ws_min_box_area = int(getattr(args, "ws_min_box_area", 50))
+
     blur = cv2.GaussianBlur(gray, (3, 3), 0)
     _, binary_inv = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
 
@@ -402,6 +412,17 @@ def _finalize_debug_crops(
         plt.show()
 
 
+def _load_image_array(image_path: str, args, mode: str = "L") -> np.ndarray:
+    """Wczytuje obraz z odszumianiem i zwraca jako numpy array.
+
+    Centralizuje powtarzane wywołanie `load_and_optionally_denoise(...); np.array(...)`.
+    Zwraca obraz w postaci 2D (skala szarości) jeśli `mode=='L'`, w przeciwnym wypadku
+    zwraca surową tablicę obrazu.
+    """
+    image = load_and_optionally_denoise(image_path, args, mode=mode)
+    return np.array(image)
+
+
 # ── Przekazanie zdjęć folderu do predykcji ───────────────────────────────────────────────
 
 
@@ -431,7 +452,7 @@ def process_folder(folder_path, args, models_dir, device, info):
         try:
             info(f"\nRozpoznawanie: {file_path}")
 
-            per_model = predict_letter_multi(
+            per_model = predict_word_crnn_multi(
                 file_path,
                 loaded_models,
                 device,
@@ -492,11 +513,11 @@ def _load_bbox_data(folder_path):
     
     return bbox_data if bbox_data else None
 
-def predict_letter_multi(image_path, models, device, args, info):
+def predict_word_crnn_multi(image_path, models, device, args, info):
     results = {}
 
     for name, model in models.items():
-        res = predict_letter(image_path, model, device, args)
+        res = predict_word_crnn(image_path, model, device, args)
         results[name] = res
 
     return results
@@ -639,7 +660,7 @@ def run_ensembles_inference(file_path, ensembles, loaded_models, device, args, i
 
         subset = {m: loaded_models[m] for m in ensemble}
 
-        per_model = predict_letter_multi(
+        per_model = predict_word_crnn_multi(
             file_path,
             subset,
             device,
@@ -716,7 +737,7 @@ def build_cache(folder_path, loaded_models, device, args, info):
 
         info(f"CACHE: {file_path}")
 
-        per_model = predict_letter_multi(
+        per_model = predict_word_crnn_multi(
             file_path,
             loaded_models,
             device,
@@ -730,8 +751,8 @@ def build_cache(folder_path, loaded_models, device, args, info):
         json.dump(cache, f, ensure_ascii=False, indent=2)
 
     return cache
-# ── Predykcja pojedynczej litery ───────────────────────────────────────────────
-def predict_letter(
+# ── Predykcja wyrazu modelem CTC ───────────────────────────────────────────────
+def predict_word_crnn(
     image_path: str,
     model: nn.Module,
     device: torch.device,
@@ -742,9 +763,7 @@ def predict_letter(
     """
         funkcja rozpoznaje wyraz słowa
     """
-    image = load_and_optionally_denoise(image_path, args, mode="L")
-    
-    img_array = np.array(image)
+    img_array = _load_image_array(image_path, args, mode="L")
     debug = _is_debug_enabled(args)
     #if(debug):
         #show_image(image, "przed crop")
@@ -754,12 +773,7 @@ def predict_letter(
     model.eval()
     with torch.no_grad():
         original_shape = img_array.shape
-        
-        # crop
-        #img_array = _tight_crop(img_array)
         cropped_shape = img_array.shape
-        
-        # UWAGA: zmień preprocess
         pil = Image.fromarray(img_array).convert("L")
         
         if(debug):
@@ -816,16 +830,16 @@ def predict_letter(
     return {"text": text, "confidence": confidence, "per_char_confidences": confidences, "probs": probs_out}
 
 
-# ── Predykcja tekstu modelem CRNN ─────────────────────────────────────────────
+# ── Predykcja pojedynczej litery ──────────────────────────────────────────────
 
-def predict_image(
+def predict_letter(
     image_path: str,
     model: nn.Module,
     device: torch.device,
     args,
 ) -> tuple[str, float, torch.Tensor]:
     """
-    Rozpoznaje pojedynczy znak na zdjęciu.
+    Rozpoznaje pojedynczą literę na zdjęciu.
     
     Funkcja ładuje obraz, przycina do bounding boxa znaku,
     przetwarza i klasyfikuje przy użyciu modelu CNN.
@@ -843,11 +857,10 @@ def predict_image(
             - probs (torch.Tensor): Tensor prawdopodobieństw dla wszystkich klas
     
     Przykład:
-        >>> char, conf, probs = predict_image("letter.png", model, device, args)
+        >>> char, conf, probs = predict_letter("letter.png", model, device, args)
         >>> print(f"Rozpoznano: {char} z pewnością {conf:.1f}%")
     """
-    image = load_and_optionally_denoise(image_path, args, mode="L")
-    img_array = np.array(image)
+    img_array = _load_image_array(image_path, args, mode="L")
     debug = _is_debug_enabled(args)
     
     debug_crops: list[tuple[np.ndarray, str]] = []
@@ -855,13 +868,14 @@ def predict_image(
     model.eval()
     with torch.no_grad():
         original_shape = img_array.shape
-        #img_array = _tight_crop(img_array)
-        cropped_shape = img_array.shape
-        
-        #img_array = preprocess_letter(img_array)
-        preprocessed_shape = img_array.shape
-        
-        letter = _classify_letter(img_array, model, device, 1, args)
+        # przytnij do tight crop przed klasyfikacją pojedynczej litery
+        gray = img_array if img_array.ndim == 2 else np.array(Image.fromarray(img_array).convert("L"))
+        cropped = _tight_crop(gray)
+        cropped_shape = cropped.shape
+        preprocessed = preprocess_letter(cropped)
+        preprocessed_shape = preprocessed.shape
+
+        letter = _classify_letter(preprocessed, model, device, 1, args)
 
     if debug:
         predicted_char, confidence, probs = letter
@@ -878,6 +892,11 @@ def predict_image(
         _finalize_debug_crops(debug_crops, args, image_path, mode_tag="image")
 
     return letter
+
+
+# Backward compatibility for older imports.
+predict_image = predict_letter
+predict_letter_multi = predict_word_crnn_multi
 
 # ── Predykcja wyrazu (jedna linia) ────────────────────────────────────────────
 
@@ -911,8 +930,7 @@ def predict_word(
         Funkcja oczekuje obrazu z pojedynczą linią tekstu.
         Dla obrazów wieloliniowych użyj predict_segments().
     """
-    image = load_and_optionally_denoise(image_path, args, mode="L")
-    img_array = np.array(image)
+    img_array = _load_image_array(image_path, args, mode="L")
     letter_boxes = _segment_letters(img_array, args=args)
     debug = _is_debug_enabled(args)
 
@@ -993,8 +1011,7 @@ def predict_segments(
         na podstawie odległości między literami.
 
     """
-    image = load_and_optionally_denoise(image_path, args, mode="L")
-    img_array = np.array(image)
+    img_array = _load_image_array(image_path, args, mode="L")
     binary = img_array < 128
     debug = _is_debug_enabled(args)
 

@@ -19,7 +19,7 @@ import sys
 import torch
 
 from ocr.config import MODEL_PATH, OCR_MODEL_PATH
-from ocr.inference import run_ensemble_generation, compute_accuracy, test_models, test_cache_models, get_active_chars, load_model, predict_image, predict_letter, predict_segments, predict_word, process_folder
+from ocr.inference import run_ensemble_generation, compute_accuracy, test_models, test_cache_models, get_active_chars, load_model, predict_letter, predict_segments, predict_word, process_folder
 from ocr.output import OCRResult, create_output_handler
 from ocr.utils import save_image_to_today_folder, DictCorrect, list_models, generate_model_ensembles, load_transcription, save_results_csv
 from ocr.trainer import train_model, infinite_train, multi_train, TRAINING_PRESETS, get_preset_names
@@ -540,7 +540,7 @@ def main(args=None, info=None, buffor=None):
 
         model = load_model(ocr_path, device, info, 2)
 
-        predicted_char, confidence, probs = predict_image(args.image, model, device, args)
+        predicted_char, confidence, probs = predict_letter(args.image, model, device, args)
         active_labels = get_active_chars()
 
 
@@ -635,18 +635,18 @@ def main(args=None, info=None, buffor=None):
                 continue
 
             save_image_to_today_folder(img_path, info)
-            result = predict_image(img_path, model, device, args)
+            predicted_char, confidence, probs = predict_letter(img_path, model, device, args)
             results.append(
                 {
                     "file": img_path,
-                    "char": result["text"],
-                    "confidence": result["confidence"],
-                    "probs": result["probs"],
+                    "char": predicted_char,
+                    "confidence": confidence,
+                    "probs": probs,
                 }
             )
 
             if not args.json:
-                print_multi_result(img_path, result["text"], result["confidence"], info)
+                print_multi_result(img_path, predicted_char, confidence, info)
 
         if args.json:
             payload = build_multi_result_json(results=results, device=str(device))

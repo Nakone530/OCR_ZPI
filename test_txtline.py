@@ -72,6 +72,27 @@ def visualize_connected_components(thresh):
 
     return output, num_labels, stats
 
+def _apply_virtual_margins(boxes, margin_px, img_h):
+    if margin_px <= 0:
+        return boxes
+
+    trimmed = []
+    for bx, by, bw, bh in boxes:
+        ny = by + margin_px
+        nh = bh - 2 * margin_px
+        if nh <= 0:
+            continue
+        if ny < 0:
+            nh += ny
+            ny = 0
+        if ny + nh > img_h:
+            nh = img_h - ny
+        if nh > 0:
+            trimmed.append((bx, ny, bw, nh))
+
+    return trimmed
+
+
 def split_lines_from_roi(roi, x, y, median_height, min_peak_distance=10):
     print("SPLIT CALLED")
     projection = np.sum(roi > 0, axis=1).astype(np.float32)
@@ -120,10 +141,12 @@ def split_lines_from_roi(roi, x, y, median_height, min_peak_distance=10):
         segments.append((prev, roi.shape[0]))
 
     # 5. konwersja do bboxów
-    return [
+    boxes = [
         (x, y + s, roi.shape[1], e - s)
         for s, e in segments
     ]
+    margin_px = max(1, int(round(0.08 * median_height)))
+    return _apply_virtual_margins(boxes, margin_px, img_h=y + roi.shape[0])
 
 def detect_text_lines(image_path):
     img = cv2.imread(image_path)
@@ -207,6 +230,9 @@ def detect_text_lines(image_path):
             
             #lines.extend(too_small)
             lines.extend(most_safe)
+
+    margin_px = max(1, int(round(0.08 * median_height)))
+    lines = _apply_virtual_margins(lines, margin_px, img_h=thresh.shape[0])
         
     # Sortowanie od góry do dołuedian_heig
     lines = sorted(lines, key=lambda b: b[1])

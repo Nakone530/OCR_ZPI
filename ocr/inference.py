@@ -9,6 +9,7 @@ Odpowiedzialności:
 """
 
 import difflib
+import gc
 import os
 import re
 import json
@@ -83,10 +84,10 @@ def _find_bounds(projection: np.ndarray) -> list[tuple[int, int]]:
     bounds = []
     in_seg = False
     for i, val in enumerate(projection):
-        if val > 0 and not in_seg:
+        if val >= 2 and not in_seg:
             start = i
             in_seg = True
-        elif val == 0 and in_seg:
+        elif val < 2 and in_seg:
             bounds.append((start, i))
             in_seg = False
     if in_seg:
@@ -130,21 +131,20 @@ def _merge_fragmented_boxes(
     current_group = [boxes[0]]
     
     for i in range(1, len(boxes)):
-        prev_x1, prev_y1, prev_x2, prev_y2 = current_group[-1]
+        # gap poziomy: ostatni box w grupie (posortowane po x, więc skrajny prawy)
+        prev_x2 = current_group[-1][2]
         curr_x1, curr_y1, curr_x2, curr_y2 = boxes[i]
-        
-        prev_h = prev_y2 - prev_y1
+
+        # wyrównanie pionowe: scalony bbox całej grupy
+        group_y1 = min(b[1] for b in current_group)
+        group_y2 = max(b[3] for b in current_group)
+        group_h = group_y2 - group_y1
         curr_h = curr_y2 - curr_y1
-        
-        # Sprawdź czy boxy są sąsiadujące poziomo
+
         horizontal_gap = curr_x1 - prev_x2
-        
-        # Sprawdź czy boxy są wyrównane pionowo
-        y_overlap = max(0, min(prev_y2, curr_y2) - max(prev_y1, curr_y1))
-        vertical_distance = max(0, max(prev_y1, curr_y1) - min(prev_y2, curr_y2))
-        
-        # Sprawdzenie czy boxy mają podobną wysokość
-        height_ratio = max(prev_h, curr_h) / min(prev_h, curr_h) if min(prev_h, curr_h) > 0 else 1.0
+        y_overlap = max(0, min(group_y2, curr_y2) - max(group_y1, curr_y1))
+        vertical_distance = max(0, max(group_y1, curr_y1) - min(group_y2, curr_y2))
+        height_ratio = max(group_h, curr_h) / min(group_h, curr_h) if min(group_h, curr_h) > 0 else 1.0
         
         # Warunki scalenia - bardziej liberalne
         # Scalaj jeśli: przerwa jest mała LUB boxy się nachodzą pionowo
@@ -255,6 +255,14 @@ def _segment_letters(gray: np.ndarray, args=None) -> list[tuple[int, int, int, i
     kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
     cleaned = cv2.morphologyEx(binary_inv, cv2.MORPH_OPEN, kernel, iterations=1)
 
+    ws_min_comp_area = int(getattr(args, "ws_min_comp_area", 20)) if args else 20
+    ws_min_box_w    = int(getattr(args, "ws_min_box_w",    3))  if args else 3
+    ws_min_box_h    = int(getattr(args, "ws_min_box_h",    5))  if args else 5
+    ws_split_aspect = float(getattr(args, "ws_split_aspect", 1.8)) if args else 1.8
+    ws_split_min_area = int(getattr(args, "ws_split_min_area", 100)) if args else 100
+    ws_fg_ratio     = float(getattr(args, "ws_fg_ratio",    0.5)) if args else 0.5
+    ws_min_box_area = int(getattr(args, "ws_min_box_area",  20)) if args else 20
+
     num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(cleaned, connectivity=8)
     boxes: list[tuple[int, int, int, int]] = []
 
@@ -314,7 +322,7 @@ def _classify_letter(letter_gray: np.ndarray, model: nn.Module, device: torch.de
         >>> char = _classify_letter(letter_img, model, device, False)
         >>> char, conf, probs = _classify_letter(letter_img, model, device, True)
     """
-    pil = Image.fromarray(letter_gray).resize((28, 28)).convert("L")
+    pil = Image.fromarray(letter_gray).convert("L")
     tensor = aux_transform()(pil).unsqueeze(0).to(device)
     probs = torch.softmax(model(tensor), dim=1)
     confidence, predicted = torch.max(probs, 1)
@@ -409,61 +417,55 @@ def process_folder(folder_path, args, models_dir, device, info):
 
     if not os.path.isdir(folder_path):
         raise ValueError(f"To nie jest katalog: {folder_path}")
-    
+
     models_dir = os.path.dirname(models_dir)
     version = select_version()
     models = list_models(models_dir, version)
     default_model, selected_models = select_models(models)
 
-    loaded_models = load_models(models_dir, selected_models, device, info)
-
     bbox_data = _load_bbox_data(folder_path)
-    bbox_index = 0
+
+    png_files = sorted([
+        os.path.join(folder_path, f)
+        for f in os.listdir(folder_path)
+        if f.lower().endswith(".png")
+    ])
+
+    # Wyniki per-plik per-model: {file_path: {model_name: result_dict}}
+    all_per_model = {fp: {} for fp in png_files}
+
+    for model_name in selected_models:
+        model_path = os.path.join(models_dir, model_name, "model.pth")
+        model = load_model(model_path, device, info)
+
+        for file_path in png_files:
+            try:
+                info(f"\nRozpoznawanie [{model_name}]: {file_path}")
+                res = predict_letter(file_path, model, device, args)
+                all_per_model[file_path][model_name] = res
+            except Exception as e:
+                info(f"Błąd [{model_name}] {file_path}: {e}")
+
+        del model
+        gc.collect()
 
     results = []
+    bbox_index = 0
+    for file_path in png_files:
+        per_model = all_per_model[file_path]
+        bbox = bbox_data[bbox_index].get("bbox") if bbox_data and bbox_index < len(bbox_data) else None
+        bbox_index += 1
 
-    for filename in os.listdir(folder_path):
-        if not filename.lower().endswith(".png"):
+        if not per_model:
+            results.append({"file": file_path, "error": "Brak wyników modelu"})
             continue
 
-        file_path = os.path.join(folder_path, filename)
-
         try:
-            info(f"\nRozpoznawanie: {file_path}")
-
-            per_model = predict_letter_multi(
-                file_path,
-                loaded_models,
-                device,
-                args,
-                info
-            )
-
             final_text = aggregate(per_model, default_model)
-
-            best_conf = max(
-                r["confidence"] for r in per_model.values()
-            )
-
-
-            bbox = None
-            if bbox_data and bbox_index < len(bbox_data):
-                bbox = bbox_data[bbox_index].get("bbox")
-            bbox_index += 1
-
-            results.append({
-                "file": file_path,
-                "text": final_text,
-                "confidence": best_conf,
-                "bbox": bbox,
-                "per_model": per_model
-            })
-
+            best_conf = max(r["confidence"] for r in per_model.values())
+            results.append({"file": file_path, "text": final_text, "confidence": best_conf, "bbox": bbox})
         except Exception as e:
-            results.append({
-                "file": file_path,
-                "error": str(e)
-            })
+            results.append({"file": file_path, "error": str(e)})
 
     return results
 
@@ -789,7 +791,6 @@ def predict_letter(
 
             if p != prev and p != 0:
                 chars.append(idx2char[p])
-
                 confidences.append(probs[t, 0, p].item())
 
             prev = p
@@ -797,8 +798,8 @@ def predict_letter(
         text = "".join(chars)
         confidence = float(np.mean(confidences) * 100) if confidences else 0.0
 
-        # dla kompatybilności: zwracamy probs z pierwszego kroku
-        probs_out = probs[0, 0]
+        probs_out = probs[0, 0].detach().cpu()
+        del tensor, outputs, log_probs, probs
 
     if debug:
         info(

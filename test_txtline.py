@@ -172,7 +172,6 @@ def detect_text_lines(image_path):
 
     median_height = int(np.median(heights))
     median_width = int(np.median(widths))
-    most_safe_bb = []
     too_large = []
     lines = []
     for cnt in contours:
@@ -190,12 +189,7 @@ def detect_text_lines(image_path):
             roi = thresh[y:y+h, x:x+w]
             print("TOO LARGE:", (x, y, w, h))
             split = split_lines_from_roi(roi, x, y, median_height)
-##            split = [
-##                (bx, by, bw, bh)
-##                for (bx, by, bw, bh) in split
-##                if bw > 5 and bh > 5 + 0.3 * median_height
-##            ]
-##            lines.extend(split)
+            
             too_small = [
                 (bx, by, bw, bh) 
                 for (bx, by, bw, bh) in split

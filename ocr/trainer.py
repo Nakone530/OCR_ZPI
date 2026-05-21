@@ -650,7 +650,8 @@ def train_model(epochs=10, batch_size=32, model_path=None, info=None, args=None,
             input_lengths = torch.full(
                 size=(images.size(0),),
                 fill_value=outputs.size(0),
-                dtype=torch.long
+                dtype=torch.long,
+                device=GLOBAL_DEVICE,
             )
 
             loss = GLOBAL_CRITERION(
@@ -684,9 +685,10 @@ def train_model(epochs=10, batch_size=32, model_path=None, info=None, args=None,
                 input_lengths = torch.full(
                     size=(images.size(0),),
                     fill_value=outputs.size(0),
-                    dtype=torch.long
+                    dtype=torch.long,
+                    device=GLOBAL_DEVICE,
                 )
-                
+
                 loss = GLOBAL_CRITERION(
                     log_probs,
                     targets,
@@ -987,8 +989,9 @@ def infinite_train(batch_size=32, model_path=None, checkpoint_interval=5, info=N
     TRAINING_PAUSED = False
     TRAINING_STOP = False
     GLOBAL_BEST_ACC = float('inf')
-    
-    
+
+    signal.signal(signal.SIGINT, infinite_handler)
+
     try:
         info("1. Ładowanie datasetu...")
         
@@ -1067,9 +1070,10 @@ def infinite_train(batch_size=32, model_path=None, checkpoint_interval=5, info=N
                 input_lengths = torch.full(
                     size=(images.size(0),),
                     fill_value=outputs.size(0),
-                    dtype=torch.long
+                    dtype=torch.long,
+                    device=GLOBAL_DEVICE,
                 )
-                
+
                 loss = GLOBAL_CRITERION(
                     log_probs,
                     targets,
@@ -1111,9 +1115,10 @@ def infinite_train(batch_size=32, model_path=None, checkpoint_interval=5, info=N
                     input_lengths = torch.full(
                         size=(images.size(0),),
                         fill_value=outputs.size(0),
-                        dtype=torch.long
+                        dtype=torch.long,
+                        device=GLOBAL_DEVICE,
                     )
-                    
+
                     loss = GLOBAL_CRITERION(
                         log_probs,
                         targets,
@@ -1175,4 +1180,5 @@ def infinite_train(batch_size=32, model_path=None, checkpoint_interval=5, info=N
         info(f"\nBłąd podczas treningu: {e}")
         import traceback
         info(traceback.format_exc())
-
+    finally:
+        signal.signal(signal.SIGINT, handler)

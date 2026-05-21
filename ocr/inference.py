@@ -517,7 +517,7 @@ def predict_word_crnn_multi(image_path, models, device, args, info):
     results = {}
 
     for name, model in models.items():
-        res = predict_word_crnn(image_path, model, device, args)
+        res = predict_word_crnn(image_path, model, device, args, info)
         results[name] = res
 
     return results
@@ -757,6 +757,7 @@ def predict_word_crnn(
     model: nn.Module,
     device: torch.device,
     args,
+    info=None,
 ) -> tuple[str, float, torch.Tensor]:
 
 
@@ -764,6 +765,8 @@ def predict_word_crnn(
         funkcja rozpoznaje wyraz słowa
     """
     img_array = _load_image_array(image_path, args, mode="L")
+    if info is None:
+        info = globals().get("info")
     debug = _is_debug_enabled(args)
     #if(debug):
         #show_image(image, "przed crop")
@@ -837,6 +840,7 @@ def predict_letter(
     model: nn.Module,
     device: torch.device,
     args,
+    info=None,
 ) -> tuple[str, float, torch.Tensor]:
     """
     Rozpoznaje pojedynczą literę na zdjęciu.
@@ -861,6 +865,8 @@ def predict_letter(
         >>> print(f"Rozpoznano: {char} z pewnością {conf:.1f}%")
     """
     img_array = _load_image_array(image_path, args, mode="L")
+    if info is None:
+        info = globals().get("info")
     debug = _is_debug_enabled(args)
     
     debug_crops: list[tuple[np.ndarray, str]] = []
@@ -905,6 +911,7 @@ def predict_word(
     model: nn.Module,
     device: torch.device,
     args,
+    info=None,
 ) -> tuple[str, float, dict[str, float]]:
     """
     Segmentuje i rozpoznaje litery w jednej linii tekstu.
@@ -931,6 +938,8 @@ def predict_word(
         Dla obrazów wieloliniowych użyj predict_segments().
     """
     img_array = _load_image_array(image_path, args, mode="L")
+    if info is None:
+        info = globals().get("info")
     letter_boxes = _segment_letters(img_array, args=args)
     debug = _is_debug_enabled(args)
 
@@ -981,6 +990,7 @@ def predict_segments(
     model: nn.Module,
     device: torch.device,
     args,
+    info=None,
 ) -> tuple[str, list[tuple[str, float]], dict[str, float]]:
     """
     Segmentuje i rozpoznaje tekst wieloliniowy.
@@ -1012,6 +1022,8 @@ def predict_segments(
 
     """
     img_array = _load_image_array(image_path, args, mode="L")
+    if info is None:
+        info = globals().get("info")
     binary = img_array < 128
     debug = _is_debug_enabled(args)
 

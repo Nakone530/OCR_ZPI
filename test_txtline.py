@@ -133,6 +133,20 @@ def detect_text_lines(image_path):
     
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
+    f_clahe = cv2.createCLAHE(
+        clipLimit=2.0,
+        tileGridSize=(8, 8)
+    )
+    
+    clahe = f_clahe.apply(gray)
+
+    bilateral = cv2.bilateralFilter(
+        clahe,
+        d=7,
+        sigmaColor=50,
+        sigmaSpace=50
+    )
+
     # Binaryzacja
     _, thresh = cv2.threshold(
         gray,
@@ -140,7 +154,18 @@ def detect_text_lines(image_path):
         255,
         cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU
     )
-    
+
+    # median on binary image
+    median = cv2.medianBlur(thresh, 3)
+
+    # opening
+    kernel = np.ones((2, 2), np.uint8)
+
+    opened = cv2.morphologyEx(
+        median,
+        cv2.MORPH_OPEN,
+        kernel
+    )
 
     # Łączenie znaków w poziome linie
     kernel = cv2.getStructuringElement(
@@ -298,13 +323,51 @@ if __name__ == "__main__":
             cv2.COLOR_GRAY2BGR
         )
 
+        gray = cv2.cvtColor(original, cv2.COLOR_BGR2GRAY)
+
+        f_clahe = cv2.createCLAHE(
+            clipLimit=0.1,
+            tileGridSize=(10, 10)
+        )
+        clahe_steps = f_clahe.apply(gray)
+
+        bilateral_steps = cv2.bilateralFilter(
+            clahe_steps,
+            d=5,
+            sigmaColor=5,
+            sigmaSpace=5
+        )
+
+        # Binaryzacja
+        _, binary_steps = cv2.threshold(
+            bilateral_steps,
+            0,
+            255,
+            cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU
+        )
+        # opening
+        kernel = np.ones((2, 2), np.uint8)
+
+        opened = cv2.morphologyEx(
+            binary_steps,
+            cv2.MORPH_OPEN,
+            kernel
+        )
+
+
         debug_views = [
             ("Output", output),
             ("Original", original),
+            ("Gray", gray),
             ("Binaryzacja", thresh_bgr),
             ("Dylatacja", dilated_bgr),
             ("CC", cc_vis),
             ("CC Dilated", cc_vis_d),
+            ("Clahe", clahe_steps),
+            ("Bilateryzacja", bilateral_steps),
+            ("filtered Binaryzacja", binary_steps), 
+            ("Binaryzacja", thresh_bgr),
+            ("final (g->c->bil->bin->m->o)", opened),
         ]
 
         debug_views = [

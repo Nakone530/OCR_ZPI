@@ -210,6 +210,27 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--json-pretty", action="store_true", help="Sformatuj JSON")
     parser.add_argument("--json-path", type=str, default=None, metavar="PLIK", help="Zapisz wynik JSON do pliku")
 
+        # Parametry segmentacji watershed
+    parser.add_argument("--ws-fg-ratio", type=float, default=0.45,
+                        help="Próg foreground dla watershed (ułamek max distance, domyślnie: 0.45)")
+    parser.add_argument("--ws-split-aspect", type=float, default=1.15,
+                        help="Kiedy komponent uznać za sklejony: warunek szerokość > ratio * wysokość (domyślnie: 1.15)")
+    parser.add_argument("--ws-min-comp-area", type=int, default=30,
+                        help="Minimalne pole komponentu, aby był kandydatem na literę (domyślnie: 30)")
+    parser.add_argument("--ws-split-min-area", type=int, default=250,
+                        help="Minimalne pole komponentu, od którego próbujemy podział watershed (domyślnie: 250)")
+    parser.add_argument("--ws-min-box-w", type=int, default=3,
+                        help="Minimalna szerokość boxa litery po segmentacji (domyślnie: 3)")
+    parser.add_argument("--ws-min-box-h", type=int, default=5,
+                        help="Minimalna wysokość boxa litery po segmentacji (domyślnie: 5)")
+    parser.add_argument("--ws-min-box-area", type=int, default=20,
+                        help="Minimalne pole boxa litery po segmentacji (domyślnie: 20)")
+    parser.add_argument("--ws-merge-gap", type=int, default=4,
+                        help="Maksymalna przerwa pozioma między fragmentami do scalenia (domyślnie: 4)")
+    parser.add_argument("--ws-merge-height-ratio", type=float, default=1.8,
+                        help="Maksymalny stosunek wysokości fragmentów do scalenia (domyślnie: 1.8)")
+    parser.add_argument("--ws-merge-vert-dist", type=int, default=4,
+                        help="Maksymalna odległość pionowa do scalenia fragmentów (domyślnie: 4)")
     return parser
 
 

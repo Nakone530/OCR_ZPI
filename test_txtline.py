@@ -125,6 +125,90 @@ def split_lines_from_roi(roi, x, y, median_height, min_peak_distance=10):
         for s, e in segments
     ]
 
+def detect_color_blocks(img, min_area=600, chroma_thresh=6):
+    lab = cv2.cvtColor(img, cv2.COLOR_BGR2LAB)
+    l, a, b = cv2.split(lab)
+
+    h, w = l.shape
+    y0 = int(h * 0.15)
+    y1 = int(h * 0.85)
+    x0 = int(w * 0.15)
+    x1 = int(w * 0.85)
+
+    a_bg = float(np.median(a[y0:y1, x0:x1]))
+    b_bg = float(np.median(b[y0:y1, x0:x1]))
+
+    da = a.astype(np.float32) - a_bg
+    db = b.astype(np.float32) - b_bg
+    chroma = np.sqrt(da * da + db * db)
+
+    color_mask = (chroma > chroma_thresh) & (l > 40) & (l < 245)
+    color_mask = color_mask.astype(np.uint8) * 255
+
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5))
+    color_mask = cv2.morphologyEx(color_mask, cv2.MORPH_OPEN, kernel, iterations=1)
+    color_mask = cv2.morphologyEx(color_mask, cv2.MORPH_CLOSE, kernel, iterations=2)
+
+    num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(color_mask)
+
+    blocks = []
+    for i in range(1, num_labels):
+        area = stats[i, cv2.CC_STAT_AREA]
+        if area < min_area:
+            continue
+
+        x = stats[i, cv2.CC_STAT_LEFT]
+        y = stats[i, cv2.CC_STAT_TOP]
+        w = stats[i, cv2.CC_STAT_WIDTH]
+        h = stats[i, cv2.CC_STAT_HEIGHT]
+        blocks.append((x, y, w, h))
+
+    return color_mask, blocks
+
+def normalize_illumination(gray, ksize=51):
+    if ksize % 2 == 0:
+        ksize += 1
+
+    blur = cv2.GaussianBlur(gray, (ksize, ksize), 0)
+    blur = np.clip(blur, 1, 255).astype(np.uint8)
+    norm = cv2.divide(gray, blur, scale=255)
+
+    return norm
+
+def threshold_by_color_blocks(img, gray, base_thresh):
+    color_mask, blocks = detect_color_blocks(img)
+
+    refined = base_thresh.copy()
+    per_block_thresholds = []
+
+    for (x, y, w, h) in blocks:
+        roi_gray = gray[y:y+h, x:x+w]
+        roi_mask = color_mask[y:y+h, x:x+w]
+
+        if np.count_nonzero(roi_mask) < 20:
+            continue
+
+        # Otsu w obrębie bloku kolorowego
+        t, _ = cv2.threshold(
+            roi_gray,
+            0,
+            255,
+            cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU
+        )
+
+        per_block_thresholds.append(((x, y, w, h), float(t)))
+
+        _, roi_thresh = cv2.threshold(
+            roi_gray,
+            t,
+            255,
+            cv2.THRESH_BINARY_INV
+        )
+
+        refined[y:y+h, x:x+w] = roi_thresh
+
+    return refined, color_mask, blocks, per_block_thresholds
+
 def detect_text_lines(image_path):
     img = cv2.imread(image_path)
 
@@ -133,13 +217,20 @@ def detect_text_lines(image_path):
     
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
-    # Binaryzacja
-    _, thresh = cv2.threshold(
-        gray,
+    # Korekcja nierownego oswietlenia
+    gray_norm = normalize_illumination(gray)
+
+    # Binaryzacja bazowa (globalna)
+    _, base_thresh = cv2.threshold(
+        gray_norm,
         0,
         255,
         cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU
     )
+
+    # Binaryzacja z lokalnym progiem w blokach kolorowych
+    thresh, color_mask, color_blocks, per_block_thresholds = \
+        threshold_by_color_blocks(img, gray_norm, base_thresh)
     
 
     # Łączenie znaków w poziome linie
@@ -235,7 +326,28 @@ def detect_text_lines(image_path):
             2
         )
 
-    return output, thresh, dilated, lines
+    # Oznaczenie bloków kolorowych + próg
+    for (x, y, w, h) in color_blocks:
+        cv2.rectangle(
+            output,
+            (x, y),
+            (x + w, y + h),
+            (255, 0, 0),
+            2
+        )
+
+    for (x, y, w, h), t in per_block_thresholds:
+        cv2.putText(
+            output,
+            f"T={int(round(t))}",
+            (x, max(10, y - 8)),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.6,
+            (255, 0, 0),
+            2
+        )
+
+    return output, thresh, dilated, lines, color_mask
 
 
 
@@ -270,7 +382,7 @@ if __name__ == "__main__":
 
         print(f"\n=== {image_path} ===")
 
-        output, thresh, dilated, lines = \
+        output, thresh, dilated, lines, color_mask = \
             detect_text_lines(image_path)
 
         print(f"Znaleziono {len(lines)} linii")
@@ -284,6 +396,11 @@ if __name__ == "__main__":
         original = cv2.imread(image_path)
 
         cc_vis, _, _ = visualize_connected_components(thresh)
+
+        color_mask_bgr = cv2.cvtColor(
+            color_mask,
+            cv2.COLOR_GRAY2BGR
+        )
 
         cc_vis_d, _, _ = \
             visualize_connected_components(dilated)
@@ -301,6 +418,7 @@ if __name__ == "__main__":
         debug_views = [
             ("Output", output),
             ("Original", original),
+            ("Color Blocks", color_mask_bgr),
             ("Binaryzacja", thresh_bgr),
             ("Dylatacja", dilated_bgr),
             ("CC", cc_vis),

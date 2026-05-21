@@ -1,6 +1,7 @@
 import os
 import glob
 import argparse
+import json
 import cv2
 import numpy as np
 
@@ -175,8 +176,12 @@ def normalize_illumination(gray, ksize=51):
 
     return norm
 
-def threshold_by_color_blocks(img, gray, base_thresh):
-    color_mask, blocks = detect_color_blocks(img)
+def threshold_by_color_blocks(img, gray, base_thresh, min_area=600, chroma_thresh=6):
+    color_mask, blocks = detect_color_blocks(
+        img,
+        min_area=min_area,
+        chroma_thresh=chroma_thresh
+    )
 
     refined = base_thresh.copy()
     per_block_thresholds = []
@@ -218,7 +223,8 @@ def detect_text_lines(image_path):
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
     # Korekcja nierownego oswietlenia
-    gray_norm = normalize_illumination(gray)
+    illum_ksize = 51
+    gray_norm = normalize_illumination(gray, ksize=illum_ksize)
 
     # Binaryzacja bazowa (globalna)
     _, base_thresh = cv2.threshold(
@@ -229,17 +235,27 @@ def detect_text_lines(image_path):
     )
 
     # Binaryzacja z lokalnym progiem w blokach kolorowych
+    color_min_area = 600
+    color_chroma_thresh = 6
     thresh, color_mask, color_blocks, per_block_thresholds = \
-        threshold_by_color_blocks(img, gray_norm, base_thresh)
+        threshold_by_color_blocks(
+            img,
+            gray_norm,
+            base_thresh,
+            min_area=color_min_area,
+            chroma_thresh=color_chroma_thresh
+        )
     
 
     # Łączenie znaków w poziome linie
+    kernel_size = (10, 2)
     kernel = cv2.getStructuringElement(
         cv2.MORPH_RECT,
-        (10, 2)
+        kernel_size
     )
 
-    dilated = cv2.dilate(thresh, kernel, iterations=1)
+    dilation_iterations = 1
+    dilated = cv2.dilate(thresh, kernel, iterations=dilation_iterations)
 
     # Szukanie konturów
     contours, _ = cv2.findContours(
@@ -252,12 +268,13 @@ def detect_text_lines(image_path):
     widths = []
     num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(thresh)
 
+    cc_min_area = 20
     for i in range(1, num_labels):
         h = stats[i, cv2.CC_STAT_HEIGHT]
         w = stats[i, cv2.CC_STAT_WIDTH]
         area = stats[i, cv2.CC_STAT_AREA]
 
-        if area > 20:
+        if area > cc_min_area:
             heights.append(h)
             widths.append(w)
 
@@ -265,14 +282,18 @@ def detect_text_lines(image_path):
     median_width = int(np.median(widths))
     too_large = []
     lines = []
+    min_w = 5
+    min_h_base = 5
+    min_h_ratio = 0.2
+    max_h_ratio = 3.0
     for cnt in contours:
         
         x, y, w, h = cv2.boundingRect(cnt)
 
         # Odrzucenie małych elementów
-        if 5 + 0.2 * median_height <= h <= 3.0 * median_height:
+        if min_h_base + min_h_ratio * median_height <= h <= max_h_ratio * median_height:
             print(" ")
-            if w > 5:
+            if w > min_w:
                 lines.append((x, y, w, h))
         else:
             too_large.append((x, y, w, h))
@@ -284,13 +305,13 @@ def detect_text_lines(image_path):
             too_small = [
                 (bx, by, bw, bh) 
                 for (bx, by, bw, bh) in split
-                    if bw < 5 or bh < 5 + 0.3 * median_height
+                    if bw < min_w or bh < min_h_base + 0.3 * median_height
             ]
 
             most_safe = [
                 (bx, by, bw, bh)
                 for (bx, by, bw, bh) in split
-                    if not bw >= 5 or bh >= 5 + 0.3 * median_height
+                    if not bw >= min_w or bh >= min_h_base + 0.3 * median_height
             ]
             center_y = y + h / 2
             center_x = x + w / 2
@@ -347,7 +368,55 @@ def detect_text_lines(image_path):
             2
         )
 
-    return output, thresh, dilated, lines, color_mask
+    report = {
+        "image_path": image_path,
+        "image_shape": [int(img.shape[0]), int(img.shape[1])],
+        "grayscale": {"method": "cv2.COLOR_BGR2GRAY"},
+        "illumination_correction": {
+            "method": "divide_by_gaussian",
+            "ksize": int(illum_ksize)
+        },
+        "binarization_global": {
+            "method": "otsu",
+            "type": "THRESH_BINARY_INV + THRESH_OTSU"
+        },
+        "color_blocks": {
+            "space": "LAB",
+            "min_area": int(color_min_area),
+            "chroma_thresh": float(color_chroma_thresh),
+            "morph_kernel": [5, 5],
+            "morph_open_iter": 1,
+            "morph_close_iter": 2,
+            "count": int(len(color_blocks))
+        },
+        "binarization_color_blocks": {
+            "method": "otsu_per_block",
+            "thresholds": [
+                {
+                    "bbox": [int(x), int(y), int(w), int(h)],
+                    "threshold": float(t)
+                }
+                for (x, y, w, h), t in per_block_thresholds
+            ]
+        },
+        "morphology": {
+            "dilate_kernel": [int(kernel_size[0]), int(kernel_size[1])],
+            "dilate_iterations": int(dilation_iterations)
+        },
+        "connected_components": {
+            "min_area": int(cc_min_area),
+            "median_height": int(median_height),
+            "median_width": int(median_width)
+        },
+        "line_filtering": {
+            "min_w": int(min_w),
+            "min_h_base": int(min_h_base),
+            "min_h_ratio": float(min_h_ratio),
+            "max_h_ratio": float(max_h_ratio)
+        }
+    }
+
+    return output, thresh, dilated, lines, color_mask, report
 
 
 
@@ -382,10 +451,18 @@ if __name__ == "__main__":
 
         print(f"\n=== {image_path} ===")
 
-        output, thresh, dilated, lines, color_mask = \
+        output, thresh, dilated, lines, color_mask, report = \
             detect_text_lines(image_path)
 
         print(f"Znaleziono {len(lines)} linii")
+
+        print("Parametry przetwarzania:")
+        print(json.dumps(report, ensure_ascii=True, indent=2))
+
+        report_path = os.path.splitext(image_path)[0] + "_report.json"
+        with open(report_path, "w", encoding="utf-8") as f:
+            json.dump(report, f, ensure_ascii=True, indent=2)
+        print(f"Zapisano raport: {report_path}")
 
         for i, (x, y, w, h) in enumerate(lines):
             print(f"{i}: x={x}, y={y}, w={w}, h={h}")

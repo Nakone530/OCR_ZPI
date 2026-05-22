@@ -126,94 +126,6 @@ def split_lines_from_roi(roi, x, y, median_height, min_peak_distance=10):
         for s, e in segments
     ]
 
-def detect_color_blocks(img, min_area=600, chroma_thresh=6):
-    lab = cv2.cvtColor(img, cv2.COLOR_BGR2LAB)
-    l, a, b = cv2.split(lab)
-
-    h, w = l.shape
-    y0 = int(h * 0.15)
-    y1 = int(h * 0.85)
-    x0 = int(w * 0.15)
-    x1 = int(w * 0.85)
-
-    a_bg = float(np.median(a[y0:y1, x0:x1]))
-    b_bg = float(np.median(b[y0:y1, x0:x1]))
-
-    da = a.astype(np.float32) - a_bg
-    db = b.astype(np.float32) - b_bg
-    chroma = np.sqrt(da * da + db * db)
-
-    color_mask = (chroma > chroma_thresh) & (l > 40) & (l < 245)
-    color_mask = color_mask.astype(np.uint8) * 255
-
-    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5))
-    color_mask = cv2.morphologyEx(color_mask, cv2.MORPH_OPEN, kernel, iterations=1)
-    color_mask = cv2.morphologyEx(color_mask, cv2.MORPH_CLOSE, kernel, iterations=2)
-
-    num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(color_mask)
-
-    blocks = []
-    for i in range(1, num_labels):
-        area = stats[i, cv2.CC_STAT_AREA]
-        if area < min_area:
-            continue
-
-        x = stats[i, cv2.CC_STAT_LEFT]
-        y = stats[i, cv2.CC_STAT_TOP]
-        w = stats[i, cv2.CC_STAT_WIDTH]
-        h = stats[i, cv2.CC_STAT_HEIGHT]
-        blocks.append((x, y, w, h))
-
-    return color_mask, blocks
-
-def normalize_illumination(gray, ksize=51):
-    if ksize % 2 == 0:
-        ksize += 1
-
-    blur = cv2.GaussianBlur(gray, (ksize, ksize), 0)
-    blur = np.clip(blur, 1, 255).astype(np.uint8)
-    norm = cv2.divide(gray, blur, scale=255)
-
-    return norm
-
-def threshold_by_color_blocks(img, gray, base_thresh, min_area=600, chroma_thresh=6):
-    color_mask, blocks = detect_color_blocks(
-        img,
-        min_area=min_area,
-        chroma_thresh=chroma_thresh
-    )
-
-    refined = base_thresh.copy()
-    per_block_thresholds = []
-
-    for (x, y, w, h) in blocks:
-        roi_gray = gray[y:y+h, x:x+w]
-        roi_mask = color_mask[y:y+h, x:x+w]
-
-        if np.count_nonzero(roi_mask) < 20:
-            continue
-
-        # Otsu w obrębie bloku kolorowego
-        t, _ = cv2.threshold(
-            roi_gray,
-            0,
-            255,
-            cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU
-        )
-
-        per_block_thresholds.append(((x, y, w, h), float(t)))
-
-        _, roi_thresh = cv2.threshold(
-            roi_gray,
-            t,
-            255,
-            cv2.THRESH_BINARY_INV
-        )
-
-        refined[y:y+h, x:x+w] = roi_thresh
-
-    return refined, color_mask, blocks, per_block_thresholds
-
 def detect_text_lines(image_path):
     img = cv2.imread(image_path)
 
@@ -222,40 +134,22 @@ def detect_text_lines(image_path):
     
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
-    # Korekcja nierownego oswietlenia
-    illum_ksize = 51
-    gray_norm = normalize_illumination(gray, ksize=illum_ksize)
-
-    # Binaryzacja bazowa (globalna)
-    _, base_thresh = cv2.threshold(
-        gray_norm,
+    # Binaryzacja
+    _, thresh = cv2.threshold(
+        gray,
         0,
         255,
         cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU
     )
-
-    # Binaryzacja z lokalnym progiem w blokach kolorowych
-    color_min_area = 600
-    color_chroma_thresh = 6
-    thresh, color_mask, color_blocks, per_block_thresholds = \
-        threshold_by_color_blocks(
-            img,
-            gray_norm,
-            base_thresh,
-            min_area=color_min_area,
-            chroma_thresh=color_chroma_thresh
-        )
     
 
     # Łączenie znaków w poziome linie
-    kernel_size = (10, 2)
     kernel = cv2.getStructuringElement(
         cv2.MORPH_RECT,
-        kernel_size
+        (10, 2)
     )
 
-    dilation_iterations = 1
-    dilated = cv2.dilate(thresh, kernel, iterations=dilation_iterations)
+    dilated = cv2.dilate(thresh, kernel, iterations=1)
 
     # Szukanie konturów
     contours, _ = cv2.findContours(
@@ -268,32 +162,53 @@ def detect_text_lines(image_path):
     widths = []
     num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(thresh)
 
-    cc_min_area = 20
     for i in range(1, num_labels):
         h = stats[i, cv2.CC_STAT_HEIGHT]
         w = stats[i, cv2.CC_STAT_WIDTH]
         area = stats[i, cv2.CC_STAT_AREA]
 
-        if area > cc_min_area:
+        if area > 20:
             heights.append(h)
             widths.append(w)
 
-    median_height = int(np.median(heights))
-    median_width = int(np.median(widths))
+    if heights and widths:
+        median_height = int(np.median(heights))
+        median_width = int(np.median(widths))
+        mean_height = float(np.mean(heights))
+        mean_width = float(np.mean(widths))
+        std_height = float(np.std(heights))
+        std_width = float(np.std(widths))
+        stats_cc = {
+            "count": len(heights),
+            "median_height": median_height,
+            "median_width": median_width,
+            "mean_height": mean_height,
+            "mean_width": mean_width,
+            "std_height": std_height,
+            "std_width": std_width,
+        }
+    else:
+        median_height = 0
+        median_width = 0
+        stats_cc = {
+            "count": 0,
+            "median_height": 0,
+            "median_width": 0,
+            "mean_height": 0.0,
+            "mean_width": 0.0,
+            "std_height": 0.0,
+            "std_width": 0.0,
+        }
     too_large = []
     lines = []
-    min_w = 5
-    min_h_base = 5
-    min_h_ratio = 0.2
-    max_h_ratio = 3.0
     for cnt in contours:
         
         x, y, w, h = cv2.boundingRect(cnt)
 
         # Odrzucenie małych elementów
-        if min_h_base + min_h_ratio * median_height <= h <= max_h_ratio * median_height:
+        if 5 + 0.2 * median_height <= h <= 3.0 * median_height:
             print(" ")
-            if w > min_w:
+            if w > 5:
                 lines.append((x, y, w, h))
         else:
             too_large.append((x, y, w, h))
@@ -305,13 +220,13 @@ def detect_text_lines(image_path):
             too_small = [
                 (bx, by, bw, bh) 
                 for (bx, by, bw, bh) in split
-                    if bw < min_w or bh < min_h_base + 0.3 * median_height
+                    if bw < 5 or bh < 5 + 0.3 * median_height
             ]
 
             most_safe = [
                 (bx, by, bw, bh)
                 for (bx, by, bw, bh) in split
-                    if not bw >= min_w or bh >= min_h_base + 0.3 * median_height
+                    if not bw >= 5 or bh >= 5 + 0.3 * median_height
             ]
             center_y = y + h / 2
             center_x = x + w / 2
@@ -347,76 +262,7 @@ def detect_text_lines(image_path):
             2
         )
 
-    # Oznaczenie bloków kolorowych + próg
-    for (x, y, w, h) in color_blocks:
-        cv2.rectangle(
-            output,
-            (x, y),
-            (x + w, y + h),
-            (255, 0, 0),
-            2
-        )
-
-    for (x, y, w, h), t in per_block_thresholds:
-        cv2.putText(
-            output,
-            f"T={int(round(t))}",
-            (x, max(10, y - 8)),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.6,
-            (255, 0, 0),
-            2
-        )
-
-    report = {
-        "image_path": image_path,
-        "image_shape": [int(img.shape[0]), int(img.shape[1])],
-        "grayscale": {"method": "cv2.COLOR_BGR2GRAY"},
-        "illumination_correction": {
-            "method": "divide_by_gaussian",
-            "ksize": int(illum_ksize)
-        },
-        "binarization_global": {
-            "method": "otsu",
-            "type": "THRESH_BINARY_INV + THRESH_OTSU"
-        },
-        "color_blocks": {
-            "space": "LAB",
-            "min_area": int(color_min_area),
-            "chroma_thresh": float(color_chroma_thresh),
-            "morph_kernel": [5, 5],
-            "morph_open_iter": 1,
-            "morph_close_iter": 2,
-            "count": int(len(color_blocks))
-        },
-        "binarization_color_blocks": {
-            "method": "otsu_per_block",
-            "thresholds": [
-                {
-                    "bbox": [int(x), int(y), int(w), int(h)],
-                    "threshold": float(t)
-                }
-                for (x, y, w, h), t in per_block_thresholds
-            ]
-        },
-        "morphology": {
-            "dilate_kernel": [int(kernel_size[0]), int(kernel_size[1])],
-            "dilate_iterations": int(dilation_iterations)
-        },
-        "connected_components": {
-            "min_area": int(cc_min_area),
-            "median_height": int(median_height),
-            "median_width": int(median_width)
-        },
-        "line_filtering": {
-            "min_w": int(min_w),
-            "min_h_base": int(min_h_base),
-            "min_h_ratio": float(min_h_ratio),
-            "max_h_ratio": float(max_h_ratio)
-        }
-    }
-
-    return output, thresh, dilated, lines, color_mask, report
+    return output, thresh, dilated, lines, stats_cc
 
 
 
@@ -439,6 +285,13 @@ if __name__ == "__main__":
         help="Tryb debug"
     )
 
+    parser.add_argument(
+        "--json",
+        type=str,
+        default=None,
+        help="Zapis statystyk do JSON"
+    )
+
     args = parser.parse_args()
 
     image_paths = collect_images(args.input)
@@ -447,22 +300,40 @@ if __name__ == "__main__":
         print("Nie znaleziono obrazów")
         exit(1)
 
+    json_rows = []
+
+    abort_all = False
+
     for image_path in image_paths:
 
         print(f"\n=== {image_path} ===")
 
-        output, thresh, dilated, lines, color_mask, report = \
+        output, thresh, dilated, lines, stats_cc = \
             detect_text_lines(image_path)
 
         print(f"Znaleziono {len(lines)} linii")
+        print(
+            "Sredni rozmiar liter (CC): "
+            f"h={stats_cc['mean_height']:.2f}px, "
+            f"w={stats_cc['mean_width']:.2f}px | "
+            f"mediana h={stats_cc['median_height']}px, "
+            f"w={stats_cc['median_width']}px | "
+            f"odchylenie h={stats_cc['std_height']:.2f}, "
+            f"w={stats_cc['std_width']:.2f}"
+        )
 
-        print("Parametry przetwarzania:")
-        print(json.dumps(report, ensure_ascii=True, indent=2))
+        if args.json:
+            json_rows.append({
+                "image": image_path,
+                "count": stats_cc["count"],
+                "median_height": stats_cc["median_height"],
+                "median_width": stats_cc["median_width"],
+                "mean_height": stats_cc["mean_height"],
+                "mean_width": stats_cc["mean_width"],
+                "std_height": stats_cc["std_height"],
+                "std_width": stats_cc["std_width"],
+            })
 
-        report_path = os.path.splitext(image_path)[0] + "_report.json"
-        with open(report_path, "w", encoding="utf-8") as f:
-            json.dump(report, f, ensure_ascii=True, indent=2)
-        print(f"Zapisano raport: {report_path}")
 
         for i, (x, y, w, h) in enumerate(lines):
             print(f"{i}: x={x}, y={y}, w={w}, h={h}")
@@ -473,11 +344,6 @@ if __name__ == "__main__":
         original = cv2.imread(image_path)
 
         cc_vis, _, _ = visualize_connected_components(thresh)
-
-        color_mask_bgr = cv2.cvtColor(
-            color_mask,
-            cv2.COLOR_GRAY2BGR
-        )
 
         cc_vis_d, _, _ = \
             visualize_connected_components(dilated)
@@ -495,7 +361,6 @@ if __name__ == "__main__":
         debug_views = [
             ("Output", output),
             ("Original", original),
-            ("Color Blocks", color_mask_bgr),
             ("Binaryzacja", thresh_bgr),
             ("Dylatacja", dilated_bgr),
             ("CC", cc_vis),
@@ -531,8 +396,8 @@ if __name__ == "__main__":
 
             # ESC
             if key == 27 or key == ord('q'):
-                cv2.destroyAllWindows()
-                exit(0)
+                abort_all = True
+                break
 
             # D / strzałka w prawo
             elif key in [ord('d'), 83]:
@@ -546,4 +411,11 @@ if __name__ == "__main__":
             elif key == 13:
                 break
 
+        if abort_all:
+            break
+
     cv2.destroyAllWindows()
+
+    if args.json and json_rows:
+        with open(args.json, "w", encoding="utf-8") as handle:
+            json.dump(json_rows, handle, ensure_ascii=True, indent=2)

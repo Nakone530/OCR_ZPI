@@ -1,0 +1,62 @@
+{
+  "image_path": "D:\\Kacper\\OCR_ZPI\\Listy\\Szymborska\\Szymborska3.jpg",
+  "image_shape": [
+    971,
+    1367
+  ],
+  "grayscale": {
+    "method": "cv2.COLOR_BGR2GRAY"
+  },
+  "illumination_correction": {
+    "method": "divide_by_gaussian",
+    "ksize": 51
+  },
+  "binarization_global": {
+    "method": "otsu",
+    "type": "THRESH_BINARY_INV + THRESH_OTSU"
+  },
+  "color_blocks": {
+    "space": "LAB",
+    "min_area": 600,
+    "chroma_thresh": 6.0,
+    "morph_kernel": [
+      5,
+      5
+    ],
+    "morph_open_iter": 1,
+    "morph_close_iter": 2,
+    "count": 0
+  },
+  "binarization_color_blocks": {
+    "method": "otsu_per_block",
+    "thresholds": []
+  },
+  "morphology": {
+    "dilate_kernel": [
+      10,
+      2
+    ],
+    "dilate_iterations": 1
+  },
+  "connected_components": {
+    "min_area": 20,
+    "median_height": 20,
+    "median_width": 30,
+    "mean_height": 20.234375,
+    "mean_width": 39.953125,
+    "count": 64
+  },
+  "letter_size": {
+    "avg_height": 20.234375,
+    "avg_width": 39.953125,
+    "median_height": 20,
+    "median_width": 30,
+    "count": 64
+  },
+  "line_filtering": {
+    "min_w": 5,
+    "min_h_base": 5,
+    "min_h_ratio": 0.2,
+    "max_h_ratio": 3.0
+  }
+}

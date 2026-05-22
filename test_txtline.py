@@ -278,8 +278,16 @@ def detect_text_lines(image_path):
             heights.append(h)
             widths.append(w)
 
-    median_height = int(np.median(heights))
-    median_width = int(np.median(widths))
+    if heights and widths:
+        median_height = int(np.median(heights))
+        median_width = int(np.median(widths))
+        mean_height = float(np.mean(heights))
+        mean_width = float(np.mean(widths))
+    else:
+        median_height = 0
+        median_width = 0
+        mean_height = 0.0
+        mean_width = 0.0
     too_large = []
     lines = []
     min_w = 5
@@ -406,7 +414,17 @@ def detect_text_lines(image_path):
         "connected_components": {
             "min_area": int(cc_min_area),
             "median_height": int(median_height),
-            "median_width": int(median_width)
+            "median_width": int(median_width),
+            "mean_height": float(mean_height),
+            "mean_width": float(mean_width),
+            "count": int(len(heights))
+        },
+        "letter_size": {
+            "avg_height": float(mean_height),
+            "avg_width": float(mean_width),
+            "median_height": int(median_height),
+            "median_width": int(median_width),
+            "count": int(len(heights))
         },
         "line_filtering": {
             "min_w": int(min_w),

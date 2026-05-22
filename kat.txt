@@ -1,0 +1,90 @@
+========================================================
+  KOREKCJA KĄTA TEKSTU (DESKEW) – 2026-05-20
+  Gałąź: CRNN
+========================================================
+
+──────────────────────────────────────────────────────
+  CO ZOSTAŁO WYKONANE
+──────────────────────────────────────────────────────
+
+Dodano automatyczną korekcję kąta pochylenia tekstu działającą
+w dwóch miejscach pipeline'u OCR. Nie wymaga żadnych flag —
+działa przy każdym wywołaniu --page.
+
+──────────────────────────────────────────────────────
+  1. NOWY PLIK: ocr/preprocessing.py
+──────────────────────────────────────────────────────
+
+Niezależny moduł z funkcjami deskew.
+
+  estimate_line_angle_deg(items) → float
+    Regresja liniowa przez centra bounding-boxów komponentów w linii.
+    Zwraca kąt pochylenia linii tekstu w stopniach.
+    Zwraca 0.0 gdy < 3 komponentów (za mało danych).
+
+  estimate_word_angle_deg(gray) → float
+    Wykrywanie kąta metodą Hougha na obrazie pojedynczego wyrazu.
+    Relaxed progi: min 30 krawędzi, min 3 linie (dla małych obrazów).
+
+  rotate_image(image, angle_deg) → np.ndarray
+    Obrót obrazu o zadany kąt, BORDER_REPLICATE (bez czarnych krawędzi).
+
+──────────────────────────────────────────────────────
+  2. ZMIANA: ocr/bbox_annotator.py
+──────────────────────────────────────────────────────
+
+  detect_word_boxes_auto() — deskew per-linia tekstu:
+
+    Dla każdej wykrytej linii tekstu:
+      - oblicza kąt metodą regresji liniowej przez centra BB
+      - jeśli |kąt| > 1.5°: obraca binarne ROI linii
+      - projekcja pionowa liczona na obróconym ROI
+        → lepsze przerwy między wyrazami → dokładniejszy podział
+
+    Tekst prosty (kąt ≤ 1.5°) → ROI bez zmian, brak narzutu.
+
+──────────────────────────────────────────────────────
+  3. ZMIANA: ocr/inference.py
+──────────────────────────────────────────────────────
+
+  predict_letter() — deskew per-wyraz z porównaniem confidence:
+
+    Dla każdego wyciętego wyrazu:
+      - oblicza kąt metodą Hougha
+      - jeśli |kąt| ≥ 1.5°:
+          → uruchamia OCR na oryginale
+          → uruchamia OCR na obróconym obrazie
+          → zwraca wynik z WYŻSZĄ confidence
+      - jeśli |kąt| < 1.5°:
+          → OCR raz na oryginale (nic nie zmieniane)
+
+  Wyodrębniono _run_crnn_on_array() — wewnętrzna inferencja CRNN
+  na tablicy numpy, używana do uruchomienia OCR dwukrotnie.
+
+  Naprawiono błąd KeyError: default_model nie istniał w loaded_models
+  gdy wybrany model nie miał pliku .pth — teraz automatycznie
+  wybierany jest pierwszy dostępny załadowany model.
+
+──────────────────────────────────────────────────────
+  4. ZMIANA: ocr/utils.py
+──────────────────────────────────────────────────────
+
+  select_version() i select_models() — dodano try/except (EOFError, OSError)
+  zapobiegający crashowi przy uruchomieniu nieinteraktywnym (--non-interactive).
+
+──────────────────────────────────────────────────────
+  DZIAŁANIE W SKRÓCIE
+──────────────────────────────────────────────────────
+
+  Tekst krzywy (kąt > 1.5°):
+    bbox:  linia prostowana → lepszy podział na wyrazy
+    OCR:   dwa wyniki → zwracany lepszy
+
+  Tekst prosty (kąt ≤ 1.5°):
+    bbox:  bez zmian
+    OCR:   jeden przebieg, bez obrotu
+
+  Próg domyślny: 1.5 stopnia
+  Zmiana progu:  --deskew-threshold X
+
+========================================================

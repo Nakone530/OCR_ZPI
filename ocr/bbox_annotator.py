@@ -6,6 +6,8 @@ import shutil
 import cv2
 import numpy as np
 
+from .preprocessing import estimate_page_angle_deg, estimate_line_angle_deg, rotate_image
+
 
 def clamp_box(box, width, height, min_size=4):
     x1, y1, x2, y2 = box
@@ -597,6 +599,11 @@ def detect_word_boxes_auto(image):
         roi = clean[ly1:ly2, lx1:lx2]
         if roi.size == 0:
             continue
+
+        # Deskew per-linia: regresja przez centra BB → obrót binarnego ROI
+        line_angle = estimate_line_angle_deg(items)
+        if abs(line_angle) > 1.5:
+            roi = rotate_image(roi, -line_angle)
 
         proj = np.sum(roi > 0, axis=0).astype(np.float32)
         if np.max(proj) <= 0:
@@ -1343,6 +1350,12 @@ def process_letter(image_path, base_dir="inference", enable_box_edit=True, non_i
     if img_cv2 is None:
         print(f"Błąd: nie udało się wczytać obrazu '{image_path}'.")
         return None
+
+    # Globalny deskew przed detekcją boksów — wycinki i bboxy będą proste
+    page_angle = estimate_page_angle_deg(img_cv2)
+    if abs(page_angle) > 1.5:
+        print(f"Wykryto pochylenie strony: {page_angle:.2f}° — prostowanie obrazu.")
+        img_cv2 = rotate_image(img_cv2, page_angle)
 
     img_h, img_w = img_cv2.shape[:2]
 

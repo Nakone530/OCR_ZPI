@@ -52,6 +52,7 @@ from .utils import (
     select_version,
 )
 from .display import visualize_prediction, show_image
+from .preprocessing import estimate_word_angle_deg, rotate_image
 from . import info
 
 
@@ -425,6 +426,10 @@ def process_folder(folder_path, args, models_dir, device, info):
 
     loaded_models = load_models(models_dir, selected_models, device, info)
 
+    # Fallback: jeśli default_model nie trafił do loaded_models, użyj pierwszego dostępnego
+    if loaded_models and default_model not in loaded_models:
+        default_model = next(iter(loaded_models))
+
     bbox_data = _load_bbox_data(folder_path)
     bbox_index = 0
 
@@ -738,6 +743,40 @@ def build_cache(folder_path, loaded_models, device, args, info):
         json.dump(cache, f, ensure_ascii=False, indent=2)
 
     return cache
+# ── Wewnętrzna inferencja CRNN ────────────────────────────────────────────────
+
+def _run_crnn_on_array(img_array: np.ndarray, model: nn.Module, device: torch.device, args) -> dict:
+    """Uruchamia CRNN na tablicy numpy i zwraca słownik z text/confidence/per_char_confidences/probs."""
+    pil = Image.fromarray(img_array).convert("L")
+    tensor = get_inf_transform(args)(pil).unsqueeze(0).to(device)
+
+    outputs = model(tensor)
+    log_probs = outputs.log_softmax(2)
+    probs = log_probs.exp()
+
+    preds = log_probs.argmax(2)[:, 0].cpu().numpy()
+
+    chars: list[str] = []
+    confidences: list[float] = []
+    prev = 0
+
+    for t in range(len(preds)):
+        p = preds[t]
+        if p != prev and p != 0:
+            chars.append(idx2char[p])
+            confidences.append(probs[t, 0, p].item())
+        prev = p
+
+    text = "".join(chars)
+    confidence = float(np.mean(confidences) * 100) if confidences else 0.0
+    return {
+        "text": text,
+        "confidence": confidence,
+        "per_char_confidences": confidences,
+        "probs": probs[0, 0],
+    }
+
+
 # ── Predykcja pojedynczej litery ───────────────────────────────────────────────
 def predict_letter(
     image_path: str,
@@ -747,66 +786,42 @@ def predict_letter(
 ) -> tuple[str, float, torch.Tensor]:
 
 
-    """
-        funkcja rozpoznaje wyraz słowa
-    """
+    """funkcja rozpoznaje wyraz słowa"""
     image = load_and_optionally_denoise(image_path, args, mode="L")
-    
+
     img_array = np.array(image)
     debug = _is_debug_enabled(args)
-    #if(debug):
-        #show_image(image, "przed crop")
-    
     debug_crops: list[tuple[np.ndarray, str]] = []
 
     model.eval()
     with torch.no_grad():
         original_shape = img_array.shape
-        
-        # crop
-        #img_array = _tight_crop(img_array)
         cropped_shape = img_array.shape
-        
-        # UWAGA: zmień preprocess
-        pil = Image.fromarray(img_array).convert("L")
-        
-        if(debug):
-            #show_image(pil, "po crop", True)
-            img_before = pil
-            
-        tensor = get_inf_transform(args)(pil).unsqueeze(0).to(device)
-        
-        if(debug):
-            show_before_after(img_before, tensor)
-            
-        preprocessed_shape = tensor.shape
 
-        outputs = model(tensor)  # (T, B, C)
-        log_probs = outputs.log_softmax(2)
-        probs = log_probs.exp()
+        if debug:
+            pil_before = Image.fromarray(img_array).convert("L")
 
-        preds = log_probs.argmax(2)[:, 0].cpu().numpy()
+        deskew_threshold = float(getattr(args, "deskew_threshold", 1.5))
+        angle = estimate_word_angle_deg(img_array)
 
-        chars = []
-        confidences = []
+        if abs(angle) >= deskew_threshold:
+            rotated_array = rotate_image(img_array, angle)
+            result_orig = _run_crnn_on_array(img_array, model, device, args)
+            result_rot = _run_crnn_on_array(rotated_array, model, device, args)
+            result = result_rot if result_rot["confidence"] >= result_orig["confidence"] else result_orig
+        else:
+            result = _run_crnn_on_array(img_array, model, device, args)
 
-        prev = 0  # blank
+        if debug:
+            pil_tensor = get_inf_transform(args)(pil_before).unsqueeze(0).to(device)
+            show_before_after(pil_before, pil_tensor)
 
-        for t in range(len(preds)):
-            p = preds[t]
+        preprocessed_shape = result["probs"].shape
 
-            if p != prev and p != 0:
-                chars.append(idx2char[p])
-
-                confidences.append(probs[t, 0, p].item())
-
-            prev = p
-
-        text = "".join(chars)
-        confidence = float(np.mean(confidences) * 100) if confidences else 0.0
-
-        # dla kompatybilności: zwracamy probs z pierwszego kroku
-        probs_out = probs[0, 0]
+        text = result["text"]
+        confidence = result["confidence"]
+        confidences = result["per_char_confidences"]
+        probs_out = result["probs"]
 
     if debug:
         info(
@@ -814,10 +829,7 @@ def predict_letter(
             f"oryginał={original_shape}, po_crop={cropped_shape}, "
             f"po_preprocess={preprocessed_shape}"
         )
-        info(
-            f"[DEBUG][image] predykcja: '{text}' ({confidence:.1f}%)"
-        )
-
+        info(f"[DEBUG][image] predykcja: '{text}' ({confidence:.1f}%)")
         debug_crops.append((img_array.copy(), f"{text}_{confidence:.1f}"))
         _finalize_debug_crops(debug_crops, args, image_path, mode_tag="image")
 

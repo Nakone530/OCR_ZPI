@@ -245,7 +245,13 @@ def tighten_box_to_foreground(image, box, pad=2):
     return clamp_box([nx1, ny1, nx2, ny2], width, height)
 
 
-def split_wide_box_by_projection(image, box):
+def split_wide_box_by_projection(image, box, median_h=None):
+    """Dzieli szeroki bbox w 4 krokach:
+    1. Wyznaczenie mediany wysokości liter (zewnętrzna lub szacowana z boxa).
+    2. Adaptacja kerneli Gaussa i dylatacji poziomej do median_h.
+    3. Znalezienie kandydatów na podział (doliny projekcji pionowej).
+    4. Weryfikacja: kawałki muszą być bliżej oczekiwanej szerokości słowa niż cały bbox.
+    """
     height, width = image.shape[:2]
     x1, y1, x2, y2 = clamp_box(box, width, height)
     w = x2 - x1
@@ -253,75 +259,112 @@ def split_wide_box_by_projection(image, box):
     if w <= 0 or h <= 0:
         return []
 
-    # Nie dziel małych lub umiarkowanie szerokich boxów - to zwykle kursywa albo liczby.
-    if w < max(110, 4 * h):
+    # ── Krok 1: Efektywna wysokość litery ────────────────────────────────────
+    # Po tighten_box_to_foreground h boxa ≈ faktyczna wysokość liter w tym regionie.
+    # median_h z komponentów bywa zaniżony (pociągnięcia pisma ≠ całe litery),
+    # więc h boxa jest priorytetem; median_h jedynie jako fallback gdy h < 4px.
+    if median_h is None or median_h <= 0:
+        median_h = float(h)
+    ref_h = float(h) if h >= 4 else float(median_h)
+
+    # Nie dziel boksów węższych niż 4× ref_h — to klasyczne słowo lub kursywa.
+    if w < max(110, 4.0 * ref_h):
         return [[x1, y1, x2, y2]]
+
+    # Oczekiwana szerokość wyrazu: ~2.5× wysokość liter (pismo ręczne).
+    expected_word_w = max(1.0, 2.5 * ref_h)
 
     crop = image[y1:y2, x1:x2]
     if crop.size == 0:
         return [[x1, y1, x2, y2]]
 
-    if crop.ndim == 3:
-        crop_gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
-    else:
-        crop_gray = crop.copy()
+    crop_gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY) if crop.ndim == 3 else crop.copy()
 
-    blurred = cv2.GaussianBlur(crop_gray, (3, 3), 0)
+    # ── Krok 2: Adaptacja dylatacji i filtrów ────────────────────────────────
+    # Kernel Gaussa skalowany z ref_h, zawsze nieparzysty.
+    bk = max(3, int(round(0.05 * ref_h)) * 2 + 1)
+    blurred = cv2.GaussianBlur(crop_gray, (bk, bk), 0)
+
+    block_size = max(21, (min(crop_gray.shape[:2]) // 8) | 1)
     mask = cv2.adaptiveThreshold(
-        blurred,
-        255,
-        cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-        cv2.THRESH_BINARY_INV,
-        max(21, (min(crop_gray.shape[:2]) // 8) | 1),
-        5,
+        blurred, 255,
+        cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV,
+        block_size, 5,
     )
 
-    proj = np.sum(mask > 0, axis=0).astype(np.float32)
+    # Dylatacja pozioma ≈ 45 % ref_h scala litery wewnątrz słowa
+    # (spacja między literami < 0.45×ref_h), zachowując spacje między wyrazami.
+    dil_w = max(1, int(round(0.45 * ref_h)))
+    dil_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (dil_w, 1))
+    mask_proj = cv2.dilate(mask, dil_kernel, iterations=1)
+
+    proj = np.sum(mask_proj > 0, axis=0).astype(np.float32)
     if proj.size < 8 or np.max(proj) <= 0:
         return [[x1, y1, x2, y2]]
 
-    foreground_ratio = float(np.count_nonzero(mask)) / float(mask.size)
-    if foreground_ratio > 0.25:
+    fg_ratio = float(np.count_nonzero(mask)) / float(mask.size)
+    if fg_ratio > 0.30:
         return [[x1, y1, x2, y2]]
 
+    # ── Krok 3: Kandydaci na podział ─────────────────────────────────────────
     p20 = float(np.percentile(proj, 20))
     p85 = float(np.percentile(proj, 85))
     valley_thr = max(0.0, p20 + 0.48 * max(0.0, p85 - p20))
 
     empty = proj <= valley_thr
-    min_gap = max(14, int(round(0.22 * w)))
+    # Minimalna długość pustej sekcji: spacja ≥ ~35 % ref_h.
+    min_gap = max(int(round(0.35 * ref_h)), 5)
+
     split_points = []
     run_start = None
-
     for idx, is_empty in enumerate(empty):
         if is_empty and run_start is None:
             run_start = idx
-        elif (not is_empty) and run_start is not None:
+        elif not is_empty and run_start is not None:
             run_len = idx - run_start
             if run_len >= min_gap:
-                split_points.append(run_start + (run_len // 2))
+                split_points.append(run_start + run_len // 2)
             run_start = None
-
-    if run_start is not None:
-        run_len = len(empty) - run_start
-        if run_len >= min_gap:
-            split_points.append(run_start + (run_len // 2))
+    if run_start is not None and (len(empty) - run_start) >= min_gap:
+        split_points.append(run_start + (len(empty) - run_start) // 2)
 
     if not split_points:
         return [[x1, y1, x2, y2]]
 
+    min_piece_w = max(int(round(1.2 * ref_h)), 8)
     pieces = []
     left = 0
     for sp in split_points:
-        if sp - left >= max(16, int(round(0.14 * w))):
+        if sp - left >= min_piece_w:
             pieces.append((left, sp))
         left = sp
-    if w - left >= max(16, int(round(0.14 * w))):
+    if w - left >= min_piece_w:
         pieces.append((left, w))
 
     if len(pieces) <= 1:
         return [[x1, y1, x2, y2]]
 
+    # ── Krok 4: Weryfikacja gęstości wyrazów ─────────────────────────────────
+    # "Naturalność" = bliskość do expected_word_w w log-skali (1 = ideał, 0 = daleko).
+    def naturalness(pw):
+        return 1.0 / (1.0 + abs(np.log(max(1e-6, pw) / expected_word_w)))
+
+    piece_widths = [float(pe - ps) for ps, pe in pieces]
+
+    # Zbyt wąski fragment = cięcie w środku słowa → odrzuć podział.
+    min_natural_w = max(8.0, 1.2 * ref_h)
+    if any(pw < min_natural_w for pw in piece_widths):
+        return [[x1, y1, x2, y2]]
+
+    score_before = naturalness(float(w))
+    score_after = float(np.mean([naturalness(pw) for pw in piece_widths]))
+
+    # Podział zatwierdzamy tylko wtedy, gdy kawałki są łącznie bliżej
+    # oczekiwanej szerokości słowa niż oryginalny szeroki bbox.
+    if score_after <= score_before:
+        return [[x1, y1, x2, y2]]
+
+    # Zbuduj finalne boxy z pikseli foreground (oryginalna maska, bez dylatacji).
     split_boxes = []
     for sx1, sx2 in pieces:
         seg = mask[:, sx1:sx2]
@@ -481,7 +524,7 @@ def detect_word_boxes_auto(image):
             clean[labels == label] = 255
 
     # Delikatne otwarcie morfologiczne - rozmiar jadra skaluje sie z obrazem
-    k_size = max(1, min(height, width) // 800)
+    k_size = max(1, min(height, width) // 400)
     open_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (k_size + 1, k_size + 1))
     clean = cv2.morphologyEx(clean, cv2.MORPH_OPEN, open_kernel, iterations=1)
 
@@ -493,6 +536,7 @@ def detect_word_boxes_auto(image):
     # Komponenty foregroundu (litery lub ich fragmenty).
     num_labels, _, stats, _ = cv2.connectedComponentsWithStats(clean, connectivity=8)
     components = []
+    margin = max(5, int(round(0.03 * min(width, height))))
     for label in range(1, num_labels):
         x = int(stats[label, cv2.CC_STAT_LEFT])
         y = int(stats[label, cv2.CC_STAT_TOP])
@@ -500,6 +544,8 @@ def detect_word_boxes_auto(image):
         h = int(stats[label, cv2.CC_STAT_HEIGHT])
         area = int(stats[label, cv2.CC_STAT_AREA])
         if area < min_fg_area or w < 2 or h < 3:
+            continue
+        if x < margin:
             continue
         components.append(
             {
@@ -524,8 +570,28 @@ def detect_word_boxes_auto(image):
     core_h = hs[(hs >= h20) & (hs <= h80)]
     core_w = ws[(ws >= w20) & (ws <= w80)]
     median_h = float(np.median(core_h)) if core_h.size else float(np.median(hs))
+
+    # Odcedź komponenty-artefakty (np. krawędź skanu na pełną wysokość)
+    max_allowed_h = max(median_h * 5.0, float(height) * 0.8)
+    components = [c for c in components if c["h"] <= max_allowed_h]
+    if not components:
+        return []
+
+    hs = np.array([c["h"] for c in components], dtype=np.float32)
+    ws = np.array([c["w"] for c in components], dtype=np.float32)
+    median_h = float(np.median(hs))
     median_w = float(np.median(core_w)) if core_w.size else float(np.median(ws))
     effective_w = min(median_w, max(10.0, 0.08 * float(width)))
+
+    # Usuń komponenty-szum (znacznie niższe niż typowa litera)
+    min_comp_h = max(3.0, 0.35 * median_h)
+    components = [c for c in components if c["h"] >= min_comp_h]
+    if not components:
+        return []
+
+    hs = np.array([c["h"] for c in components], dtype=np.float32)
+    ws = np.array([c["w"] for c in components], dtype=np.float32)
+    median_h = float(np.median(hs))
 
     # Grupowanie komponentow w linie.
     line_tol = max(4.0, 0.45 * median_h)
@@ -566,7 +632,18 @@ def detect_word_boxes_auto(image):
                 "h": max(1, int(round(line["y2"] - line["y1"]))),
             }
 
-    # Wycinanie wyrazow w kazdej linii.
+    # ── Adaptacyjna segmentacja na wyrazy ──
+    # Krok 3: typowa gęstość wyrazów w całym dokumencie
+    line_densities = []
+    for line in lines:
+        sitems = sorted(line["items"], key=lambda c: c["x1"])
+        if len(sitems) < 2:
+            continue
+        total_w = sum(c["w"] for c in sitems)
+        span = max(sitems[-1]["x2"] - sitems[0]["x1"], 1)
+        line_densities.append(total_w / span)
+    avg_density = float(np.median(line_densities)) if line_densities else 0.5
+
     word_boxes = []
     lines.sort(key=lambda l: l["cy"])
     pad_x = max(2, int(round(0.15 * effective_w)))
@@ -580,9 +657,21 @@ def detect_word_boxes_auto(image):
         box = clamp_box([gx1 - pad_x, gy1 - pad_y, gx2 + pad_x, gy2 + pad_y], width, height)
         word_boxes.append(box)
 
+    def density_of(group):
+        if len(group) < 1:
+            return 0.5
+        tw = sum(c["w"] for c in group)
+        sp = max(group[-1]["x2"] - group[0]["x1"], 1)
+        return tw / sp
+
     for line in lines:
         items = sorted(line["items"], key=lambda c: c["x1"])
         if not items:
+            continue
+
+        # Krok 1: skala dla tej linii
+        char_h = float(np.median([c["h"] for c in items]))
+        if char_h < 3:
             continue
 
         lx1 = min(c["x1"] for c in items)
@@ -590,10 +679,17 @@ def detect_word_boxes_auto(image):
         lx2 = max(c["x2"] for c in items)
         ly2 = max(c["y2"] for c in items)
 
-        line_pad_y = max(1, int(round(0.10 * median_h)))
+        line_pad_y = max(1, int(round(0.10 * char_h)))
         ly1 = max(0, ly1 - line_pad_y)
         ly2 = min(height, ly2 + line_pad_y)
 
+        # Progi skalowane przez char_h
+        min_word_w_local = max(6, int(round(0.5 * char_h)))
+        min_word_h_local = max(6, int(round(0.4 * char_h)))
+        pad_x_local = max(2, int(round(0.15 * char_h)))
+        pad_y_local = max(2, int(round(0.2 * char_h)))
+
+        # Krok 2: projekcja pozioma → doliny → kandydaci na podział
         roi = clean[ly1:ly2, lx1:lx2]
         if roi.size == 0:
             continue
@@ -602,15 +698,15 @@ def detect_word_boxes_auto(image):
         if np.max(proj) <= 0:
             continue
 
-        line_h = float(max(1, ly2 - ly1))
-        max_proj = np.max(proj)
-        low_thr = max(0.0, 0.03 * line_h)
+        line_h_px = float(max(1, ly2 - ly1))
+        low_thr = max(0.0, 0.03 * line_h_px)
         p20 = float(np.percentile(proj, 20))
         p85 = float(np.percentile(proj, 85))
         valley_thr = max(low_thr, p20 + 0.35 * max(0.0, p85 - p20))
 
         empty_cols = proj <= valley_thr
-        min_gap_run = max(4, int(round(1.0 * effective_w)))
+        # Minimalny przebieg pustych kolumn – skalowany przez char_h
+        min_gap_run = max(2, int(round(0.5 * char_h)))
         split_points = []
         run_start = None
 
@@ -628,52 +724,78 @@ def detect_word_boxes_auto(image):
             if run_len >= min_gap_run:
                 split_points.append(run_start + (run_len // 2))
 
+        # Krok 3: walidacja gęstościowa podziałów
         segments = []
         left = 0
         for sp in split_points:
-            if (sp - left) >= min_word_w:
-                segments.append((left, sp))
+            if (sp - left) >= min_word_w_local:
+                segments.append((left, sp, "proj"))
             left = sp
-        if (roi.shape[1] - left) >= min_word_w:
-            segments.append((left, roi.shape[1]))
+        if (roi.shape[1] - left) >= min_word_w_local:
+            segments.append((left, roi.shape[1], "proj"))
 
-        # Fallback: podzial po odstepach miedzy komponentami.
+        # Fallback: podział po przerwach między komponentami
         if len(segments) <= 1 and len(items) > 1:
-            comp_gap = []
+            intra_gap = 0.3 * char_h
+            inter_gap = 1.0 * char_h
+            comp_groups = [[items[0]]]
+            definite_splits = set()
+            uncertain_splits = []
+
+            for i in range(len(items) - 1):
+                gap = items[i + 1]["x1"] - items[i]["x2"]
+                if gap > inter_gap:
+                    definite_splits.add(i)
+                elif gap > intra_gap:
+                    uncertain_splits.append((gap, i))
+
+            # Weryfikacja niepewnych przerw pionowym profilem projekcji
+            for gap, idx in uncertain_splits:
+                x_center = (items[idx]["x2"] + items[idx + 1]["x1"]) // 2
+                hw = max(2, int(gap))
+                sx1 = max(0, x_center - hw)
+                sx2 = min(width, x_center + hw)
+                strip = clean[ly1:ly2, sx1:sx2]
+                if strip.size == 0:
+                    continue
+                sproj = np.sum(strip > 0, axis=0).astype(np.float32)
+                if len(sproj) < 2:
+                    continue
+                local_min = float(np.min(sproj))
+                mean_val = float(np.mean(sproj))
+                if mean_val > 0 and local_min < 0.2 * mean_val:
+                    definite_splits.add(idx)
+
+            # Zastosuj definite_splits
+            comp_groups = [[items[0]]]
             for i in range(1, len(items)):
-                g = float(items[i]["x1"] - items[i - 1]["x2"])
-                if g > 0:
-                    comp_gap.append(g)
-
-            if comp_gap:
-                gaps_sorted = np.sort(np.array(comp_gap, dtype=np.float32))
-                g25 = float(np.percentile(gaps_sorted, 25))
-                g75 = float(np.percentile(gaps_sorted, 75))
-                g50 = float(np.percentile(gaps_sorted, 50))
-                robust_gap = max(g50, 0.5 * (g25 + g75))
-                word_gap_thr = max(2.5 * effective_w, 3.0 * robust_gap)
-            else:
-                word_gap_thr = 2.5 * effective_w
-
-            groups = [[items[0]]]
-            for cur in items[1:]:
-                prev = groups[-1][-1]
-                g = float(cur["x1"] - prev["x2"])
-                if g > word_gap_thr:
-                    groups.append([cur])
+                if (i - 1) in definite_splits:
+                    comp_groups.append([items[i]])
                 else:
-                    groups[-1].append(cur)
+                    comp_groups[-1].append(items[i])
 
-            if len(groups) > 1:
-                for gitems in groups:
-                    gx1 = min(c["x1"] for c in gitems)
-                    gy1 = min(c["y1"] for c in gitems)
-                    gx2 = max(c["x2"] for c in gitems)
-                    gy2 = max(c["y2"] for c in gitems)
-                    add_box(gx1, gy1, gx2, gy2)
+            if len(comp_groups) > 1:
+                for grp in comp_groups:
+                    if not grp:
+                        continue
+                    gx1 = min(c["x1"] for c in grp)
+                    gy1 = min(c["y1"] for c in grp)
+                    gx2 = max(c["x2"] for c in grp)
+                    gy2 = max(c["y2"] for c in grp)
+                    bw = gx2 - gx1
+                    bh = gy2 - gy1
+                    if bw < min_word_w_local or bh < min_word_h_local:
+                        continue
+                    box = clamp_box(
+                        [gx1 - pad_x_local, gy1 - pad_y_local, gx2 + pad_x_local, gy2 + pad_y_local],
+                        width, height,
+                    )
+                    word_boxes.append(box)
                 continue
 
-        for sx1, sx2 in segments:
+        # Walidacja gęstościowa dla segmentów z projekcji
+        valid_segments = []
+        for sx1, sx2, _ in segments:
             seg = roi[:, sx1:sx2]
             ys, xs = np.where(seg > 0)
             if xs.size == 0:
@@ -683,7 +805,59 @@ def detect_word_boxes_auto(image):
             gx2 = lx1 + sx1 + int(xs.max()) + 1
             gy1 = ly1 + int(ys.min())
             gy2 = ly1 + int(ys.max()) + 1
-            add_box(gx1, gy1, gx2, gy2)
+
+            bw = gx2 - gx1
+            bh = gy2 - gy1
+            if bw < min_word_w_local or bh < min_word_h_local:
+                continue
+
+            # Sprawdź gęstość – czy ten segment nie jest zlepieniem wielu wyrazów
+            comps_in_seg = [c for c in items if c["x1"] < gx2 and c["x2"] > gx1]
+            if len(comps_in_seg) >= 2:
+                seg_den = density_of(comps_in_seg)
+                if seg_den < 0.7 * avg_density:
+                    # Próbuj dalej dzielić
+                    intra_gap = 0.3 * char_h
+                    sub_splits = []
+                    for j in range(len(comps_in_seg) - 1):
+                        g = comps_in_seg[j + 1]["x1"] - comps_in_seg[j]["x2"]
+                        if g > intra_gap:
+                            sub_splits.append(j)
+                    if sub_splits:
+                        sub_grps = []
+                        sub_cur = [comps_in_seg[0]]
+                        for j in range(1, len(comps_in_seg)):
+                            if (j - 1) in sub_splits:
+                                sub_grps.append(sub_cur)
+                                sub_cur = [comps_in_seg[j]]
+                            else:
+                                sub_cur.append(comps_in_seg[j])
+                        sub_grps.append(sub_cur)
+
+                        old_diff = abs(seg_den - avg_density)
+                        new_dens = [density_of(sg) for sg in sub_grps]
+                        new_avg = float(np.mean(new_dens)) if new_dens else 0
+                        if abs(new_avg - avg_density) < old_diff:
+                            for sg in sub_grps:
+                                sgx1 = min(c["x1"] for c in sg)
+                                sgy1 = min(c["y1"] for c in sg)
+                                sgx2 = max(c["x2"] for c in sg)
+                                sgy2 = max(c["y2"] for c in sg)
+                                sbw = sgx2 - sgx1
+                                sbh = sgy2 - sgy1
+                                if sbw >= min_word_w_local and sbh >= min_word_h_local:
+                                    box = clamp_box(
+                                        [sgx1 - pad_x_local, sgy1 - pad_y_local, sgx2 + pad_x_local, sgy2 + pad_y_local],
+                                        width, height,
+                                    )
+                                    word_boxes.append(box)
+                            continue
+
+            box = clamp_box(
+                [gx1 - pad_x_local, gy1 - pad_y_local, gx2 + pad_x_local, gy2 + pad_y_local],
+                width, height,
+            )
+            word_boxes.append(box)
 
     if not word_boxes:
         return []
@@ -777,7 +951,7 @@ def detect_word_boxes_auto(image):
     tightened_boxes = []
     for box in refined_boxes:
         tightened = tighten_box_to_foreground(image, box)
-        tightened_boxes.extend(split_wide_box_by_projection(image, tightened))
+        tightened_boxes.extend(split_wide_box_by_projection(image, tightened, median_h=median_h))
 
     # Usuń ekstremalnie małe śmieci po segmentacji, ale zostaw prawdziwe krótkie słowa i liczby.
     cleaned_boxes = []
@@ -848,8 +1022,9 @@ def detect_word_boxes_auto(image):
         if keep:
             non_overlapping.append(box)
 
-    merged_words = merge_boxes_into_words(non_overlapping)
-    refined_boxes = sorted(merged_words, key=lambda b: (b[1], b[0], b[3], b[2]))
+    # Odrzuć skrajne szumy na brzegach obrazu
+    margin = max(5, int(round(0.03 * min(width, height))))
+    refined_boxes = [b for b in non_overlapping if b[0] >= margin]
 
     boxes = [{"box": b} for b in refined_boxes]
     return sort_boxes_reading_order(boxes)

@@ -605,6 +605,19 @@ def main(args=None, info=None, buffor=None):
         model = load_model(ocr_path, device, info, 2)
         text, words_with_confidence, class_confidence = predict_segments(args.lines, model, device, args)
 
+        # Korekta słownikowa wyrazów
+        corrected_words = []
+        for word, conf in words_with_confidence:
+            corrected_words.append((DictCorrect(word), conf))
+
+        if not args.json:
+            info(f"\nRozpoznany tekst:\n{text}")
+            if corrected_words:
+                info("\nKorekta slownikowa:")
+                for idx, ((word, conf), (corr, _)) in enumerate(zip(words_with_confidence, corrected_words), start=1):
+                    marker = f" -> {corr}" if corr != word else ""
+                    info(f"  {idx}. '{word}' ({conf:.1f}%){marker}")
+
         if args.json:
             payload = build_lines_result_json(
                 image_path=args.lines,
@@ -615,8 +628,6 @@ def main(args=None, info=None, buffor=None):
             info(dump_json(payload, pretty=args.json_pretty))
             out_path = args.json_path or (os.path.splitext(saved_copy_path)[0] + ".json")
             write_json(out_path, payload, pretty=args.json_pretty)
-        else:
-            print_text_result(text, words_with_confidence, class_confidence, info)
 
         if args.accuracy:
             _print_accuracy(text, args.accuracy, info)

@@ -654,16 +654,21 @@ def list_models(models_dir: str, version: str | None = None):
     return models
 
 def select_version():
-    version = input("Wybierz wersję (ENTER = wszystkie): ").strip()
-    return version if version else None
+    try:
+        version = input("Wybierz wersję (ENTER = wszystkie): ").strip()
+        return version if version else None
+    except EOFError:
+        return None
 
 def select_models(models):
     print("\nDostępne modele:")
     for i, m in enumerate(models):
         print(f"[{i}] {m}")
-
-    default_idx = int(input("\nWybierz DEFAULT model (index): "))
-    selected = input("Wybierz ensemble (np. 0,1,2) lub ENTER = wszystkie: ")
+    try:
+        default_idx = int(input("\nWybierz DEFAULT model (index): "))
+        selected = input("Wybierz ensemble (np. 0,1,2) lub ENTER = wszystkie: ")
+    except EOFError:
+        return models[0], models
 
     if selected.strip() == "":
         ensemble = models

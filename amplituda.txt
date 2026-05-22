@@ -1,0 +1,28 @@
+Zmiany w amplitudzie (segmentacji) — 2026-05-22
+=============================================
+
+1. Filtr artefaktów full-height (bbox_annotator.py:571)
+   - Komponenty o h > 5×median_h lub h > 0.8×height są odrzucane przed grupowaniem linii
+   - Rozwiązuje problem Chopin 11: artefakt krawędzi skanu (x=0..6, y=0..208) łączył wszystkie linie → 18 bboxów
+   - Po filtrze: 57 (później 44 po NMS) poprawnych bboxów z rozdzielonymi liniami
+
+2. Filtr szumu na lewym marginesie (bbox_annotator.py:539, 1026)
+   - Komponenty z x < margin (max(5, 0.03×min(width,height))) odrzucane przy kolekcji
+   - Dodatkowy filtr na poziomie finalnych boxów: b[0] >= margin
+   - Szymborska: szum na lewym marginesie z 62→40 bboxów, boxy 68/69 usunięte
+
+3. Zwiększone jądro morfologiczne (bbox_annotator.py:527)
+   - k_size = max(1, min(h,w)//400) zamiast //800
+   - Skuteczniejsze usuwanie drobnego szumu na większych obrazach
+
+4. Korekta słownikowa w --lines (main.py:610-619)
+   - DictCorrect dla każdego wyrazu z words_with_confidence
+   - Wyświetlanie oryginału i korekty w konsoli
+
+5. EOFError w select_version/select_models (utils.py:656-675)
+   - Przy nieinteraktywnym uruchomieniu zwracają domyślne wartości zamiast crashować
+
+6. Brakujące stałe w _segment_letters (inference.py:254-260)
+   - Dodano: ws_min_comp_area=20, ws_min_box_w=3, ws_min_box_h=8,
+     ws_split_aspect=3.0, ws_split_min_area=300, ws_fg_ratio=0.25, ws_min_box_area=20
+   - Zginęły w refactorze, bez nich --lines rzucał NameError

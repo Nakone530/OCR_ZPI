@@ -248,6 +248,13 @@ def _segment_letters(gray: np.ndarray, args=None) -> list[tuple[int, int, int, i
     Segmentuje litery bez opierania się na pustych przerwach pionowych.
     Najpierw CC, a szerokie komponenty próbuje dzielić watershed.
     """
+    ws_min_comp_area = 20
+    ws_min_box_w = 3
+    ws_min_box_h = 8
+    ws_split_aspect = 3.0
+    ws_split_min_area = 300
+    ws_fg_ratio = 0.25
+    ws_min_box_area = 20
 
     blur = cv2.GaussianBlur(gray, (3, 3), 0)
     _, binary_inv = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)

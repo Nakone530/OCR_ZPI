@@ -7,6 +7,7 @@ Narzędzia pomocnicze:
 """
 
 import os
+import re
 from datetime import date
 from pathlib import Path
 import random
@@ -410,6 +411,46 @@ def load_all_datasets(root_dir):
                 all_data.append(item)
 
     return all_data
+
+
+def load_phsf_znaki(phsf_dir: str) -> list:
+    """
+    Ładuje dataset znaków PHSF (znaki/png/0..88).
+
+    Parsuje numeracja.txt, dla każdego folderu zbiera pliki PNG
+    i buduje listę {"image_path": ..., "text": znak}.
+    Pomija znaki nieobsługiwane przez model (spoza char2idx po lowercase).
+    """
+    numeracja_path = os.path.join(phsf_dir, "numeracja.txt")
+    znaki_dir = os.path.join(phsf_dir, "znaki", "png")
+
+    folder_to_char: dict[int, str] = {}
+    with open(numeracja_path, "r", encoding="utf-8") as f:
+        for line in f:
+            m = re.match(r"(\d+)\s*=\s*(.+)", line.strip())
+            if m:
+                folder_to_char[int(m.group(1))] = m.group(2).strip()
+
+    items = []
+    skipped_chars: set[str] = set()
+
+    for folder_num, char in sorted(folder_to_char.items()):
+        if char.lower() not in char2idx:
+            skipped_chars.add(char)
+            continue
+
+        folder_path = os.path.join(znaki_dir, str(folder_num))
+        if not os.path.isdir(folder_path):
+            continue
+
+        for fname in os.listdir(folder_path):
+            if fname.lower().endswith(".png"):
+                items.append({
+                    "image_path": os.path.join(folder_path, fname),
+                    "text": char,
+                })
+
+    return items
 
 # ── Zapis do folderu z datą ────────────────────────────────────────────────────
 

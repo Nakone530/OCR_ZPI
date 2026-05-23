@@ -182,6 +182,14 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     parser.add_argument("--model-path", type=str, default=None, metavar="PLIK", help="Sciezka do wytrenowanego modelu")
+    parser.add_argument(
+        "--model-version",
+        type=str,
+        default=None,
+        metavar="WERSJA",
+        dest="model_version",
+        help="Filtruj modele ensemble po wersji glownej, np. --model-version 21",
+    )
     parser.add_argument("--annotation-dir", type=str, default="inference", metavar="KATALOG", help="Katalog wyjsciowy dla trybu --annotate")
     parser.add_argument("--no-edit", action="store_true", help="W trybie --annotate wylacz interaktywna edycje bboxow")
     parser.add_argument("--non-interactive", action="store_true", help="W trybie --annotate pomin pytania input() i zapisz automatycznie")

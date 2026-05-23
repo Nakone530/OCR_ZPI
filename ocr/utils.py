@@ -10,6 +10,7 @@ import os
 from datetime import date
 from pathlib import Path
 import random
+from difflib import SequenceMatcher
 import json
 try:
     import cv2  # type: ignore
@@ -29,19 +30,44 @@ import torch
 import torch.nn as nn
 from torchvision import transforms
 import torchvision.transforms.functional as F
-
+import csv
 from datetime import datetime
 from typing import Any
 from datetime import date
 
 from pathlib import Path
 import matplotlib.pyplot as plt
-from .config import IMAGE_SIZE, MEAN, STD, CHARS, MODEL_PATH, NUM_CLASSES, char2idx, idx2char
-from .model import SimpleCNN
+import itertools
+from .config import IMAGE_SIZE, MEAN, STD, CHARS, AuxCHARS, MODEL_PATH, NUM_CLASSES, char2idx, idx2char, VERSION_RE, ÐICT_PATH
+from .model import MainModel, AuxModel
 from . import info
 
+def load_dictionary(json_path: str = ÐICT_PATH) -> list[str]:
+    with open(json_path, "r", encoding="utf-8") as f:
+        data = json.load(f)
 
+    if not isinstance(data, list):
+        raise ValueError("JSON musi zawierać listę stringów")
+
+    return [str(word) for word in data]
 # ── Transformacje ──────────────────────────────────────────────────────────────
+
+def aux_transform():
+    """
+    pipeline transformacji obrazu do inferencji (bez augmentacji danych).
+    
+    Pipeline zawiera:
+      - Konwersja do skali szarości (1 kanał)
+      - Zmiana rozmiaru do IMAGE_SIZE x IMAGE_SIZE
+      - Konwersja do tensora PyTorch
+      - Normalizacja wartości pikseli (mean=0.5, std=0.5)
+    """
+    return transforms.Compose([
+        transforms.Grayscale(num_output_channels=1),
+        transforms.Resize((24, 24)),
+        transforms.ToTensor(),
+        transforms.Normalize((0.5,), (0.5,)),
+    ])
 
 def base_transform():
     """
@@ -79,7 +105,8 @@ def get_inf_transform(args) -> transforms.Compose:
         >>> tensor = transform(pil_image)
     """
     pack = [ResizeWithAspect(),
-            RandomOtsu(Otsu()),]
+            RandomOtsu(Otsu()),
+            TightCrop(),]
     if getattr(args, "denoise", False):
         pack.append(trans_denoise_bil())
 
@@ -87,31 +114,22 @@ def get_inf_transform(args) -> transforms.Compose:
     return transforms.Compose(pack)
 
 
-def get_train_transform(args) -> transforms.Compose:
+def get_train_transform(args=None, denoise_prob: float = 0.3, max_padding: int = 20) -> transforms.Compose:
     """
     Zwraca pipeline transformacji obrazu do trenowania modelu (z augmentacją danych).
-    
-    Pipeline zawiera:
-      - Losowa rotacja obrazu o maksymalnie 10 stopni (augmentacja)
-      - Konwersja do skali szarości (1 kanał)
-      - Zmiana rozmiaru do IMAGE_SIZE x IMAGE_SIZE
-      - Konwersja do tensora PyTorch
-      - Normalizacja wartości pikseli (mean=0.5, std=0.5)
-    
-    Zwraca:
-        transforms.Compose: Złożona transformacja z augmentacją
-                            do użycia podczas trenowania modelu.
-    
-    Przykład:
-        >>> train_transform = get_train_transform()
-        >>> tensor = train_transform(pil_image)
+
+    Args:
+        args: nieużywany, zachowany dla kompatybilności wstecznej
+        denoise_prob: prawdopodobieństwo losowego odszumiania (0.0 = wyłączone, 1.0 = zawsze)
+        max_padding: maksymalny padding w pikselach dla RandomPadding
     """
     pack = [
         transforms.RandomRotation(5),
-        RandomDenoise(),
-        RandomPadding(),
+        RandomDenoise(p=denoise_prob),
+        RandomPadding(max_pad=max_padding),
         ResizeWithAspect(),
-        RandomOtsu(Otsu())
+        RandomOtsu(Otsu()),
+        TightCrop(),
     ]
     pack.extend(base_transform())
     return transforms.Compose(pack)
@@ -176,6 +194,28 @@ class RandomOtsu:
         if random.random() < self.p:
             return self.otsu(img)
         return img
+
+class TightCrop:
+    def __call__(self, img):
+        # zakładamy PIL Image lub tensor -> konwersja do numpy
+        img_np = np.array(img)
+
+        if img_np.ndim == 3:  # RGB → grayscale
+            img_np = img_np.mean(axis=2)
+
+        # maska nie-tła (próg można dostosować)
+        mask = img_np < 250  # dla jasnego tła
+
+        coords = np.argwhere(mask)
+
+        if coords.size == 0:
+            return img  # fallback
+
+        y0, x0 = coords.min(axis=0)
+        y1, x1 = coords.max(axis=0) + 1
+
+        cropped = img.crop((x0, y0, x1, y1))
+        return cropped
     
 def preprocess_letter(img: np.ndarray) -> np.ndarray:
     """
@@ -185,7 +225,7 @@ def preprocess_letter(img: np.ndarray) -> np.ndarray:
       1. Dodaje biały padding (10px) wokół obrazu
       2. Tworzy kwadratowy canvas o rozmiarze max(wysokość, szerokość)
       3. Centruje literę na canvasie z białym tłem
-      4. Skaluje wynikowy obraz do rozmiaru 28x28 pikseli
+      4. Skaluje wynikowy obraz do rozmiaru 24x24 pikseli
     
     Argumenty:
         img (np.ndarray): Obraz litery w skali szarości jako tablica numpy.
@@ -197,7 +237,7 @@ def preprocess_letter(img: np.ndarray) -> np.ndarray:
     Przykład:
         >>> letter = preprocess_letter(letter_array)
         >>> letter.shape
-        (28, 28)
+        (24, 24)
     """
     pad = 10
     img = np.pad(img, pad, mode='constant', constant_values=255)
@@ -212,7 +252,7 @@ def preprocess_letter(img: np.ndarray) -> np.ndarray:
     
     new_img[y_offset:y_offset+h, x_offset:x_offset+w] = img
     
-    new_img = cv2.resize(new_img, (28, 28))
+    new_img = cv2.resize(new_img, (24, 24))
     return new_img
 
 # ── Odszumianie ────────────────────────────────────────────────────────────────
@@ -476,22 +516,6 @@ def save_image_to_temp_folder(image: Any, order: str) -> str:
 ACTIVE_CHARS = list(CHARS)
 
 
-def _map_chars74k_sample_to_char(sample_name: str) -> str:
-    """Mapuje nazwę SampleXXX z Chars74K na znak (A-Z, a-z, 0-9) gdy to możliwe."""
-    match = re.fullmatch(r"Sample(\d+)", sample_name)
-    if not match:
-        return sample_name
-
-    idx = int(match.group(1))
-    if 1 <= idx <= 10:
-        return str(idx - 1)
-    if 11 <= idx <= 36:
-        return chr(ord("A") + (idx - 11))
-    if 37 <= idx <= 62:
-        return chr(ord("a") + (idx - 37))
-    return sample_name
-
-
 def get_active_chars() -> list[str]:
     """Zwraca aktualne mapowanie indeks->znak używane przez model."""
     return list(ACTIVE_CHARS)
@@ -500,12 +524,7 @@ def get_active_chars() -> list[str]:
 def _set_active_chars(checkpoint: object | None = None) -> None:
     """Ustawia mapowanie indeks->znak na podstawie checkpointa lub domyślnej konfiguracji."""
     global ACTIVE_CHARS
-    if isinstance(checkpoint, dict) and "class_names" in checkpoint:
-        class_names = checkpoint.get("class_names")
-        if isinstance(class_names, list) and class_names:
-            ACTIVE_CHARS = [_map_chars74k_sample_to_char(str(name)) for name in class_names]
-            info(f"Wczytano mapowanie klas z checkpointa ({len(ACTIVE_CHARS)} klas)")
-            return
+
 
     ACTIVE_CHARS = list(CHARS)
 
@@ -517,7 +536,7 @@ def _label_for_idx(idx: int) -> str:
 
 #print(matplotlib.get_backend())
 
-def load_model(model_path: str = MODEL_PATH, device: torch.device = None, info=None) -> nn.Module:
+def load_model(model_path: str = MODEL_PATH, device: torch.device = None, info=None, model_type = 1) -> nn.Module:
     if info is None:
         info = print
 
@@ -537,29 +556,65 @@ def load_model(model_path: str = MODEL_PATH, device: torch.device = None, info=N
         else:
             state_dict = checkpoint
             info("Wczytano state_dict")
-
-        model = SimpleCNN(num_classes=len(CHARS) + 1)
-
+        if(model_type == 1):
+            model = MainModel(num_classes=len(CHARS) + 1)
+        else:
+            model = AuxModel(num_classes=len(AuxCHARS))
         model.load_state_dict(state_dict)
         info("Model wczytany!")
 
     else:
         info(f"UWAGA: Nie znaleziono modelu {model_path}")
-        model = SimpleCNN(num_classes=len(CHARS) + 1)
+        if(model_type == 1):
+            model = MainModel(num_classes=len(CHARS) + 1)
+        else:
+            model = AuxModel(num_classes=len(AuxCHARS))
 
     model.to(device)
     model.eval()
 
     return model
 
+
+#------Zarządzanie transkrypcjami------
+
+def load_transcription(path):
+    mapping = {}
+
+    with open(path, "r", encoding="utf-8") as f:
+        for line in f:
+            parts = line.strip().split(maxsplit=1)
+            if len(parts) != 2:
+                continue
+
+            key, text = parts
+
+            # usuń rozszerzenie jeśli jest
+            key = key.replace(".png", "")
+
+            mapping[key] = text
+
+    return mapping
+
 #------Zarządzanie modelami------------
-def list_models(models_dir: str):
+def list_models(models_dir: str, version: str | None = None):
     models = [
         name for name in os.listdir(models_dir)
         if os.path.isdir(os.path.join(models_dir, name))
     ]
+
+    if version:
+        models = [
+            m for m in models
+            if m.startswith(f"v{version}")
+        ]
+
     models.sort()
     return models
+
+def select_version():
+    version = input("Wybierz wersję (ENTER = wszystkie): ").strip()
+    return version if version else None
 
 def select_models(models):
     print("\nDostępne modele:")
@@ -598,17 +653,168 @@ def aggregate(results, default_model):
 
     for model_name, res in results.items():
         text = res["text"]
+
         conf = res["confidence"]
+        if hasattr(conf, "item"):  # torch / numpy
+            conf = conf.item()
 
         votes[text] += 1
         confidence_sum[text] = confidence_sum.get(text, 0) + conf
 
-    # majority
     top_text, top_count = votes.most_common(1)[0]
 
-    # czy jest consensus?
     if top_count >= 2:
         return top_text
 
-    # fallback: default model
     return results[default_model]["text"]
+
+def generate_model_ensembles(models, min_size=3, max_size=5, mode=1):
+    if max_size is None:
+        max_size = len(models)
+
+    max_size = min(max_size, len(models))
+
+    if mode == 1 :
+        for r in range(min_size, max_size + 1):
+            for combo in itertools.combinations(models, r):
+                yield combo
+    elif mode == 2 :
+        for r in range(min_size, max_size + 1):
+            for combo in itertools.permutations(models, r):
+                yield combo
+
+#---cache----------
+def parse_version(name: str):
+    m = VERSION_RE.match(name)
+    if not m:
+        return None
+    major = int(m.group(1))
+    minor = int(m.group(2) or 0)
+    return (major, minor)
+
+
+def version_str(v):
+    major, minor = v
+    return f"v{major}" if minor == 0 else f"v{major}.{minor}"
+
+
+def resolve_cache_path(models_dir="./models", cache_dir="./cache"):
+    versions = []
+
+    for d in os.listdir(models_dir):
+        full = os.path.join(models_dir, d)
+        if os.path.isdir(full):
+            v = parse_version(d)
+            if v:
+                versions.append(v)
+
+    if not versions:
+        raise ValueError("Brak poprawnych wersji w ./models")
+
+    versions.sort()
+
+    v_min = versions[0]
+    v_max = versions[-1]
+
+    base = f"{version_str(v_min)}_{version_str(v_max)}.json"
+    path = os.path.join(cache_dir, base)
+
+    if not os.path.exists(path):
+        return path
+
+    i = 1
+    while True:
+        suffix = f"_a{i:02d}"
+        new_path = os.path.join(cache_dir, base.replace(".json", f"{suffix}.json"))
+        if not os.path.exists(new_path):
+            return new_path
+        i += 1
+
+
+
+
+def load_cache(cache_path):
+    with open(cache_path, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+def to_serializable(obj):
+    if isinstance(obj, torch.Tensor):
+        return obj.detach().cpu().tolist() if obj.ndim > 0 else obj.item()
+
+    if isinstance(obj, dict):
+        return {k: to_serializable(v) for k, v in obj.items()}
+
+    if isinstance(obj, list):
+        return [to_serializable(v) for v in obj]
+
+    return obj
+
+
+def save_results_csv(rows, path="results.csv"):
+    file_exists = os.path.exists(path)
+
+    with open(path, "a", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(
+            f,
+            fieldnames=[
+                "key",
+                "file",
+                "ensemble",
+                "text",
+                "confidence",
+                "accuracy"
+            ]
+        )
+
+        if not file_exists:
+            writer.writeheader()
+
+        for r in rows:
+
+            writer.writerow({
+                "key": r["key"],
+                "file": r["file"],
+                "ensemble": r["ensemble"],
+                "text": r["text"],
+                "confidence": r["confidence"],
+                "accuracy": r["accuracy"]
+            })
+#--- Autokorekta------
+def DictCorrect(
+    text: str,
+    threshold: float = 0.8,
+) -> str:
+    """
+    Szuka najbardziej podobnego słowa w słowniku.
+    
+    Jeśli podobieństwo >= threshold:
+        zwraca słowo ze słownika
+    W przeciwnym razie:
+        zwraca oryginalny tekst
+    """
+    dictionary = load_dictionary()
+    text = text.strip()
+
+    if not text:
+        return text
+
+    best_match = None
+    best_score = 0.0
+
+    text_lower = text.lower()
+
+    for word in dictionary:
+        score = SequenceMatcher(
+            None,
+            text_lower,
+            word.lower()
+        ).ratio()
+
+        if score > best_score:
+            best_score = score
+            best_match = word
+
+    if best_score >= threshold:
+        return best_match
+
+    return text

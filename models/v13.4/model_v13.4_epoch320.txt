@@ -1,0 +1,3 @@
+epoch: 320
+ratio: 0.8
+model_version: v13.4

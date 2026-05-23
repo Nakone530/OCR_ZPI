@@ -18,15 +18,16 @@ import sys
 
 import torch
 
-from ocr.config import MODEL_PATH
-from ocr.inference import compute_accuracy, get_active_chars, load_model, predict_image, predict_letter, predict_segments, predict_word, process_folder
+from ocr.config import MODEL_PATH, OCR_MODEL_PATH
+from ocr.inference import run_ensemble_generation, compute_accuracy, test_models, test_cache_models, get_active_chars, load_model, predict_image, predict_letter, predict_segments, predict_word, process_folder
 from ocr.output import OCRResult, create_output_handler
-from ocr.trainer import train_model, infinite_train
-from ocr.utils import save_image_to_today_folder
+from ocr.utils import save_image_to_today_folder, DictCorrect, list_models, generate_model_ensembles, load_transcription, save_results_csv
+from ocr.trainer import train_model, infinite_train, multi_train, TRAINING_PRESETS, get_preset_names
 from ocr.json_output import (
     build_image_result_json,
     build_word_result_json,
     build_lines_result_json,
+    build_page_result_json,
     build_multi_result_json,
     dump_json,
     write_json,
@@ -132,9 +133,19 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     mode = parser.add_mutually_exclusive_group()
-    mode.add_argument("--prepare", "-p", action="store_true", help="Pobierz i przygotuj dane")
     mode.add_argument("--train", "-t", action="store_true", help="Trenuj model (okreslona liczba epok)")
     mode.add_argument("--infinite", action="store_true", help="Nieskonczony trening do przerwania (Ctrl+C)")
+    mode.add_argument(
+        "--multi-train",
+        nargs="*",
+        metavar="PRESET",
+        dest="multi_train",
+        help=(
+            "Multi-trening: uruchamia kilka konfiguracji kolejno. "
+            f"Dostepne presety: {', '.join(TRAINING_PRESETS)}. "
+            "Bez argumentow = wszystkie presety."
+        ),
+    )
     mode.add_argument("--image", "-i", type=str, metavar="PLIK", help="Rozpoznaj pojedyncza litere")
     mode.add_argument("--word", "-w", type=str, metavar="PLIK", help="Rozpoznaj wyraz (jedna linia)")
     mode.add_argument("--lines", "-l", type=str, metavar="PLIK", help="Rozpoznaj tekst wieloliniowy")
@@ -143,9 +154,14 @@ def build_parser() -> argparse.ArgumentParser:
     mode.add_argument("--folder", type=str, metavar="PLIK", help="Rozpoznaj zdjęcia w folderze")
     mode.add_argument("--page", type=str, metavar="PLIK", help="Separacja zdjęcia na wyrazy oraz ich rozpoznanie")
     mode.add_argument("--crnn", type=str, metavar="PLIK", help="Rozpoznawanie CRNN (tekst z obrazu)")
+    mode.add_argument("--ensemble", "-n", type=str, metavar="PLIK", help="Sprawdź kombinacle modeli")
+    parser.add_argument("--trans", "-s", type=str, metavar="PLIK", help="Plik zawierający transkrypcje, do użycia z -n")
+    # Cache
+    parser.add_argument("--cache_path", type=str)
+    parser.add_argument("--use_cache", action="store_true")
     # Porównanie z referencją
     parser.add_argument("--accuracy", "-a", type=str, default=None, metavar="PLIK",
-                        help="Plik z referencyjną transkrypcją; oblicza procentowe podobieństwo wyniku OCR do referencji")
+                        help="Plik z referencyjną transkrypcją; oblicza procentowe podobieństwo wyniku do referencji")
 
     parser.add_argument("--epochs", "-e", type=int, default=10, help="Liczba epok (domyslnie: 10)")
     parser.add_argument("--batch-size", "-b", type=int, default=32, help="Rozmiar batcha (domyslnie: 32)")
@@ -164,20 +180,6 @@ def build_parser() -> argparse.ArgumentParser:
         choices=["nlm-color", "median", "bilateral", "gaussian"],
         help="Metoda odszumiania (domyslnie: nlm-color)",
     )
-    parser.add_argument("--h", type=int, default=10, help="Sila NLM - luminancja")
-    parser.add_argument("--hColor", type=int, default=10, help="Sila NLM - kolor")
-    parser.add_argument("--ksize", type=int, default=3, help="Rozmiar jadra dla median/gaussian (3,5,7...)")
-
-    parser.add_argument("--ws-fg-ratio", type=float, default=0.45)
-    parser.add_argument("--ws-split-aspect", type=float, default=1.15)
-    parser.add_argument("--ws-min-comp-area", type=int, default=30)
-    parser.add_argument("--ws-split-min-area", type=int, default=250)
-    parser.add_argument("--ws-min-box-w", type=int, default=3)
-    parser.add_argument("--ws-min-box-h", type=int, default=5)
-    parser.add_argument("--ws-min-box-area", type=int, default=20)
-    parser.add_argument("--ws-merge-gap", type=int, default=4)
-    parser.add_argument("--ws-merge-height-ratio", type=float, default=1.8)
-    parser.add_argument("--ws-merge-vert-dist", type=int, default=4)
 
     parser.add_argument("--model-path", type=str, default=None, metavar="PLIK", help="Sciezka do wytrenowanego modelu")
     parser.add_argument("--annotation-dir", type=str, default="inference", metavar="KATALOG", help="Katalog wyjsciowy dla trybu --annotate")
@@ -209,6 +211,27 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--json-pretty", action="store_true", help="Sformatuj JSON")
     parser.add_argument("--json-path", type=str, default=None, metavar="PLIK", help="Zapisz wynik JSON do pliku")
 
+        # Parametry segmentacji watershed
+    parser.add_argument("--ws-fg-ratio", type=float, default=0.45,
+                        help="Próg foreground dla watershed (ułamek max distance, domyślnie: 0.45)")
+    parser.add_argument("--ws-split-aspect", type=float, default=1.15,
+                        help="Kiedy komponent uznać za sklejony: warunek szerokość > ratio * wysokość (domyślnie: 1.15)")
+    parser.add_argument("--ws-min-comp-area", type=int, default=30,
+                        help="Minimalne pole komponentu, aby był kandydatem na literę (domyślnie: 30)")
+    parser.add_argument("--ws-split-min-area", type=int, default=250,
+                        help="Minimalne pole komponentu, od którego próbujemy podział watershed (domyślnie: 250)")
+    parser.add_argument("--ws-min-box-w", type=int, default=3,
+                        help="Minimalna szerokość boxa litery po segmentacji (domyślnie: 3)")
+    parser.add_argument("--ws-min-box-h", type=int, default=5,
+                        help="Minimalna wysokość boxa litery po segmentacji (domyślnie: 5)")
+    parser.add_argument("--ws-min-box-area", type=int, default=20,
+                        help="Minimalne pole boxa litery po segmentacji (domyślnie: 20)")
+    parser.add_argument("--ws-merge-gap", type=int, default=4,
+                        help="Maksymalna przerwa pozioma między fragmentami do scalenia (domyślnie: 4)")
+    parser.add_argument("--ws-merge-height-ratio", type=float, default=1.8,
+                        help="Maksymalny stosunek wysokości fragmentów do scalenia (domyślnie: 1.8)")
+    parser.add_argument("--ws-merge-vert-dist", type=int, default=4,
+                        help="Maksymalna odległość pionowa do scalenia fragmentów (domyślnie: 4)")
     return parser
 
 
@@ -269,6 +292,7 @@ def main(args=None, info=None, buffor=None):
         buffor = []
 
     model_path = getattr(args, "model_path", None) or MODEL_PATH
+    ocr_path = getattr(args, "model_path", None) or OCR_MODEL_PATH
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     info(f"Uzywane urzadzenie: {device}")
@@ -279,6 +303,15 @@ def main(args=None, info=None, buffor=None):
     # ── Trening ──
     if args.train:
         train_model(epochs=args.epochs, batch_size=args.batch_size, model_path=args.resume, info=info, args=args)
+
+    elif args.multi_train is not None:
+        preset_names = args.multi_train or None  # [] -> None oznacza "wszystkie"
+        multi_train(
+            preset_names=preset_names,
+            epochs=args.epochs,
+            batch_size=args.batch_size,
+            info=info,
+        )
 
     elif args.infinite:
         info("\nUruchamianie nieskonczonego treningu...")
@@ -354,18 +387,32 @@ def main(args=None, info=None, buffor=None):
         table_rows.sort(key=lambda r: r["key"] if r["key"] else "")
         
         # Wyświetl tabelę
-        info(f"\n{'NAME':<12} {'TEXT':<20} {'CONF':<10}")
-        info("-" * 45)
+        info(f"\n{'NAME':<12} {'TEXT':<20} {'CONF':<10} {'AUTOCORRECT':<20}")
+        info("-" * 60)
 
         for r in table_rows:
             if r["confidence"] is None:
-                info(f"{str(r['key']) if r['key'] else '-':<12} {r['text']:<20} {'-':<10}")
+                autocorTXT = DictCorrect(r['text'])
+                info(f"{str(r['key']) if r['key'] else '-':<12} {autocorTXT:<20} {'-':<10}")
             else:
-                info(f"{r['key']:<12} {r['text']:<20} {r['confidence']:.2f}%")
+                autocorTXT = DictCorrect(r['text'])
+                info(f"{r['key']:<12} {r['text']:<20} {r['confidence']/100:<10.2%} {autocorTXT:<20} {'-':<10}")
+
         
         # Wyświetl w rozmieszczeniu
-        display_text_layout(layout_words, info)
-
+        #display_text_layout(layout_words, info)
+        if args.json:
+            saved_copy_path = save_image_to_today_folder(args.page, info)
+            payload = build_page_result_json(
+                image_path=args.page,
+                saved_copy_path=saved_copy_path,
+                rows=table_rows,
+                device=str(device),
+            )
+            jsFile, _ = os.path.splitext(os.path.basename(saved_copy_path))
+            jsFile = jsFile + ".json"
+            jsPath = os.path.join(os.path.dirname(saved_copy_path), jsFile)
+            write_json(jsPath, payload, pretty=args.json_pretty)
     elif args.folder:
         results = process_folder(args.folder, args, model_path, device, info)
         rows = []
@@ -389,70 +436,161 @@ def main(args=None, info=None, buffor=None):
                 "confidence": r["confidence"]
             })
         rows.sort(key=lambda r: r["key"] if r["key"] else "")
-        info(f"\n{'NAME':<12} {'TEXT':<20} {'CONF':<10}")
+        info(f"\n{'NAME':<12} {'TEXT':<20} {'CONF':<10} {'AUTOCORRECT':<20}")
         info("-" * 45)
 
         for r in rows:
             if r["confidence"] is None:
-                info(f"{str(r['key']) if r['key'] else '-':<12} {r['text']:<20} {'-':<10}")
+                autocorTXT = DictCorrect(r['text'])
+                info(f"{str(r['key']) if r['key'] else '-':<12} {autocorTXT:<20} {'-':<10}")
+            else:
+                autocorTXT = DictCorrect(r['text'])
+                info(f"{r['key']:<12} {r['text']:<20} {r['confidence']/100:<10.2%} {autocorTXT:<20} {'-':<10}")
+        
+            
+            
+            
+        if args.json:
+            payload = build_page_result_json(
+                image_path=args.lines,
+                saved_copy_path=args.folder,
+                rows=rows,
+                device=str(device),
+            )
+            info(dump_json(payload, pretty=args.json_pretty))
+
+    elif args.ensemble:
+        gen, mn = run_ensemble_generation(model_path)
+        # tryb cache
+        if args.cache_path:
+
+            results = test_cache_models(
+                args.ensemble,
+                args,
+                model_path,
+                device,
+                info,
+                gen,
+                mn,
+                args.cache_path,
+            )
+
+
+        elif args.use_cache:
+
+            results = test_cache_models(
+                args.ensemble,
+                args,
+                model_path,
+                device,
+                info,
+                gen,
+                mn,
+            )
+
+        else:
+            results = test_models(
+                args.ensemble,
+                args,
+                model_path,
+                device,
+                info,
+                gen,
+                mn,
+            )
+        transcription = load_transcription(args.trans)
+        rows = []
+
+        for r in results:
+            if "error" in r:
+                rows.append({
+                    "key": None,
+                    "file": r["file"],
+                    "ensemble": None,
+                    "text": f"ERROR: {r['error']}",
+                    "confidence": None,
+                    "accuracy": None
+                })
+                continue
+
+            filename = os.path.basename(r["file"])
+            name, _ = os.path.splitext(filename)
+
+            for e in r["ensembles"]:
+                ensemble_name = e["ensemble"]
+
+                ref = transcription.get(name)
+
+                if ref is not None:
+                    acc = compute_accuracy(e["text"], ref)
+                else:
+                    acc = None
+
+                rows.append({
+                    "key": name,
+                    "file": r["file"],
+                    "ensemble": ensemble_name,
+                    "text": e["text"],
+                    "confidence": e["confidence"],
+                    "accuracy": acc
+                })
+
+        rows.sort(key=lambda r: (r["key"] if r["key"] else "", r["ensemble"] or ""))
+        save_results_csv(rows)
+        info(f"\n{'NAME':<12} {'ENSEMBLE':<30} {'TEXT':<20} {'CONF':<10} {'ACC':<10}")
+        info("-" * 95)
+        buffer = []
+        for r in rows:
+            key = str(r["key"]) if r["key"] else "-"
+            ensemble = r["ensemble"] if r["ensemble"] else "-"
+            ensemble_str = "+".join(ensemble)
+            if r["confidence"] is None:
+                buffer.append(f"{key:<12} {ensemble_str:<30} {r['text']:<20} {'-':<10} {'-':<10}")
             else:
                 info(f"{r['key']:<12} {r['text']:<20} {r['confidence']:.2f}%")
+        info("----Po poprawie----")
+        for r in rows:
+            autocorTXT = DictCorrect(r['text'])
+            info(f"{str(r['key']) if r['key'] else '-':<12} {autocorTXT:<20} {'-':<10}")
+
+
+
         
     elif args.image:
         _require_file(args.image, info)
         info(f"\nRozpoznawanie: {args.image}")
 
-        saved_copy_path = save_image_to_today_folder(args.image, info)
-        model = load_model(model_path, device, info)
+        model = load_model(ocr_path, device, info, 2)
 
-        result = predict_image(args.image, model, device, args)
-        text = result["text"]
-        confidence = result["confidence"]
-        probs = result["probs"]
+        predicted_char, confidence, probs = predict_image(args.image, model, device, args)
+        active_labels = get_active_chars()
+
 
         output_handler = create_output_handler(args, source_image=args.image)
-        output_handler.output(
-            OCRResult(text=text, confidence=confidence, probs=probs, mode="single", class_labels=get_active_chars()),
-            info,
-        )
+        result = OCRResult(predicted_char, confidence, probs, mode="single")
+        output_handler.output(result, info)
 
         if args.debug:
-            visualize_prediction(args.image, text, confidence, args, info)
+            visualize_prediction(args.image, predicted_char, confidence, args, info)
 
         if args.json:
             payload = build_image_result_json(
                 image_path=args.image,
                 saved_copy_path=saved_copy_path,
-                predicted_char=text,
+                predicted_char=predicted_char,
                 confidence=confidence,
                 probs=probs,
                 device=str(device),
             )
             info(dump_json(payload, pretty=args.json_pretty))
-            out_path = args.json_path or (os.path.splitext(saved_copy_path)[0] + ".json")
+            out_path = args.json_path
+            if out_path is None:
+                out_path = os.path.splitext(saved_copy_path)[0] + ".json"
             write_json(out_path, payload, pretty=args.json_pretty)
         else:
-            info(f"TEXT: {text}")
-            info(f"CONFIDENCE: {confidence:.2f}%")
+            print_single_result(predicted_char, confidence, info)
+            print_top5(probs, info)
 
-        if args.accuracy:
-            _print_accuracy(text, args.accuracy, info)
-
-    # ── CRNN ──
-    elif args.crnn:
-        _require_file(args.crnn, info)
-        info(f"\nRozpoznawanie CRNN: {args.crnn}")
-        save_image_to_today_folder(args.crnn, info)
-
-        model = load_model(model_path, device, info)
-        result = predict_image(args.crnn, model, device, args)
-        text = result["text"]
-        confidence = result["confidence"]
-
-        info(f"Rozpoznany tekst: '{text}' ({confidence:.1f}%)")
-        if args.json:
-            payload = {"file": args.crnn, "text": text, "confidence": confidence}
-            info(dump_json(payload, pretty=args.json_pretty))
 
     # ── Wyraz ──
     elif args.word:
@@ -460,7 +598,7 @@ def main(args=None, info=None, buffor=None):
         info(f"\nRozpoznawanie wyrazu: {args.word}")
         saved_copy_path = save_image_to_today_folder(args.word, info)
 
-        model = load_model(model_path, device, info)
+        model = load_model(ocr_path, device, info, 2)
         word, avg_word_confidence, class_confidence = predict_word(args.word, model, device, args)
         if args.json:
             payload = build_word_result_json(
@@ -486,7 +624,7 @@ def main(args=None, info=None, buffor=None):
         info(f"\nRozpoznawanie tekstu: {args.lines}")
 
         saved_copy_path = save_image_to_today_folder(args.lines, info)
-        model = load_model(model_path, device, info)
+        model = load_model(ocr_path, device, info, 2)
         text, words_with_confidence, class_confidence = predict_segments(args.lines, model, device, args)
 
         if args.json:

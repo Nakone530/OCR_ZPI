@@ -102,6 +102,55 @@ def build_multi_result_json(
         "results": results,
     }
 
+def build_page_result_json(
+    *,
+    image_path: str,
+    saved_copy_path: str | None,
+    rows: list[dict],
+    device: str,
+) -> dict[str, Any]:
+
+    words = []
+
+    for i, r in enumerate(rows):
+        words.append({
+            "index": i + 1,
+            "key": r["key"],
+            "file": r["file"],
+            "text": r["text"],
+            "confidence": r["confidence"],
+        })
+
+    full_text = " ".join(
+        r["text"] for r in rows
+        if r["text"]
+    )
+
+    confidences = [
+        r["confidence"]
+        for r in rows
+        if r["confidence"] is not None
+    ]
+
+    avg_confidence = (
+        sum(confidences) / len(confidences)
+        if confidences else None
+    )
+
+    return {
+        "type": "page",
+        "timestamp": datetime.now().isoformat(timespec="seconds"),
+        "device": device,
+        "input": {
+            "image_path": image_path,
+            "saved_copy_path": saved_copy_path
+        },
+        "result": {
+            "text": full_text,
+            "confidence": avg_confidence,
+            "words": words,
+        },
+    }
 
 def dump_json(payload: dict[str, Any], *, pretty: bool) -> str:
     if pretty:

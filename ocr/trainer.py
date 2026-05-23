@@ -2,8 +2,7 @@
 Moduł trenowania modelu OCR.
 
 Odpowiedzialności:
-  - pobieranie i rozpakowywanie datasetu Chars74K
-  - trening sieci SimpleCNN z walidacją
+  - trening sieci MainModel z walidacją
   - zapis najlepszego modelu na dysk
   - nieskończony trening z możliwością przerwania i kontynuacji
 """
@@ -17,7 +16,9 @@ import signal
 import threading
 import time
 import gc
+from dataclasses import dataclass, field
 from datetime import datetime
+from typing import List, Optional
 import json
 import numpy as np
 import torch
@@ -26,14 +27,69 @@ import torch.nn.functional as F
 from torchvision import datasets
 
 from .config import (
-    DATA_DIR, ARCHIVE_PATH, EXTRACTED_DIR, MODEL_PATH, CHECKPOINT_PATH,
+    DATA_DIR, MODEL_PATH, CHECKPOINT_PATH,
     MODEL_ARCHIVE_DIR, MODEL_ARCHIVE_KEEP_COUNT, IMAGES_DIR, CHARS, char2idx, idx2char, DATA_ROOT_DIR
 )
-from .model import SimpleCNN
+from .model import MainModel
 from .utils import get_train_transform, load_all_datasets
 from .model_archive import ModelArchiver
 from .OCRDataset import OCRDataset
 from . import info
+
+
+# ── Konfiguracje treningowe ───────────────────────────────────────────────────
+
+@dataclass
+class TrainingConfig:
+    """Konfiguracja jednego przebiegu treningowego."""
+    name: str
+    description: str
+    epochs: Optional[int] = None        # None = dziedziczy z CLI --epochs
+    batch_size: Optional[int] = None    # None = dziedziczy z CLI --batch-size
+    denoise_prob: float = 0.3           # prawdopodobieństwo RandomDenoise (0.0-1.0)
+    max_padding: int = 20               # maks. padding w pikselach (RandomPadding)
+    model_path: Optional[str] = None    # ścieżka zapisu (None = models/model_<name>.pth)
+    resume_path: Optional[str] = None   # ścieżka checkpointu do wznowienia
+
+
+TRAINING_PRESETS: dict = {
+    "baseline": TrainingConfig(
+        name="baseline",
+        description="Model bazowy – brak modyfikacji transformacji",
+        denoise_prob=0.0,
+        max_padding=0,
+    ),
+    "p_denoise": TrainingConfig(
+        name="p_denoise",
+        description="Trening z odszumianiem – RandomDenoise zawsze aktywny (prob=1.0)",
+        denoise_prob=1.0,
+        max_padding=20,
+    ),
+    "padding": TrainingConfig(
+        name="padding",
+        description="Trening z ulepszonym paddingiem – RandomPadding do 40px",
+        denoise_prob=0.0,
+        max_padding=40,
+    ),
+    "denoise": TrainingConfig(
+        name="denoise",
+        description="Trening z odszumianiem – RandomDenoise zawsze aktywny (prob=1.0), bez paddingu",
+        denoise_prob=0.0,
+        max_padding=40,
+    ),
+    "padding": TrainingConfig(
+        name="padding",
+        description="Trening z umiarkowanym paddingiem i denoise",
+        denoise_prob=0.5,
+        max_padding=30,
+    ),
+    "p_baseline": TrainingConfig(
+        name="p_baseline",
+        description="Model bazowy – brak modyfikacji transformacji poza lekkim paddingiem",
+        denoise_prob=0.0,
+        max_padding=20,
+    ),
+}
 
 
 # -- globalne
@@ -47,6 +103,8 @@ GLOBAL_EPOCH = 0
 GLOBAL_BEST_ACC = 0.0
 GLOBAL_VAL_ACCURACY = 0.0
 
+_GLOBAL_MAJOR_VERSION = None
+_GLOBAL_MINOR_VERSION = None
 # -- flagi kontrolne dla nieskończonego treningu
 TRAINING_PAUSED = False
 TRAINING_STOP = False
@@ -148,6 +206,58 @@ def collate_fn(batch):
 
 # -- Trening
 
+def get_runtime_major_version(folder):
+    global _GLOBAL_MAJOR_VERSION
+
+    if _GLOBAL_MAJOR_VERSION is not None:
+        return _GLOBAL_MAJOR_VERSION
+
+    pattern = re.compile(r"v(\d+)\.")
+    majors = []
+
+    if os.path.exists(folder):
+        for name in os.listdir(folder):
+            match = pattern.match(name)
+            if match:
+                majors.append(int(match.group(1)))
+
+    if not majors:
+        _GLOBAL_MAJOR_VERSION = 1
+    else:
+        _GLOBAL_MAJOR_VERSION = max(majors) + 1
+
+    return _GLOBAL_MAJOR_VERSION
+
+
+
+def get_runtime_minor_version(folder, major):
+    global _GLOBAL_MINOR_VERSION
+
+    if _GLOBAL_MINOR_VERSION is not None:
+        return _GLOBAL_MINOR_VERSION
+
+    pattern = re.compile(
+        rf"v{major}\.(\d+)"
+    )
+
+    minors = []
+
+    if os.path.exists(folder):
+
+        for name in os.listdir(folder):
+
+            match = pattern.match(name)
+
+            if match:
+                minors.append(int(match.group(1)))
+
+    if not minors:
+        _GLOBAL_MINOR_VERSION = 1
+    else:
+        _GLOBAL_MINOR_VERSION = max(minors) + 1
+
+    return _GLOBAL_MINOR_VERSION
+
 checkpoint_path = "checkpoint.pth"
 current_state = {}
 
@@ -216,7 +326,7 @@ def handler(signum, frame, info=None):
             info("Wznawianie")
             train_model(10, 32, CHECKPOINT_PATH)
         elif choice == "2":
-            info("Zapisywanie najlepszego (obecnie nie do końca działa, zapisuje ostatni stan)")
+            info("Zapisywanie najlepszego")
             save_model(MODEL_PATH, info)
         elif choice == "3":
             info("Zamykanie programu...")
@@ -401,8 +511,8 @@ def save_best_model(path, info=None):
     return path
 
 
-def capture_best_model(info=None):
-    """Przechwytuje aktualny stan modelu jako najlepszy."""
+def capture_best_model(info=None, path=None):
+    """Przechwytuje aktualny stan modelu jako najlepszy i zapisuje go pod wskazaną ścieżką."""
     global BEST_MODEL_STATE, GLOBAL_MODEL, GLOBAL_OPTIMIZER, GLOBAL_EPOCH, GLOBAL_BEST_ACC, GLOBAL_CLASS_NAMES, GLOBAL_VAL_ACCURACY
 
     if info is None:
@@ -419,7 +529,7 @@ def capture_best_model(info=None):
         "class_names": GLOBAL_CLASS_NAMES,
         "val_char_accuracy": GLOBAL_VAL_ACCURACY,
     }
-    save_best_model(MODEL_PATH, info)
+    save_best_model(path or MODEL_PATH, info)
 
 
 def init_or_load_model(num_classes, model_path=None, info=None):
@@ -431,7 +541,7 @@ def init_or_load_model(num_classes, model_path=None, info=None):
 
     GLOBAL_DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    GLOBAL_MODEL = SimpleCNN(num_classes=num_classes).to(GLOBAL_DEVICE)
+    GLOBAL_MODEL = MainModel(num_classes=num_classes).to(GLOBAL_DEVICE)
     GLOBAL_CRITERION = nn.CTCLoss(zero_infinity=True)
     GLOBAL_OPTIMIZER = torch.optim.Adam(GLOBAL_MODEL.parameters(), lr=0.0001)
 
@@ -450,17 +560,34 @@ def init_or_load_model(num_classes, model_path=None, info=None):
             GLOBAL_MODEL.load_state_dict(checkpoint)
 
 
-def train_model(epochs=10, batch_size=32, model_path=None, info=None, args=None):
+def train_model(epochs=10, batch_size=32, model_path=None, info=None, args=None,
+                config: Optional['TrainingConfig'] = None, save_path: Optional[str] = None):
+    """
+    Trenuje model OCR.
+
+    Args:
+        config: TrainingConfig z parametrami transformacji (denoise_prob, max_padding).
+                Gdy None – używane są wartości domyślne.
+        save_path: ścieżka zapisu wytrenowanego modelu.
+                   Gdy None – używana jest stała MODEL_PATH.
+    """
     global GLOBAL_MODEL, GLOBAL_OPTIMIZER, GLOBAL_CRITERION
     global GLOBAL_DEVICE, GLOBAL_EPOCH, GLOBAL_BEST_ACC, GLOBAL_CLASS_NAMES, GLOBAL_VAL_ACCURACY
 
     if info is None:
         info = print
 
+    effective_save_path = save_path or MODEL_PATH
+
+    # Parametry transformacji z konfiguracji lub wartości domyślne
+    denoise_prob = config.denoise_prob if config is not None else 0.3
+    max_padding = config.max_padding if config is not None else 20
+    checkpoint_ratios = [0.5, 0.6, 0.7, 0.8, 0.9]
+    checkpoint_saved = {r: False for r in checkpoint_ratios}
     # Odczyt dokładności istniejącego modelu i kopia zapasowa
-    prev_accuracy = get_stored_accuracy(MODEL_PATH)
-    backup_path = MODEL_PATH + ".backup"
-    _make_backup_as(MODEL_PATH, backup_path)
+    prev_accuracy = get_stored_accuracy(effective_save_path)
+    backup_path = effective_save_path + ".backup"
+    _make_backup_as(effective_save_path, backup_path)
     if prev_accuracy >= 0:
         info(f"Poprzednia dokładność modelu: {prev_accuracy:.2f}%")
     else:
@@ -471,8 +598,8 @@ def train_model(epochs=10, batch_size=32, model_path=None, info=None, args=None)
 
     dataset = OCRDataset(
         json_data=data,
-        images_dir=None,  # już niepotrzebne
-        transform=get_train_transform(args)
+        images_dir=None,
+        transform=get_train_transform(args, denoise_prob=denoise_prob, max_padding=max_padding)
     )
     
     info(f"4. Dataset załadowany: {len(dataset)} obrazów")
@@ -573,6 +700,13 @@ def train_model(epochs=10, batch_size=32, model_path=None, info=None, args=None)
 
         epoch_time = time.time() - epoch_start
         info(f"Epoch {epoch+1} | train_loss={running_loss:.4f} | val_loss={val_loss:.4f} | time={epoch_time:.1f}s")
+        progress = (epoch + 1) / target_epoch
+
+        for ratio in checkpoint_ratios:
+            if not checkpoint_saved[ratio] and progress >= ratio:
+                info(f"[CHECKPOINT] Saving model at {int(ratio*100)}% (epoch {epoch+1})")
+                save_checkpoint_model(GLOBAL_MODEL, epoch + 1, ratio)
+                checkpoint_saved[ratio] = True
         if torch.isnan(loss):
             print("NaN detected!")
             print("targets:", target_lengths)
@@ -591,14 +725,14 @@ def train_model(epochs=10, batch_size=32, model_path=None, info=None, args=None)
 
     if prev_accuracy < 0:
         info("Pierwszy model – zapisuję jako punkt odniesienia.")
-        capture_best_model(info)
+        capture_best_model(info, path=effective_save_path)
     elif new_accuracy >= prev_accuracy:
         info(f"Poprawa: {prev_accuracy:.2f}% -> {new_accuracy:.2f}% – zapisuję nowy model.")
-        capture_best_model(info)
+        capture_best_model(info, path=effective_save_path)
     else:
         info(f"Brak poprawy: {prev_accuracy:.2f}% -> {new_accuracy:.2f}% – przywracam poprzedni model.")
         if os.path.exists(backup_path):
-            shutil.copy2(backup_path, MODEL_PATH)
+            shutil.copy2(backup_path, effective_save_path)
 
     # Usuń plik backup
     if os.path.exists(backup_path):
@@ -612,7 +746,150 @@ def train_model(epochs=10, batch_size=32, model_path=None, info=None, args=None)
     info(f"  Całkowity czas treningu: {total_training_time:.1f}s")
     info("=" * 60)
 
+def save_checkpoint_model(model, epoch, ratio):
+    f_models = folder = "models"
+    major = get_runtime_major_version(f_models)
+    minor = get_runtime_minor_version(f_models, major)
+    folder = os.path.join(folder, f"v{major}.{minor}")
+    os.makedirs(folder, exist_ok=True)
+    
+    subfolder = os.path.join(folder, f"v{major}.{int(ratio*10) - 4}")
+    os.makedirs(subfolder, exist_ok=True)
+    mPath = os.path.join(subfolder, f"model.pth")
+    
+    torch.save(model.state_dict(), mPath)
+    dPath = os.path.join(subfolder, f"model_v{major}.{int(ratio*10) - 4}_epoch{epoch}.txt")
+    with open(dPath, "w", encoding="utf-8") as f:
+        f.write(f"epoch: {epoch}\n")
+        f.write(f"ratio: {ratio}\n")
+        f.write(f"model_version: v{major}.{int(ratio*10) - 4}\n")
+        
+def multi_train(
+    preset_names: Optional[List[str]] = None,
+    epochs: int = 10,
+    batch_size: int = 32,
+    info=None,
+):
+    """
+    Uruchamia wiele konfiguracji treningowych kolejno po sobie.
 
+    Args:
+        preset_names: lista nazw presetów z TRAINING_PRESETS; None lub [] = wszystkie
+        epochs: domyślna liczba epok (używana gdy preset nie nadpisuje)
+        batch_size: domyślny rozmiar batcha (używany gdy preset nie nadpisuje)
+        info: funkcja logowania
+
+    Przykład użycia w CLI:
+        python -m ocr.main --multi-train                 # wszystkie presety
+        python -m ocr.main --multi-train baseline denoise
+    """
+    global GLOBAL_MODEL, GLOBAL_EPOCH, GLOBAL_BEST_ACC, GLOBAL_VAL_ACCURACY, BEST_MODEL_STATE, _GLOBAL_MAJOR_VERSION, _GLOBAL_MINOR_VERSION
+
+    if info is None:
+        info = print
+
+    if not preset_names:
+        configs = list(TRAINING_PRESETS.values())
+    else:
+        unknown = [n for n in preset_names if n not in TRAINING_PRESETS]
+        if unknown:
+            info(f"Nieznane presety: {', '.join(unknown)}")
+            info(f"Dostępne: {', '.join(TRAINING_PRESETS)}")
+            return
+        configs = [TRAINING_PRESETS[n] for n in preset_names]
+
+    total = len(configs)
+    info("\n" + "=" * 60)
+    info(f"  MULTI-TRENING – {total} konfiguracji w kolejce")
+    info("=" * 60)
+    for i, cfg in enumerate(configs, 1):
+        info(f"  {i}. [{cfg.name}] {cfg.description}")
+    info("=" * 60 + "\n")
+
+    results = []
+    overall_start = time.time()
+
+    for i, config in enumerate(configs, 1):
+        info("\n" + "=" * 60)
+        info(f"  [{i}/{total}] START: {config.name}")
+        info(f"  {config.description}")
+        info("=" * 60 + "\n")
+
+        # Resetuj globalny stan modelu – każdy preset zaczyna od zera
+        GLOBAL_MODEL = None
+        GLOBAL_EPOCH = 0
+        GLOBAL_BEST_ACC = 0.0
+        GLOBAL_VAL_ACCURACY = 0.0
+        BEST_MODEL_STATE = None
+        _GLOBAL_MAJOR_VERSION = None
+        _GLOBAL_MINOR_VERSION = None
+        
+        cfg_epochs = config.epochs if config.epochs is not None else epochs
+        cfg_batch_size = config.batch_size if config.batch_size is not None else batch_size
+        base_dir = config.model_path or "./models"
+        base_name = f"model_{config.name}"
+
+        save_path = get_versioned_model_path(base_dir, base_name)
+        run_start = time.time()
+        status = "OK"
+        try:
+            train_model(
+                epochs=cfg_epochs,
+                batch_size=cfg_batch_size,
+                model_path=config.resume_path,
+                info=info,
+                config=config,
+                save_path=save_path,
+            )
+        except Exception as exc:
+            status = "BŁĄD"
+            info(f"Błąd podczas treningu '{config.name}': {exc}")
+            import traceback
+            info(traceback.format_exc())
+
+        run_time = time.time() - run_start
+        results.append((config.name, status, GLOBAL_VAL_ACCURACY, save_path, run_time))
+        info(f"\n  [{i}/{total}] KONIEC: {config.name} | {status} | czas: {run_time:.1f}s\n")
+
+    total_time = time.time() - overall_start
+    info("\n" + "=" * 60)
+    info("  PODSUMOWANIE MULTI-TRENINGU")
+    info("=" * 60)
+    info(f"  {'PRESET':<14} {'STATUS':<8} {'DOKŁADNOŚĆ':>12}  ŚCIEŻKA")
+    info("  " + "-" * 58)
+    for name, status, acc, path, _ in results:
+        info(f"  {name:<14} {status:<8} {acc:>10.2f}%  {path}")
+    info("=" * 60)
+    info(f"  Łączny czas: {total_time:.1f}s")
+    info("=" * 60 + "\n")
+
+def get_versioned_model_path(base_dir, base_name):
+    pattern = re.compile(rf"{re.escape(base_name)}_v(\d+)\.pth$")
+    
+    existing_versions = []
+
+    if not os.path.exists(base_dir):
+        os.makedirs(base_dir)
+
+    for f in os.listdir(base_dir):
+        match = pattern.match(f)
+        if match:
+            existing_versions.append(int(match.group(1)))
+
+    if not existing_versions:
+        version = 1
+    else:
+        version = max(existing_versions) + 1
+
+    filename = f"{base_name}_v{version}.pth"
+    return os.path.join(base_dir, filename)
+
+def get_preset_names() -> List[str]:
+    """Zwraca listę dostępnych nazw presetów treningowych."""
+    return list(TRAINING_PRESETS.keys())
+
+    
+    
 def show_infinite_menu(info=None):
     """Wyświetla interaktywne menu po przerwaniu nieskończonego treningu."""
     global TRAINING_PAUSED, TRAINING_STOP, GLOBAL_EPOCH, GLOBAL_BEST_ACC
@@ -709,10 +986,8 @@ def infinite_train(batch_size=32, model_path=None, checkpoint_interval=5, info=N
     # Reset flag
     TRAINING_PAUSED = False
     TRAINING_STOP = False
-    GLOBAL_BEST_ACC = float('inf')  # reset na nieskończoność dla loss (chcemy minimalizować)
+    GLOBAL_BEST_ACC = float('inf')
     
-    # UWAGA: signal.signal() nie może być używany w wątku!
-    # Dlatego nie ustawiamy handlera - nieskończony trening będzie działać bez Ctrl+C
     
     try:
         info("1. Ładowanie datasetu...")

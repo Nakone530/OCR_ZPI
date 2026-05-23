@@ -153,6 +153,7 @@ def build_parser() -> argparse.ArgumentParser:
     mode.add_argument("--annotate", type=str, metavar="PLIK", help="Wycinki: popraw bboxy i zapisz wycinki + adnotacje")
     mode.add_argument("--folder", type=str, metavar="PLIK", help="Rozpoznaj zdjęcia w folderze")
     mode.add_argument("--page", type=str, metavar="PLIK", help="Separacja zdjęcia na wyrazy oraz ich rozpoznanie")
+    mode.add_argument("--crnn", type=str, metavar="PLIK", help="Rozpoznawanie CRNN (tekst z obrazu)")
     mode.add_argument("--ensemble", "-n", type=str, metavar="PLIK", help="Sprawdź kombinacle modeli")
     parser.add_argument("--trans", "-s", type=str, metavar="PLIK", help="Plik zawierający transkrypcje, do użycia z -n")
     # Cache

@@ -600,15 +600,15 @@ def train_model(epochs=10, batch_size=32, model_path=None, info=None, args=None,
         data = preloaded_data
     else:
         info("3. Ładowanie datasetu OCR...")
-        data = load_all_datasets(DATA_ROOT_DIR)
+        data = load_phsf_znaki(PHSF_DATA_DIR)
         info(f"   ttData: {len(data)} próbek")
 
-        if os.path.isdir(PHSF_DATA_DIR):
-            phsf_data = load_phsf_znaki(PHSF_DATA_DIR)
-            info(f"   PHSF znaki: {len(phsf_data)} próbek")
-            data = data + phsf_data
-        else:
-            info(f"   PHSF pominięty (brak katalogu: {PHSF_DATA_DIR})")
+##        if os.path.isdir(PHSF_DATA_DIR):
+##            phsf_data = load_phsf_znaki(PHSF_DATA_DIR)
+##            info(f"   PHSF znaki: {len(phsf_data)} próbek")
+##            data = data + phsf_data
+##        else:
+##            info(f"   PHSF pominięty (brak katalogu: {PHSF_DATA_DIR})")
 
     dataset = OCRDataset(
         json_data=data,

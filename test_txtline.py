@@ -202,13 +202,103 @@ def detect_text_words(img):
             #words.extend(too_small)
             words.extend(most_safe)
         
-    # Sortowanie od góry do dołuedian_heig
+    # Konwersja do obiektów Word
     words = [
-        Word(i, box)
-        for i, box in enumerate(words)
+        Word(0, box)
+        for box in words
     ]
-    
-    words.sort(key=lambda w: w.y)
+
+    # Grupowanie w linie: dopasowanie po cy + pionowym overlapie (bardziej stabilne)
+    if words:
+        prepared = [
+            {
+                "word": w,
+                "x1": float(w.x),
+                "y1": float(w.y),
+                "x2": float(w.x + w.w),
+                "y2": float(w.y + w.h),
+                "h": float(max(1, w.h)),
+                "cy": float(w.cy),
+            }
+            for w in words
+        ]
+
+        base_tol = max(4.0, 0.45 * float(max(1, median_height)))
+        prepared.sort(key=lambda d: (d["cy"], d["x1"]))
+
+        lines = []
+        for entry in prepared:
+            best_idx = None
+            best_score = 1e9
+
+            for i, line in enumerate(lines):
+                line_h = max(1.0, line["y2"] - line["y1"])
+                tol = max(base_tol, 0.30 * max(entry["h"], line_h))
+                dist = abs(entry["cy"] - line["cy"])
+
+                overlap_h = max(0.0, min(entry["y2"], line["y2"]) - max(entry["y1"], line["y1"]))
+                overlap_ratio = overlap_h / max(1.0, min(entry["h"], line_h))
+
+                if dist <= tol or overlap_ratio >= 0.45:
+                    score = dist - (overlap_ratio * base_tol)
+                    if score < best_score:
+                        best_score = score
+                        best_idx = i
+
+            if best_idx is None:
+                lines.append(
+                    {
+                        "items": [entry],
+                        "y1": entry["y1"],
+                        "y2": entry["y2"],
+                        "cy": entry["cy"],
+                    }
+                )
+            else:
+                line = lines[best_idx]
+                line["items"].append(entry)
+                n = float(len(line["items"]))
+                line["y1"] = min(line["y1"], entry["y1"])
+                line["y2"] = max(line["y2"], entry["y2"])
+                line["cy"] = ((line["cy"] * (n - 1.0)) + entry["cy"]) / n
+
+        # Scal linie, które są praktycznie tą samą linią (po podziale na fragmenty)
+        lines.sort(key=lambda l: l["cy"])
+        merged = []
+        for line in lines:
+            if not merged:
+                merged.append(line)
+                continue
+
+            prev = merged[-1]
+            prev_h = max(1.0, prev["y2"] - prev["y1"])
+            line_h = max(1.0, line["y2"] - line["y1"])
+            merge_tol = max(2.0, 0.18 * max(prev_h, line_h), 0.20 * float(max(1, median_height)))
+            center_dist = abs(line["cy"] - prev["cy"])
+
+            overlap_h = max(0.0, min(line["y2"], prev["y2"]) - max(line["y1"], prev["y1"]))
+            overlap_ratio = overlap_h / max(1.0, min(prev_h, line_h))
+
+            if center_dist <= merge_tol and overlap_ratio >= 0.35:
+                prev["items"].extend(line["items"])
+                prev["y1"] = min(prev["y1"], line["y1"])
+                prev["y2"] = max(prev["y2"], line["y2"])
+                prev["cy"] = float(np.mean([e["cy"] for e in prev["items"]]))
+            else:
+                merged.append(line)
+
+        # Sortowanie finalne: linie góra->dół, słowa w linii lewo->prawo
+        ordered = []
+        merged.sort(key=lambda l: l["cy"])
+        for line in merged:
+            line["items"].sort(key=lambda e: e["x1"])
+            ordered.extend(e["word"] for e in line["items"])
+
+        for idx, w in enumerate(ordered, start=1):
+            w.idx = idx
+
+        # Utrzymaj listę words również w kolejności czytania (ważne dla dalszego pipeline)
+        words = ordered
 
     # Kopia do rysowania
     output = img.copy()
@@ -480,8 +570,13 @@ if __name__ == "__main__":
         l_output, output, true_l_output, false_l_output, lines  = detect_text_lines(original.copy(), output, words)        
         print(f"Znaleziono {len(words)} linii")
 
-        for i, (x, y, w, h) in enumerate(words):
-            print(f"{i}: x={x}, y={y}, w={w}, h={h}")
+        for i, w in enumerate(words):
+            print(f"{i}: idx={w.idx}, x={w.x}, y={w.y}, w={w.w}, h={w.h}")
+
+        # Dodatkowo: wydrukuj słowa posortowane według idx (kolejność czytania)
+        print("--- Reading order ---")
+        for w in sorted(words, key=lambda x: x.idx):
+            print(f"idx={w.idx}: x={w.x}, y={w.y}, w={w.w}, h={w.h}")
 
         if not args.debug:
             continue

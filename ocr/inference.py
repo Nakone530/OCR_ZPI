@@ -299,7 +299,7 @@ def _segment_letters(gray: np.ndarray, args=None) -> list[tuple[int, int, int, i
     return boxes
 
 
-def _classify_letter(letter_gray: np.ndarray, model: nn.Module, device: torch.device, more, args) -> str:
+def _classify_letter(letter_gray: np.ndarray, model: nn.Module, device: torch.device, more, args, model_type=0) -> str:
     """
     Klasyfikuje pojedynczy wycięty fragment obrazu jako znak.
     
@@ -322,14 +322,66 @@ def _classify_letter(letter_gray: np.ndarray, model: nn.Module, device: torch.de
         >>> char = _classify_letter(letter_img, model, device, False)
         >>> char, conf, probs = _classify_letter(letter_img, model, device, True)
     """
-    pil = Image.fromarray(letter_gray).resize((28, 28)).convert("L")
-    tensor = aux_transform()(pil).unsqueeze(0).to(device)
-    probs = torch.softmax(model(tensor), dim=1)
-    confidence, predicted = torch.max(probs, 1)
-    if(more):
-        return _label_for_idx(predicted.item()), confidence.item() * 100, probs[0]
+    if model_type == 0:
+            # ---------------- CNN ----------------
+            pil = (
+                Image.fromarray(letter_gray)
+                .resize((28, 28))
+                .convert("L")
+            )
+
+            tensor = aux_transform()(pil).unsqueeze(0).to(device)
+            
+            logits = model(tensor)
+
+            probs = torch.softmax(logits, dim=1)
+
+            confidence, predicted = torch.max(probs, 1)
+
     else:
-        return _label_for_idx(predicted.item())
+        # ---------------- CRNN ----------------
+        # wysokość stała, szerokość proporcjonalna
+        h, w = letter_gray.shape[:2]
+
+        target_h = 32
+        scale = target_h / h
+        target_w = max(1, int(w * scale))
+
+        pil = (
+            Image.fromarray(letter_gray)
+            .resize((target_w, target_h))
+            .convert("L")
+        )
+
+        tensor = aux_transform()(pil).unsqueeze(0).to(device)
+        # [1,1,H,W]
+        show_before_after(pil, tensor)
+        logits = model(tensor)
+
+        # CRNN może zwrócić:
+        # [T,B,C]  albo [B,T,C]
+        if logits.dim() == 3:
+            if logits.shape[1] == 1:
+                # [T,B,C]
+                probs_seq = torch.softmax(logits, dim=2)
+                probs = probs_seq.mean(dim=0)      # [B,C]
+            else:
+                # [B,T,C]
+                probs_seq = torch.softmax(logits, dim=2)
+                probs = probs_seq.mean(dim=1)      # [B,C]
+        else:
+            probs = torch.softmax(logits, dim=1)
+
+        confidence, predicted = torch.max(probs, 1)
+
+    if more:
+        return (
+            _label_for_idx(predicted.item()),
+            confidence.item() * 100,
+            probs[0],
+        )
+
+    return _label_for_idx(predicted.item())
 
 
 def _mean_per_class(class_conf_samples: dict[str, list[float]]) -> dict[str, float]:
@@ -1056,7 +1108,7 @@ def predict_segments(
                     continue
 
                 letter_img = preprocess_letter(letter_img)
-                predicted_char, confidence, probs = _classify_letter(letter_img, model, device, 1, args)
+                predicted_char, confidence, probs = _classify_letter(letter_img, model, device, 1, args, 1)
                 line_text += predicted_char
                 current_word_chars.append(predicted_char)
                 current_word_confs.append(confidence)

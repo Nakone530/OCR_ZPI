@@ -559,7 +559,7 @@ def load_model(model_path: str = MODEL_PATH, device: torch.device = None, info=N
         if(model_type == 1):
             model = MainModel(num_classes=len(CHARS) + 1)
         else:
-            model = AuxModel(num_classes=len(AuxCHARS))
+            model = AuxModel(num_classes=len(CHARS) + 1)
         model.load_state_dict(state_dict)
         info("Model wczytany!")
 
@@ -568,7 +568,7 @@ def load_model(model_path: str = MODEL_PATH, device: torch.device = None, info=N
         if(model_type == 1):
             model = MainModel(num_classes=len(CHARS) + 1)
         else:
-            model = AuxModel(num_classes=len(AuxCHARS))
+            model = AuxModel(num_classes=len(CHARS) + 1)
 
     model.to(device)
     model.eval()

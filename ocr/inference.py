@@ -939,7 +939,7 @@ def predict_image(
         #img_array = preprocess_letter(img_array)
         preprocessed_shape = img_array.shape
         
-        letter = _classify_letter(img_array, model, device, 1, args)
+        letter = _classify_letter(img_array, model, device, 1, args, 1q)
 
     if debug:
         predicted_char, confidence, probs = letter
@@ -1014,7 +1014,7 @@ def predict_word(
 
             letter_img = preprocess_letter(letter_img)
 
-            predicted_char, confidence, probs = _classify_letter(letter_img, model, device, 1, args)
+            predicted_char, confidence, probs = _classify_letter(letter_img, model, device, 1, args, 1)
             word += predicted_char
             letter_confidences.append(confidence)
             class_conf_samples.setdefault(predicted_char, []).append(confidence)

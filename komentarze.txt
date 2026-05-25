@@ -1,0 +1,544 @@
+================================================================================
+KOMENTARZE DO tui.py – implementacja multi-model, nawigacji stron, przeglądarki
+Data: 2026-05-25   |   Poprawka 3: 2026-05-25 (SettingsView, persystencja, denoise)
+================================================================================
+
+── PERSYSTENCJA STANU (nowe utility functions) ────────────────────────────────
+
+SETTINGS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".tui_settings.json")
+                                    # Absolutna ścieżka do pliku ustawień – zawsze obok tui.py
+
+DEFAULT_STATE: dict = {             # Wartości domyślne – używane gdy brak pliku lub błąd odczytu
+    "model_path": MODEL_PATH,       # Domyślna ścieżka modelu z config.py
+    "selected_models": [MODEL_PATH], # Lista wybranych modeli (single-element default)
+    "output_format": "console",     # Domyślny format wyjścia
+    "quiet": False,                 # Cichy tryb domyślnie wyłączony
+    "denoise_method": "nlm-color",  # Domyślna metoda odszumiania
+    "train_output_path": MODEL_PATH, # Domyślna ścieżka zapisu modelu po treningu
+}
+
+def load_state_from_file() -> dict:  # Wczytuje stan z JSON; fallback = DEFAULT_STATE
+    try:
+        with open(SETTINGS_FILE, encoding="utf-8") as f:
+            data = json.load(f)      # Deserializacja JSON
+        state = dict(DEFAULT_STATE)  # Zacznij od domyślnych (filtr nieznanych kluczy)
+        state.update({k: v for k, v in data.items() if k in DEFAULT_STATE})
+                                    # Nadpisz tylko znane klucze z pliku
+        return state
+    except Exception:
+        return dict(DEFAULT_STATE)   # Plik nie istnieje lub błąd → zwróć defaults
+
+def save_state_to_file(state: dict) -> None:  # Zapisuje stan do JSON cicho (bez wyjątków)
+    try:
+        with open(SETTINGS_FILE, "w", encoding="utf-8") as f:
+            json.dump(state, f, ensure_ascii=False, indent=2)
+    except Exception:
+        pass                        # Błąd zapisu jest niekrytyczny – UI działa dalej
+
+def model_meta(path: str) -> str:   # Metadane modelu: rozmiar MB + data modyfikacji
+    try:
+        size_mb = os.path.getsize(path) / 1024 / 1024   # Przelicz bajty na MB
+        mtime = datetime.fromtimestamp(os.path.getmtime(path)).strftime("%Y-%m-%d")
+        return f"{os.path.basename(path)}  [{size_mb:.1f} MB  {mtime}]"
+    except Exception:
+        return os.path.basename(path)   # Fallback: tylko nazwa pliku
+
+def model_label(display: str, path: str) -> str:  # Etykieta checkboxa z metadanymi lub ostrzeżeniem
+    if os.path.exists(path):
+        return f" {display}  ({model_meta(path)})"   # Istnieje: dodaj rozmiar i datę
+    return f" {display}  [brak pliku]"               # Brak: wyraźne ostrzeżenie
+
+── OCRTUI.state – inicjalizacja z pliku ───────────────────────────────────────
+
+state: dict = load_state_from_file()  # Wczytaj persystowany stan przy starcie aplikacji
+                                    # Dzięki temu ustawienia z poprzedniej sesji są pamiętane
+                                    # Poprzednio hardkodowane DEFAULT_STATE – bez persystencji
+
+── SETTINGS VIEW – nowa wersja ────────────────────────────────────────────────
+
+def on_mount(self) -> None:         # Wywoływane przez Textual po zamontowaniu widgetu
+    self._rebuild_model_list()      # Załaduj modele z dysku + custom z state
+    self._apply_state_to_widgets()  # Ustaw wartości kontrolek wg app.state
+
+def _apply_state_to_widgets(self) -> None:  # Synchronizuje widgety z app.state
+    # output_format RadioSet:
+    for btn in rs_fmt.query(RadioButton):
+        btn.value = (btn.id == fmt)  # Zaznacz tylko przycisk z pasującym ID
+    # denoise_method RadioSet:
+    for btn in rs_den.query(RadioButton):
+        btn.value = (btn.id == method)  # Analogicznie dla metody odszumiania
+    # quiet_mode Checkbox:
+    self.query_one("#quiet_mode", Checkbox).value = state.get("quiet", False)
+
+def _rebuild_model_list(self) -> None:   # Przebudowuje listę checkboxów modeli
+    container.remove_children()     # Usuń stare – przebuduj od zera
+    for display, path in models:    # Modele z dysku (domyślny + archiwum)
+        container.mount(Checkbox(model_label(display, path), value=(path in selected),
+            id=safe_widget_id(path), classes="model-cb", name=path))
+                                    # model_label() → etykieta z rozmiarem i datą lub "[brak pliku]"
+    for path in self.app.state.get("selected_models", []):  # Custom modele z poprzedniej sesji
+        if not any(p == path for _, p in models):           # Pomiń już dodane
+            container.mount(Checkbox(model_label(...), value=True, ...))
+
+# RadioSet metody odszumiania (nowe w SettingsView):
+RadioSet(
+    RadioButton("NLM-Color  (najlepsza jakość)", id="nlm-color", value=True),  # Domyślna
+    RadioButton("Median     (szybka)",           id="median"),   # Szybka, mniejsza jakość
+    RadioButton("Bilateral  (krawędzie)",        id="bilateral"), # Zachowuje krawędzie
+    RadioButton("Gaussian   (rozmycie)",         id="gaussian"),  # Najszybsza
+    id="denoise_method",
+)
+
+def _save_settings(self) -> None:   # Zapisuje ustawienia → app.state + plik JSON
+    self.app.state["selected_models"] = selected   # Lista zaznaczonych modeli
+    self.app.state["model_path"]      = selected[0]  # Pierwszy model = domyślny
+    self.app.state["output_format"]   = output_format  # console/txt/json
+    self.app.state["denoise_method"]  = denoise_method  # Metoda odszumiania
+    self.app.state["quiet"]           = quiet           # Cichy tryb
+    save_state_to_file(self.app.state)  # Zapis do .tui_settings.json (persystencja)
+    # Raport z ✓/✗ dla każdego modelu (czy plik istnieje):
+    for m in selected:
+        exists = "✓" if os.path.exists(m) else "✗"
+        log.write_line(f"     {exists} {os.path.basename(m)}")
+
+── RECOGNIZE VIEW – denoise_method z state ────────────────────────────────────
+
+if denoise:
+    base_args.append("--denoise")   # Włącz odszumianie
+    denoise_method = self.app.state.get("denoise_method", "nlm-color")
+    base_args += ["--denoise-method", denoise_method]
+                                    # Przekaż metodę wybraną w Ustawieniach do CLI
+                                    # Bez tego zawsze używano domyślnej metody niezależnie od ustawień
+
+
+
+── NOWY TrainView – komentarze per-linia ──────────────────────────────────────
+
+from ocr.trainer import stop_training, reset_training_flags, TRAINING_PRESETS, ...
+                                    # Import funkcji trenera i słownika presetów
+
+_running: bool = False              # Flaga stanu treningu – blokuje podwójne uruchomienie
+
+# RadioSet – trzy tryby:
+RadioButton("Zwykły  (N epok)", id="train", value=True)   # domyślnie zaznaczony
+RadioButton("Nieskończony ...", id="infinite")             # trening bez końca
+RadioButton("Multi-trening ...", id="multi_train")         # kolejne presety
+
+# Sekcje warunkowe (pokazywane/ukrywane przez _update_sections):
+Vertical(id="section_epochs")      # pokazana dla trybu train i multi_train
+Vertical(id="section_infinite")    # pokazana tylko dla infinite
+Vertical(id="section_presets")     # lista checkboxów presetów, tylko dla multi_train
+
+# Preset checkboxy:
+Checkbox(f" [{name}]  {cfg.description}", id=f"preset_{name}", name=name, classes="preset-cb")
+                                    # name = klucz presetu; classes = do query(".preset-cb")
+
+Static(" Status: gotowy", id="train-status")  # pasek statusu aktualizowany co epokę
+
+Button(" Stop [F6]", disabled=True)  # domyślnie nieaktywny; aktywuje się gdy trening trwa
+
+# on_mount:
+self._update_sections("train")      # schowaj sekcje infinite i presets na starcie
+
+# on_radio_set_changed:
+event.pressed.id                    # ID zaznaczonego RadioButton → klucz trybu
+self._update_sections(mode)         # pokaż właściwą sekcję parametrów
+
+# _update_sections(mode):
+self.query_one("#section_epochs").display = mode in ("train", "multi_train")
+                                    # .display = False ukrywa widget bez usuwania z DOM
+self.query_one("#section_infinite").display = (mode == "infinite")
+self.query_one("#section_presets").display  = (mode == "multi_train")
+
+# _set_running(running):
+self.query_one("#train_run").disabled = running    # zablokuj Start gdy trwa
+self.query_one("#train_stop").disabled = not running  # odblokuj Stop gdy trwa
+
+# _get_selected_presets():
+return [cb.name for cb in self.query(".preset-cb") if cb.value]
+                                    # query klasy CSS → lista zaznaczonych nazw presetów
+
+# _run_training():
+if self._running: return            # zapobiega podwójnemu uruchomieniu
+reset_training_flags()              # wyczyść TRAINING_STOP, TRAINING_PAUSED przed startem
+
+# Budowanie args dla multi_train:
+args += ["--multi-train"] + presets  # --multi-train preset1 preset2 ...
+args += ["--epochs", str(epochs)]    # domyślna liczba epok dla każdego presetu
+args += ["--batch-size", str(batch_size)]
+
+# Wątek run_thread – info callback:
+import ocr.trainer as _tr           # dostęp do globalnych zmiennych treningu
+epoch = _tr.GLOBAL_EPOCH            # aktualny numer epoki (aktualizowany przez trainer)
+acc = _tr.GLOBAL_BEST_ACC           # najlepsza dotychczasowa dokładność
+self.app.call_from_thread(self._update_status, f"epoka {epoch} | best acc: {acc:.1f}%")
+                                    # thread-safe aktualizacja paska statusu
+
+# finally w run_thread:
+self.app.call_from_thread(self._set_running, False)  # zawsze odblokuj przyciski po zakończeniu
+self.app.call_from_thread(self._update_status, "gotowy")  # reset statusu
+
+── POPRAWKA RecognizeView – brakujące tryby i walidacja ścieżki ───────────────
+
+_DIR_MODES = {"folder"}             # Zbiór trybów wymagających katalogu (nie pliku)
+
+# RadioSet – dodane RadioButton:
+RadioButton("Strona → wyrazy  --page",   id="page")    # Segmentacja strony na wyrazy
+RadioButton("Folder z obrazów  --folder", id="folder")  # Przetwarzanie całego folderu
+RadioButton("CRNN (tekst CNN)  --crnn",   id="crnn")    # Sieć CRNN do tekstu ciągłego
+
+# Przyciski przeglądania rozdzielone:
+Button("Przeglądaj plik",   id="browse-file")    # Otwiera FileBrowserModal dla pliku
+Button("Przeglądaj folder", id="browse-folder")  # Otwiera FileBrowserModal z select_dirs=True
+
+# Walidacja w _run_recognition():
+if mode == "folder":                # Tryb folderu – inna walidacja niż plik
+    if not os.path.isdir(path_input):  # Sprawdź czy to rzeczywiście katalog
+        log.write_line("Błąd: Nie jest folderem")  # Komunikat błędu
+        return                      # Przerwij jeśli nie folder
+    base_args = ["--folder", path_input]  # Buduj argumenty dla trybu folder
+else:                               # Wszystkie inne tryby (image/word/lines/page/crnn)
+    if not os.path.exists(path_input):   # Sprawdź istnienie pliku
+        log.write_line("Błąd: Plik nie istnieje")  # Komunikat błędu
+        return
+    base_args = [f"--{mode}", path_input]  # np. ["--page", "obraz.png"]
+
+import sys                          # Standardowa biblioteka – dostęp do argumentów i strumieni
+import os                           # Operacje na systemie plików (ścieżki, istnienie pliku)
+import threading                    # Uruchamianie OCR/treningu w tle bez blokowania UI
+from pathlib import Path            # Obiektowe zarządzanie ścieżkami (używane przez DirectoryTree)
+from textual.app import App, ComposeResult   # Klasa bazowa aplikacji i typ zwracany przez compose()
+from textual.widgets import (       # Import potrzebnych widgetów Textual
+    Button, Input, Checkbox, Label, # Przyciski, pola tekstowe, checkboxy, etykiety
+    RadioSet, RadioButton,          # Grupy przełączników (wybór trybu)
+    Static, Header, Footer, Log, Select,     # Statyczny tekst, nagłówek, stopka, log, lista rozwijana
+    DirectoryTree, ContentSwitcher, # Drzewko katalogów (przeglądarka), przełącznik treści stron
+)
+from textual.containers import Container, Vertical, Horizontal, ScrollableContainer
+                                    # Kontenery układu: pionowy, poziomy, przewijalny
+from textual.screen import Screen, ModalScreen   # Screen – ekran bazowy; ModalScreen – okno modalne
+from textual.binding import Binding  # Definicja skrótów klawiszowych
+from textual.reactive import reactive  # Reaktywne zmienne (automatyczna aktualizacja UI przy zmianie)
+from ocr.main import build_parser, main   # Parser argumentów CLI i główna funkcja OCR
+from ocr.config import MODEL_PATH   # Stała: ścieżka do domyślnego modelu
+
+── UTILITY FUNCTIONS ──────────────────────────────────────────────────────────
+
+def get_available_models():         # Funkcja pomocnicza: skanuje dysk w poszukiwaniu modeli .pth
+    models = []                     # Lista wynikowa krotek (etykieta, ścieżka)
+    if os.path.exists(MODEL_PATH):  # Jeśli plik domyślnego modelu istnieje – dodaj go pierwszy
+        models.append((f"Domyślny ({MODEL_PATH})", MODEL_PATH))  # Krotka: (nazwa_display, ścieżka)
+    archive_dir = "./model_archive" # Katalog z archiwum modeli trenowanych wcześniej
+    if os.path.exists(archive_dir): # Skanuj tylko jeśli katalog istnieje
+        for file in sorted(os.listdir(archive_dir)):  # Iteracja po plikach, posortowanych alfabetycznie
+            if file.endswith('.pth'):  # Filtr: tylko pliki PyTorch
+                models.append((file, os.path.join(archive_dir, file)))  # Dodaj do listy
+    return models                   # Zwróć listę krotek
+
+def safe_widget_id(path: str) -> str:  # Konwertuje ścieżkę na bezpieczny CSS ID
+    return "m" + "".join(c if c.isalnum() else "_" for c in path)
+                                    # Prefix "m" bo ID nie może zaczynać się od cyfry; zamień znaki specjalne
+
+── FILE BROWSER MODAL ─────────────────────────────────────────────────────────
+
+class FileBrowserModal(ModalScreen):  # Modalne okno dialogowe do wyboru pliku/folderu
+    BINDINGS = [                    # Skróty klawiszowe specyficzne dla modalu
+        Binding("escape", "dismiss_modal", "Anuluj"),   # Esc zamyka bez wyboru
+        Binding("enter", "confirm_selection", "Wybierz"),  # Enter potwierdza wybór
+    ]
+    CSS = """..."""                  # Wbudowane style CSS dla modalu (rozmiar 80×38, obramowanie)
+
+    def __init__(self, start_path, select_dirs, **kwargs):  # Konstruktor – przyjmuje folder startowy i tryb
+        super().__init__(**kwargs)  # Inicjalizacja klasy bazowej ModalScreen
+        self._start_path = os.path.abspath(start_path)  # Zamień na ścieżkę absolutną
+        self._select_dirs = select_dirs  # True = wybieramy folder; False = wybieramy plik
+        self._selected_path = None  # Aktualnie zaznaczona ścieżka (None = brak)
+
+    def compose(self):              # Buduje drzewo widgetów modalu
+        with Container(id="browser-container"):  # Główny kontener modalu
+            yield Static("PRZEGLĄDARKA PLIKÓW", id="browser-title")  # Tytuł okna
+            yield Static(f"Katalog: {self._start_path}", id="current-path")  # Wyświetla bieżący katalog
+            yield DirectoryTree(self._start_path, id="dir_tree")  # Drzewko katalogów Textual
+            yield Static("Wybrano: (brak)", id="selected-label")  # Aktualnie wybrana ścieżka
+            with Horizontal(classes="browser-buttons"):  # Poziomy układ przycisków
+                yield Button("Wybierz [Enter]", id="browser-select", variant="primary")  # Potwierdzenie
+                yield Button("Anuluj [Esc]", id="browser-cancel")  # Anulowanie
+
+    def on_directory_tree_file_selected(self, event):  # Zdarzenie: kliknięto plik w drzewie
+        if not self._select_dirs:   # Tylko gdy jesteśmy w trybie wyboru pliku
+            self._selected_path = str(event.path)  # Zapisz wybraną ścieżkę
+            self.query_one("#selected-label", Static).update(f"Wybrano: {self._selected_path}")
+                                    # Zaktualizuj etykietę wyświetlającą wybór
+
+    def on_directory_tree_directory_selected(self, event):  # Zdarzenie: kliknięto folder
+        self._selected_path = str(event.path)  # Zapisz ścieżkę (zawsze – dla nawigacji)
+        self.query_one("#selected-label", Static).update(f"Wybrano: {self._selected_path}")
+        self.query_one("#current-path", Static).update(f"Katalog: {self._selected_path}")
+
+    def on_button_pressed(self, event):  # Obsługa kliknięcia przycisku
+        if event.button.id == "browser-select":
+            self.action_confirm_selection()  # Potwierdź i zamknij z wynikiem
+        elif event.button.id == "browser-cancel":
+            self.dismiss(None)       # Zamknij bez wyniku
+
+    def action_confirm_selection(self):  # Akcja potwierdzenia wyboru
+        self.dismiss(self._selected_path)  # Zwróć ścieżkę do wywołującego ekranu
+
+    def action_dismiss_modal(self):  # Akcja zamknięcia (Esc)
+        self.dismiss(None)           # Zwróć None = brak wyboru
+
+── NAVBAR ─────────────────────────────────────────────────────────────────────
+
+class NavBar(Static):               # Pasek nawigacji – statyczny widget z przyciskami stron
+    PAGES = [                       # Definicja stron: (skrót, id, etykieta)
+        ("1", "menu", "Menu"),
+        ("2", "recognize", "Rozpoznaj"),
+        ("3", "train", "Trening"),
+        ("4", "settings", "Ustawienia"),
+    ]
+    current_page: reactive[str] = reactive("menu")  # Reaktywna zmienna: aktualna strona
+
+    def compose(self):              # Buduje poziomy pasek z przyciskami
+        with Horizontal(id="nav-inner"):
+            yield Static(" OCR System ", id="nav-logo")  # Logo aplikacji
+            for key, page_id, label in self.PAGES:       # Iteracja po stronach
+                yield Button(f"[{key}] {label}", id=f"nav_{page_id}", classes="nav-btn")
+                                    # Przycisk nawigacji z numerem skrótu
+
+    def watch_current_page(self, new_page):  # Reaktywny watcher – wykonuje się gdy zmieni się current_page
+        for _, page_id, _ in self.PAGES:
+            try:
+                btn = self.query_one(f"#nav_{page_id}", Button)
+                if page_id == new_page:
+                    btn.add_class("active")   # Aktywna strona = klasa CSS "active" (wyróżnienie)
+                else:
+                    btn.remove_class("active")  # Pozostałe bez wyróżnienia
+            except Exception:
+                pass  # Ignoruj błędy jeśli widget jeszcze nie zamontowany
+
+    def on_button_pressed(self, event):  # Obsługa kliknięcia przycisku nawigacji
+        for _, page_id, _ in self.PAGES:
+            if event.button.id == f"nav_{page_id}":
+                self.app.navigate_to(page_id)  # Deleguj do metody aplikacji
+                event.stop()         # Zatrzymaj propagację zdarzenia
+
+── MAIN MENU VIEW ─────────────────────────────────────────────────────────────
+
+class MainMenuView(Static):         # Widok menu głównego (Widget, nie Screen)
+    def compose(self):              # Buduje zawartość menu
+        yield Static("╔...╝", id="title")  # ASCII art tytułu
+        yield Static("...", id="menu-help")  # Opis skrótów klawiszowych
+        with Horizontal():
+            yield Button("Rozpoznaj obraz [2]", id="menu-recognize", variant="primary")
+            yield Button("Trenuj model [3]", id="menu-train")
+        with Horizontal():
+            yield Button("Ustawienia [4]", id="menu-settings")
+            yield Button("Wyjście [q]", id="menu-quit", variant="error")
+
+    def on_button_pressed(self, event):  # Obsługa przycisków menu
+        actions = {"menu-recognize": "recognize", "menu-train": "train", "menu-settings": "settings"}
+        if event.button.id in actions:
+            self.app.navigate_to(actions[event.button.id])  # Nawigacja do wybranej strony
+        elif event.button.id == "menu-quit":
+            self.app.exit()          # Wyjście z aplikacji
+
+── RECOGNIZE VIEW ─────────────────────────────────────────────────────────────
+
+class RecognizeView(Static):        # Widok rozpoznawania (Widget z pełnym interfejsem)
+    BINDINGS = [Binding("f5", "run_recognition", "Uruchom")]  # F5 uruchamia rozpoznawanie
+
+    def compose(self):              # Buduje formularz rozpoznawania
+        yield RadioSet(...)         # Wybór trybu: image/word/lines/multi
+        with Horizontal():
+            yield Input(id="input_path")         # Pole ścieżki pliku
+            yield Button("Przeglądaj", id="browse-input")  # Otwiera FileBrowserModal
+
+        yield Checkbox(id="denoise")     # Opcja odszumiania
+        yield Checkbox(id="json_output") # Opcja wyjścia JSON
+        yield Checkbox(id="save_output") # Opcja zapisu do pliku
+        with Horizontal():
+            yield Input(id="output_path")         # Ścieżka pliku wyjściowego
+            yield Button("Przeglądaj", id="browse-output")  # Otwiera przeglądarkę dla zapisu
+        yield Log(id="output_log")   # Okno logów wynikowych
+
+    def _browse_for(self, target_id, select_dirs=False):  # Otwiera modal przeglądarki plików
+        start = self.query_one(f"#{target_id}", Input).value.strip() or "."
+        def on_result(path):        # Callback wywoływany po zamknięciu modalu
+            if path:
+                self.query_one(f"#{target_id}", Input).value = path  # Ustaw ścieżkę w polu
+        self.app.push_screen(FileBrowserModal(start_path=start, select_dirs=select_dirs), on_result)
+
+    def _run_recognition(self):     # Główna logika uruchomienia rozpoznawania
+        selected_models = self.app.state.get("selected_models", [MODEL_PATH])
+        if not selected_models:
+            selected_models = [self.app.state.get("model_path", MODEL_PATH)]
+                                    # Fallback: użyj jednego modelu domyślnego
+
+        def run_thread():           # Funkcja wątku – nie blokuje UI
+            for model_path in selected_models:  # Iteruj po wszystkich wybranych modelach
+                model_name = os.path.basename(model_path)
+                self.app.call_from_thread(log.write_line, f"\n>>> Model: {model_name} <<<")
+                                    # Thread-safe zapis do loga
+                try:
+                    parser = build_parser()
+                    parsed_args = parser.parse_args(base_args[:])  # Kopia listy args
+                    parsed_args.model_path = model_path  # Nadpisz ścieżkę modelu
+                    def info(msg, _log=log):             # Closure: thread-safe info callback
+                        self.app.call_from_thread(_log.write_line, msg)
+                    main(parsed_args, info)              # Wywołaj właściwe OCR
+                except Exception as e:
+                    self.app.call_from_thread(log.write_line, f" Błąd: {e}")
+
+        threading.Thread(target=run_thread, daemon=True).start()  # Uruchom wątek tła
+
+── TRAIN VIEW ─────────────────────────────────────────────────────────────────
+
+class TrainView(Static):            # Widok treningu modelu
+    BINDINGS = [Binding("f5", "run_training", "Uruchom")]  # F5 uruchamia trening
+
+    def compose(self):              # Formularz parametrów treningu
+        yield RadioSet(...)         # Tryb: train (epoki) lub infinite (nieskończony)
+        yield Input(id="epochs_input", type="integer")       # Liczba epok
+        yield Input(id="batch_size_input", type="integer")   # Rozmiar batcha
+        yield Input(id="checkpoint_interval_input", type="integer")  # Interwał zapisu
+        with Horizontal():
+            yield Input(id="resume_input")         # Ścieżka do checkpointa
+            yield Button("Przeglądaj", id="browse-resume")  # Otwiera przeglądarkę
+
+    def _stop_training(self):       # Zatrzymuje nieskończony trening
+        from ocr.trainer import stop_training
+        stop_training()              # Ustawia globalną flagę TRAINING_STOP = True
+
+    def _run_training(self):        # Uruchamia trening w wątku tła
+        def run_thread():
+            parser = build_parser()
+            parsed_args = parser.parse_args(args)
+            def info(msg, _log=log):  # Thread-safe callback do loga
+                self.app.call_from_thread(_log.write_line, msg)
+            main(parsed_args, info)  # Wywołaj trening przez main()
+        threading.Thread(target=run_thread, daemon=True).start()
+
+── SETTINGS VIEW ──────────────────────────────────────────────────────────────
+
+class SettingsView(Static):         # Widok ustawień z multi-model selection
+    BINDINGS = [Binding("f5", "save_settings", "Zapisz")]  # F5 zapisuje ustawienia
+
+    def compose(self):              # Buduje formularz ustawień
+        # ── Multi-model checkboxes ──
+        with ScrollableContainer(id="model-list"):  # Przewijalny kontener z listą modeli
+            for label, path in models:
+                yield Checkbox(      # Każdy model = osobny checkbox
+                    f" {label}",
+                    value=(path in selected_paths),  # Zaznaczony jeśli w aktywnych modelach
+                    id=safe_widget_id(path),          # Bezpieczny CSS ID z ścieżki
+                    classes="model-cb",               # Klasa CSS do zbiorowego query
+                    name=path,                        # Atrybut name = ścieżka modelu
+                )
+        # ── Dodaj niestandardowy model ──
+        with Horizontal():
+            yield Input(id="custom_model_path")   # Pole ścieżki niestandardowego modelu
+            yield Button("Przeglądaj", id="browse-model")  # Otwiera FileBrowserModal
+            yield Button("Dodaj", id="add-model-btn")      # Dodaje model do listy
+
+    def _add_custom_model(self):    # Dynamicznie dodaje nowy Checkbox do listy
+        container = self.query_one("#model-list", ScrollableContainer)
+        widget_id = safe_widget_id(path)
+        existing = container.query(f"#{widget_id}")  # Sprawdź czy już istnieje
+        if existing:
+            return                   # Nie dodawaj duplikatów
+        container.mount(Checkbox(...))  # Zamontuj nowy checkbox runtime
+
+    def _refresh_model_list(self):  # Odświeża listę modeli z dysku
+        container = self.query_one("#model-list", ScrollableContainer)
+        container.remove_children()  # Usuń stare checkboxy
+        for label, path in get_available_models():
+            container.mount(Checkbox(...))  # Zamontuj nowe
+
+    def _get_selected_model_paths(self):  # Zbiera zaznaczone modele
+        selected = []
+        for cb in self.query(".model-cb"):  # Znajdź wszystkie checkboxy modeli
+            if isinstance(cb, Checkbox) and cb.value:  # Jeśli zaznaczony
+                selected.append(cb.name)   # Dodaj ścieżkę (z atrybutu name)
+        return selected
+
+    def _save_settings(self):       # Zapisuje ustawienia do app.state
+        selected_models = self._get_selected_model_paths()
+        self.app.state["selected_models"] = selected_models  # Lista wybranych modeli
+        self.app.state["model_path"] = selected_models[0]    # Pierwszy = domyślny (fallback)
+        self.app.state["output_format"] = output_format      # Format wyjścia
+        self.app.state["quiet"] = quiet_mode                 # Cichy tryb
+
+── MAIN APP ───────────────────────────────────────────────────────────────────
+
+class OCRTUI(App):                  # Klasa aplikacji Textual
+    BINDINGS = [                    # Globalne skróty klawiszowe (działają na każdej stronie)
+        Binding("q", "quit", "Wyjście"),        # q = wyjście
+        Binding("1", "goto_page('menu')", ...),  # 1 = menu główne
+        Binding("2", "goto_page('recognize')", ...),  # 2 = rozpoznawanie
+        Binding("3", "goto_page('train')", ...),      # 3 = trening
+        Binding("4", "goto_page('settings')", ...),   # 4 = ustawienia
+    ]
+
+    state: dict = {                 # Globalny stan aplikacji (między stronami)
+        "model_path": MODEL_PATH,         # Aktualny model (dla fallback)
+        "selected_models": [MODEL_PATH],  # Lista wybranych modeli (multi-model)
+        "output_format": "console",       # Format wyjścia
+        "quiet": False,                   # Cichy tryb
+    }
+
+    def compose(self):              # Buduje główny layout aplikacji
+        yield Header(show_clock=False)  # Pasek tytułu bez zegara
+        yield NavBar(id="navbar")   # Pasek nawigacji (dockowany u góry przez CSS)
+        yield ContentSwitcher(      # Przełącznik treści stron
+            MainMenuView(id="page_menu"),      # Strona 1: menu
+            RecognizeView(id="page_recognize"), # Strona 2: rozpoznawanie
+            TrainView(id="page_train"),         # Strona 3: trening
+            SettingsView(id="page_settings"),   # Strona 4: ustawienia
+            initial="page_menu",               # Start na menu głównym
+        )
+        yield Footer()              # Stopka z listą skrótów klawiszowych
+
+    def navigate_to(self, page_id):  # Metoda nawigacji – zmienia aktywną stronę
+        self.query_one(ContentSwitcher).current = f"page_{page_id}"
+                                    # Zmień widoczny widok w ContentSwitcher
+        self.query_one(NavBar).current_page = page_id
+                                    # Zaktualizuj podświetlenie w NavBar (przez reactive)
+
+    def action_goto_page(self, page_id):  # Action wywoływana przez BINDINGS (klawisze 1-4)
+        self.navigate_to(page_id)   # Deleguj do navigate_to
+
+================================================================================
+PODSUMOWANIE ZMIAN ARCHITEKTONICZNYCH
+================================================================================
+
+1. NAWIGACJA STRON (ContentSwitcher + NavBar):
+   - Zastąpiono install_screen/push_screen → ContentSwitcher z 4 widokami
+   - NavBar (dockowany u góry) pokazuje aktywną stronę (klasa CSS "active")
+   - Klawisze 1/2/3/4 przełączają strony z dowolnego miejsca
+   - navigate_to() jest centralną metodą zmiany strony
+   - reactive[str] current_page w NavBar automatycznie aktualizuje styl przycisków
+
+2. MULTI-MODEL SELECTION (SettingsView):
+   - ScrollableContainer z Checkbox per model
+   - Atrybut name=path przechowuje ścieżkę w widgecie
+   - _get_selected_model_paths() zbiera zaznaczone modele
+   - app.state["selected_models"] = lista ścieżek
+   - RecognizeView iteruje po selected_models i uruchamia OCR dla każdego
+   - Wyniki każdego modelu oddzielone sekcją ">>> Model: X <<<"
+   - Dynamiczne dodawanie modeli przez _add_custom_model() + mount()
+   - Odświeżanie listy przez _refresh_model_list() + remove_children() + mount()
+
+3. PRZEGLĄDARKA PLIKÓW (FileBrowserModal):
+   - ModalScreen z DirectoryTree
+   - Callback pattern: push_screen(modal, callback_fn)
+   - on_result(path) ustawia wartość wskazanego Input
+   - Używana w: RecognizeView (input/output), TrainView (checkpoint), SettingsView (model)
+   - select_dirs=False → wybór pliku; select_dirs=True → wybór folderu
+
+4. SPÓJNOŚĆ UX:
+   - F5 = uruchom akcję na każdej stronie (Rozpoznaj/Trenuj/Zapisz)
+   - Esc w modalach = zamknij
+   - Przycisk "Przeglądaj" przy każdym polu ścieżki
+   - Log widget z "Wyczyść log" na stronach operacyjnych
+   - Jednolity CSS dla wszystkich elementów
+================================================================================

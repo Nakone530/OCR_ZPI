@@ -50,6 +50,7 @@ from .utils import (
     to_serializable,
     aux_transform,
     select_version,
+    auto_select_models,
 )
 from .display import visualize_prediction, show_image
 from . import info
@@ -471,11 +472,16 @@ def process_folder(folder_path, args, models_dir, device, info):
         raise ValueError(f"To nie jest katalog: {folder_path}")
     
     models_dir = os.path.dirname(models_dir)
-    version = select_version()
-    models = list_models(models_dir, version)
-    default_model, selected_models = select_models(models)
+    version = getattr(args, "model_version", None)
+    default_model, selected_models = auto_select_models(models_dir, version)
 
-    loaded_models = load_models(models_dir, selected_models, device, info)
+    if not selected_models:
+        fallback_model = load_model(MODEL_PATH, device, info)
+        default_model = "model_ocr"
+        loaded_models = {default_model: fallback_model}
+    else:
+        info(f"Automatyczny wybór: {len(selected_models)} model(i), default: {default_model}")
+        loaded_models = load_models(models_dir, selected_models, device, info)
 
     bbox_data = _load_bbox_data(folder_path)
     bbox_index = 0
@@ -501,10 +507,20 @@ def process_folder(folder_path, args, models_dir, device, info):
 
             final_text = aggregate(per_model, default_model)
 
-            best_conf = max(
-                r["confidence"] for r in per_model.values()
-            )
+            # confidence modelu który wygrał głosowanie (lub domyślnego)
+            text_conf = {
+                name: res["confidence"]
+                for name, res in per_model.items()
+                if res["text"] == final_text
+            }
+            best_conf = float(np.mean(list(text_conf.values()))) if text_conf else 0.0
 
+            # letter_vectors z modelu który wyprodukował wybrany tekst (lub domyślnego)
+            winning_model = next(
+                (n for n in text_conf if n == default_model),
+                next(iter(text_conf), default_model)
+            )
+            letter_vectors = per_model.get(winning_model, {}).get("letter_vectors", [])
 
             bbox = None
             if bbox_data and bbox_index < len(bbox_data):
@@ -516,7 +532,8 @@ def process_folder(folder_path, args, models_dir, device, info):
                 "text": final_text,
                 "confidence": best_conf,
                 "bbox": bbox,
-                "per_model": per_model
+                "per_model": per_model,
+                "letter_vectors": letter_vectors,
             })
 
         except Exception as e:
@@ -841,6 +858,7 @@ def predict_letter(
 
         chars = []
         confidences = []
+        letter_vectors = []   # (litera, wektor_C) dla każdej rozpoznanej litery
 
         prev = 0  # blank
 
@@ -849,8 +867,8 @@ def predict_letter(
 
             if p != prev and p != 0:
                 chars.append(idx2char[p])
-
                 confidences.append(probs[t, 0, p].item())
+                letter_vectors.append((idx2char[p], probs[t, 0].cpu().numpy()))
 
             prev = p
 
@@ -873,7 +891,7 @@ def predict_letter(
         debug_crops.append((img_array.copy(), f"{text}_{confidence:.1f}"))
         _finalize_debug_crops(debug_crops, args, image_path, mode_tag="image")
 
-    return {"text": text, "confidence": confidence, "per_char_confidences": confidences, "probs": probs_out}
+    return {"text": text, "confidence": confidence, "per_char_confidences": confidences, "probs": probs_out, "letter_vectors": letter_vectors}
 
 
 # ── Predykcja tekstu modelem CRNN ─────────────────────────────────────────────

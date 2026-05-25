@@ -153,6 +153,7 @@ def build_parser() -> argparse.ArgumentParser:
     mode.add_argument("--annotate", type=str, metavar="PLIK", help="Wycinki: popraw bboxy i zapisz wycinki + adnotacje")
     mode.add_argument("--folder", type=str, metavar="PLIK", help="Rozpoznaj zdjęcia w folderze")
     mode.add_argument("--page", type=str, metavar="PLIK", help="Separacja zdjęcia na wyrazy oraz ich rozpoznanie")
+    mode.add_argument("--crnn", type=str, metavar="PLIK", help="Rozpoznawanie CRNN (tekst z obrazu)")
     mode.add_argument("--ensemble", "-n", type=str, metavar="PLIK", help="Sprawdź kombinacle modeli")
     parser.add_argument("--trans", "-s", type=str, metavar="PLIK", help="Plik zawierający transkrypcje, do użycia z -n")
     # Cache
@@ -181,6 +182,14 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     parser.add_argument("--model-path", type=str, default=None, metavar="PLIK", help="Sciezka do wytrenowanego modelu")
+    parser.add_argument(
+        "--model-version",
+        type=str,
+        default=None,
+        metavar="WERSJA",
+        dest="model_version",
+        help="Filtruj modele ensemble po wersji glownej, np. --model-version 21",
+    )
     parser.add_argument("--annotation-dir", type=str, default="inference", metavar="KATALOG", help="Katalog wyjsciowy dla trybu --annotate")
     parser.add_argument("--no-edit", action="store_true", help="W trybie --annotate wylacz interaktywna edycje bboxow")
     parser.add_argument("--non-interactive", action="store_true", help="W trybie --annotate pomin pytania input() i zapisz automatycznie")
@@ -373,7 +382,8 @@ def main(args=None, info=None, buffor=None):
                 "key": name,                            # klucz sortowania
                 "file": r["file"],
                 "text": r["text"],
-                "confidence": r["confidence"]
+                "confidence": r["confidence"],
+                "letter_vectors": r.get("letter_vectors", []),
             })
             
             # Dodaj do listy dla wyświetlania rozmieszczenia
@@ -390,14 +400,14 @@ def main(args=None, info=None, buffor=None):
         info("-" * 60)
 
         for r in table_rows:
-            if r["confidence"] is None:
-                autocorTXT = DictCorrect(r['text'])
-                info(f"{str(r['key']) if r['key'] else '-':<12} {autocorTXT:<20} {'-':<10}")
+            conf = r['confidence'] if r['confidence'] is not None else 50.0
+            autocorTXT = DictCorrect(r['text'], conf, letter_vectors=r.get('letter_vectors'))
+            if r['confidence'] is None:
+                info(f"{str(r['key']) if r['key'] else '-':<12} {r['text']:<20} {'-':<10} {autocorTXT:<20}")
             else:
-                autocorTXT = DictCorrect(r['text'])
-                info(f"{r['key']:<12} {r['text']:<20} {r['confidence']/100:<10.2%} {autocorTXT:<20} {'-':<10}")
+                info(f"{r['key']:<12} {r['text']:<20} {r['confidence']/100:<10.2%} {autocorTXT:<20}")
 
-        
+
         # Wyświetl w rozmieszczeniu
         #display_text_layout(layout_words, info)
         if args.json:
@@ -432,23 +442,21 @@ def main(args=None, info=None, buffor=None):
                 "key": name,                            # klucz sortowania
                 "file": r["file"],
                 "text": r["text"],
-                "confidence": r["confidence"]
+                "confidence": r["confidence"],
+                "letter_vectors": r.get("letter_vectors", []),
             })
         rows.sort(key=lambda r: r["key"] if r["key"] else "")
         info(f"\n{'NAME':<12} {'TEXT':<20} {'CONF':<10} {'AUTOCORRECT':<20}")
         info("-" * 45)
 
         for r in rows:
-            if r["confidence"] is None:
-                autocorTXT = DictCorrect(r['text'])
-                info(f"{str(r['key']) if r['key'] else '-':<12} {autocorTXT:<20} {'-':<10}")
+            conf = r['confidence'] if r['confidence'] is not None else 50.0
+            autocorTXT = DictCorrect(r['text'], conf, letter_vectors=r.get('letter_vectors'))
+            if r['confidence'] is None:
+                info(f"{str(r['key']) if r['key'] else '-':<12} {r['text']:<20} {'-':<10} {autocorTXT:<20}")
             else:
-                autocorTXT = DictCorrect(r['text'])
-                info(f"{r['key']:<12} {r['text']:<20} {r['confidence']/100:<10.2%} {autocorTXT:<20} {'-':<10}")
-        
-            
-            
-            
+                info(f"{r['key']:<12} {r['text']:<20} {r['confidence']/100:<10.2%} {autocorTXT:<20}")
+
         if args.json:
             payload = build_page_result_json(
                 image_path=args.lines,
@@ -549,7 +557,7 @@ def main(args=None, info=None, buffor=None):
                 info(f"{r['key']:<12} {r['text']:<20} {r['confidence']:.2f}%")
         info("----Po poprawie----")
         for r in rows:
-            autocorTXT = DictCorrect(r['text'])
+            autocorTXT = DictCorrect(r['text'], r['confidence'] if r['confidence'] is not None else 100.0)
             info(f"{str(r['key']) if r['key'] else '-':<12} {autocorTXT:<20} {'-':<10}")
 
 

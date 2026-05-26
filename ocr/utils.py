@@ -298,6 +298,61 @@ class trans_denoise_bil:
         return Image.fromarray(out)
 # ── Ładowanie obrazu ───────────────────────────────────────────────────────────
 
+def convert_pdf_to_images(pdf_path: str, mode: str = "RGB") -> list:
+    """
+    Konwertuje wszystkie strony PDF na listę obrazów PIL.
+    
+    Obsługuje PDF-y z DPI=300 dla wysokiej jakości.
+    Preferuje pdf2image (wymaga Popplera), fallback na PyMuPDF.
+    
+    Argumenty:
+        pdf_path (str): Ścieżka do pliku PDF.
+        mode (str, opcjonalnie): Tryb kolorów PIL. Domyślnie "RGB".
+    
+    Zwraca:
+        list: Lista obrazów PIL (Image.Image), jeden obraz na stronę.
+    
+    Przykład:
+        >>> pages = convert_pdf_to_images("document.pdf")
+        >>> for i, page in enumerate(pages):
+        ...     page.save(f"page_{i}.png")
+    """
+    if not Path(pdf_path).suffix.lower() == ".pdf":
+        raise ValueError("Plik musi być PDF-em")
+    
+    # Preferuj pdf2image
+    if convert_from_path is not None:
+        try:
+            images = convert_from_path(pdf_path, dpi=300)
+            return [img.convert(mode) for img in images]
+        except Exception:
+            pass
+    
+    # Fallback na PyMuPDF
+    if fitz is None:
+        raise ModuleNotFoundError(
+            "Obsługa PDF wymaga dodatkowych zależności.\n"
+            "- Opcja A (najprostsza): zainstaluj PyMuPDF: pip install pymupdf\n"
+            "- Opcja B: użyj pdf2image + zainstaluj Poppler i dodaj do PATH.\n"
+            "Błąd wygląda na brak Popplera (pdfinfo/pdftoppm) w systemie."
+        )
+    
+    doc = fitz.open(pdf_path)
+    images = []
+    try:
+        for page_num in range(len(doc)):
+            page = doc.load_page(page_num)
+            zoom = 300.0 / 72.0
+            mat = fitz.Matrix(zoom, zoom)
+            pix = page.get_pixmap(matrix=mat, alpha=False)
+            img = Image.frombytes("RGB", (pix.width, pix.height), pix.samples)
+            images.append(img.convert(mode))
+    finally:
+        doc.close()
+    
+    return images
+
+
 def load_image(image_path: str, mode: str = "L") -> Image.Image:
     """
     Ładuje obraz z pliku i konwertuje do wybranego trybu kolorów.

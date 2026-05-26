@@ -21,7 +21,7 @@ import torch
 from ocr.config import MODEL_PATH, OCR_MODEL_PATH
 from ocr.inference import run_ensemble_generation, compute_accuracy, test_models, test_cache_models, get_active_chars, load_model, predict_image, predict_letter, predict_segments, predict_word, process_folder
 from ocr.output import OCRResult, create_output_handler
-from ocr.utils import save_image_to_today_folder, DictCorrect, list_models, generate_model_ensembles, load_transcription, save_results_csv
+from ocr.utils import save_image_to_today_folder, DictCorrect, list_models, generate_model_ensembles, load_transcription, save_results_csv, convert_pdf_to_images
 from ocr.trainer import train_model, infinite_train, multi_train, TRAINING_PRESETS, get_preset_names
 from ocr.json_output import (
     build_image_result_json,
@@ -347,19 +347,64 @@ def main(args=None, info=None, buffor=None):
 
     elif args.page:
         _require_file(args.page, info)
-        info(f"\nUruchamianie adnotacji : {args.page}")
+        from pathlib import Path
         from ocr.bbox_annotator import process_letter
+        
+        # Sprawdź czy to PDF
+        is_pdf = Path(args.page).suffix.lower() == ".pdf"
+        
+        if is_pdf:
+            info(f"\nKonwertowanie PDF: {args.page}")
+            try:
+                pages = convert_pdf_to_images(args.page, mode="RGB")
+                info(f"Znaleziono {len(pages)} stron(y) w PDF-ie")
+            except Exception as e:
+                info(f"Błąd konwersji PDF: {e}")
+                return "\n".join(buffor)
+            
+            # Przetwórz każdą stronę
+            all_results = []
+            for page_num, page_img in enumerate(pages, 1):
+                # Zapisz stronę tymczasowo
+                temp_page_path = os.path.join(
+                    os.path.dirname(args.page),
+                    f"temp_page_{page_num}.png"
+                )
+                page_img.save(temp_page_path)
+                
+                try:
+                    info(f"\n--- Przetwarzanie strony {page_num}/{len(pages)} ---")
+                    
+                    output_dir = process_letter(
+                        image_path=temp_page_path,
+                        base_dir=args.annotation_dir,
+                        enable_box_edit=not args.no_edit,
+                        non_interactive=args.non_interactive,
+                    )
+                    if output_dir:
+                        info(f"Adnotacje strony {page_num} zapisane w: {output_dir}")
+                        
+                        results = process_folder(output_dir, args, model_path, device, info)
+                        all_results.extend(results)
+                finally:
+                    # Usuń plik tymczasowy
+                    if os.path.exists(temp_page_path):
+                        os.remove(temp_page_path)
+            
+            results = all_results
+        else:
+            # Normalne przetwarzanie dla pojedynczego obrazu
+            info(f"\nUruchamianie adnotacji : {args.page}")
+            output_dir = process_letter(
+                image_path=args.page,
+                base_dir=args.annotation_dir,
+                enable_box_edit=not args.no_edit,
+                non_interactive=args.non_interactive,
+            )
+            if output_dir:
+                info(f"Adnotacje zapisane w: {output_dir}")
 
-        output_dir = process_letter(
-            image_path=args.page,
-            base_dir=args.annotation_dir,
-            enable_box_edit=not args.no_edit,
-            non_interactive=args.non_interactive,
-        )
-        if output_dir:
-            info(f"Adnotacje zapisane w: {output_dir}")
-
-        results = process_folder(output_dir, args, model_path, device, info)
+            results = process_folder(output_dir, args, model_path, device, info)
         
         # Przygotuj dane do wyświetlania w rozmieszczeniu
         table_rows = []

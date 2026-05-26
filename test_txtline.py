@@ -184,6 +184,7 @@ def detect_text_words(img):
             roi = thresh[y:y+h, x:x+w]
             print("TOO LARGE:", (x, y, w, h))
             split = split_lines_from_roi(roi, x, y, median_height)
+            
             too_small = [
                 (bx, by, bw, bh) 
                 for (bx, by, bw, bh) in split

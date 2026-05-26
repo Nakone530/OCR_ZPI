@@ -939,7 +939,7 @@ def predict_image(
         #img_array = preprocess_letter(img_array)
         preprocessed_shape = img_array.shape
         
-        letter = _classify_letter(img_array, model, device, 1, args, 1q)
+        letter = _classify_letter(img_array, model, device, 1, args, 1)
 
     if debug:
         predicted_char, confidence, probs = letter

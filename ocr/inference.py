@@ -334,6 +334,49 @@ def _classify_letter(letter_gray: np.ndarray, model: nn.Module, device: torch.de
         return _label_for_idx(predicted.item())
 
 
+def _resolve_info_logger(info):
+    """Zwraca aktywny logger info z fallbackiem do globalnego `info`."""
+    return info if info is not None else globals().get("info")
+
+
+def _predict_letter_from_crop(
+    letter_gray: np.ndarray,
+    model: nn.Module,
+    device: torch.device,
+    args,
+) -> tuple[tuple[str, float, torch.Tensor], np.ndarray]:
+    """Wspólny krok dla predykcji znaku: preprocessing + klasyfikacja."""
+    preprocessed = preprocess_letter(letter_gray)
+    prediction = _classify_letter(preprocessed, model, device, 1, args)
+    return prediction, preprocessed
+
+
+def _record_predicted_letter(
+    predicted_char: str,
+    confidence: float,
+    class_conf_samples: dict[str, list[float]],
+    confidence_samples: list[float],
+    debug_crops: list[tuple[np.ndarray, str]],
+    crop_img: np.ndarray,
+    crop_caption: str,
+    debug: bool,
+) -> None:
+    """Aktualizuje wspólne statystyki litery i opcjonalny podgląd debug."""
+    confidence_samples.append(confidence)
+    class_conf_samples.setdefault(predicted_char, []).append(confidence)
+    if debug:
+        debug_crops.append((crop_img.copy(), crop_caption))
+
+
+def _init_prediction_context(image_path: str, args, info=None):
+    """Wspólny start dla funkcji predykcji: obraz, logger, debug i bufory."""
+    img_array = _load_image_array(image_path, args, mode="L")
+    info = _resolve_info_logger(info)
+    debug = _is_debug_enabled(args)
+    debug_crops: list[tuple[np.ndarray, str]] = []
+    return img_array, info, debug, debug_crops
+
+
 def _mean_per_class(class_conf_samples: dict[str, list[float]]) -> dict[str, float]:
     """Liczy średni poziom pewności dla każdej klasy (litery)."""
     class_avg: dict[str, float] = {}
@@ -764,14 +807,9 @@ def predict_word_crnn(
     """
         funkcja rozpoznaje wyraz słowa
     """
-    img_array = _load_image_array(image_path, args, mode="L")
-    if info is None:
-        info = globals().get("info")
-    debug = _is_debug_enabled(args)
+    img_array, info, debug, debug_crops = _init_prediction_context(image_path, args, info)
     #if(debug):
         #show_image(image, "przed crop")
-    
-    debug_crops: list[tuple[np.ndarray, str]] = []
 
     model.eval()
     with torch.no_grad():
@@ -864,12 +902,7 @@ def predict_letter(
         >>> char, conf, probs = predict_letter("letter.png", model, device, args)
         >>> print(f"Rozpoznano: {char} z pewnością {conf:.1f}%")
     """
-    img_array = _load_image_array(image_path, args, mode="L")
-    if info is None:
-        info = globals().get("info")
-    debug = _is_debug_enabled(args)
-    
-    debug_crops: list[tuple[np.ndarray, str]] = []
+    img_array, info, debug, debug_crops = _init_prediction_context(image_path, args, info)
 
     model.eval()
     with torch.no_grad():
@@ -878,10 +911,8 @@ def predict_letter(
         gray = img_array if img_array.ndim == 2 else np.array(Image.fromarray(img_array).convert("L"))
         cropped = _tight_crop(gray)
         cropped_shape = cropped.shape
-        preprocessed = preprocess_letter(cropped)
+        letter, preprocessed = _predict_letter_from_crop(cropped, model, device, args)
         preprocessed_shape = preprocessed.shape
-
-        letter = _classify_letter(preprocessed, model, device, 1, args)
 
     if debug:
         predicted_char, confidence, probs = letter
@@ -937,11 +968,8 @@ def predict_word(
         Funkcja oczekuje obrazu z pojedynczą linią tekstu.
         Dla obrazów wieloliniowych użyj predict_segments().
     """
-    img_array = _load_image_array(image_path, args, mode="L")
-    if info is None:
-        info = globals().get("info")
+    img_array, info, debug, debug_crops = _init_prediction_context(image_path, args, info)
     letter_boxes = _segment_letters(img_array, args=args)
-    debug = _is_debug_enabled(args)
 
     if debug:
         info(f"[DEBUG][word] wykryto {len(letter_boxes)} segmentów liter")
@@ -951,7 +979,6 @@ def predict_word(
     word = ""
     letter_confidences: list[float] = []
     class_conf_samples: dict[str, list[float]] = {}
-    debug_crops: list[tuple[np.ndarray, str]] = []
     model.eval()
     with torch.no_grad():
         for idx, (x1, y1, x2, y2) in enumerate(letter_boxes, start=1):
@@ -961,14 +988,19 @@ def predict_word(
                     info(f"[DEBUG][word] segment {idx}: pominięty (pusty po przycięciu)")
                 continue
 
-            letter_img = preprocess_letter(letter_img)
-
-            predicted_char, confidence, probs = _classify_letter(letter_img, model, device, 1, args)
+            letter, letter_img = _predict_letter_from_crop(letter_img, model, device, args)
+            predicted_char, confidence, probs = letter
             word += predicted_char
-            letter_confidences.append(confidence)
-            class_conf_samples.setdefault(predicted_char, []).append(confidence)
-            if debug:
-                debug_crops.append((letter_img.copy(), f"{idx}_{predicted_char}_{confidence:.1f}"))
+            _record_predicted_letter(
+                predicted_char,
+                confidence,
+                class_conf_samples,
+                letter_confidences,
+                debug_crops,
+                letter_img,
+                f"{idx}_{predicted_char}_{confidence:.1f}",
+                debug,
+            )
 
             if debug:
                 info(
@@ -1021,11 +1053,8 @@ def predict_segments(
         na podstawie odległości między literami.
 
     """
-    img_array = _load_image_array(image_path, args, mode="L")
-    if info is None:
-        info = globals().get("info")
+    img_array, info, debug, debug_crops = _init_prediction_context(image_path, args, info)
     binary = img_array < 128
-    debug = _is_debug_enabled(args)
 
     rows_bounds = _find_bounds(np.sum(binary, axis=1))
     if debug:
@@ -1034,8 +1063,6 @@ def predict_segments(
     text = ""
     words_with_confidence: list[tuple[str, float]] = []
     class_conf_samples: dict[str, list[float]] = {}
-    debug_crops: list[tuple[np.ndarray, str]] = []
-
     def _flush_word(word_chars: list[str], word_confs: list[float]) -> None:
         if not word_chars or not word_confs:
             return
@@ -1076,16 +1103,20 @@ def predict_segments(
                         )
                     continue
 
-                letter_img = preprocess_letter(letter_img)
-                predicted_char, confidence, probs = _classify_letter(letter_img, model, device, 1, args)
+                letter, letter_img = _predict_letter_from_crop(letter_img, model, device, args)
+                predicted_char, confidence, probs = letter
                 line_text += predicted_char
                 current_word_chars.append(predicted_char)
-                current_word_confs.append(confidence)
-                class_conf_samples.setdefault(predicted_char, []).append(confidence)
-                if debug:
-                    debug_crops.append(
-                        (letter_img.copy(), f"L{line_no}_{idx + 1}_{predicted_char}_{confidence:.1f}")
-                    )
+                _record_predicted_letter(
+                    predicted_char,
+                    confidence,
+                    class_conf_samples,
+                    current_word_confs,
+                    debug_crops,
+                    letter_img,
+                    f"L{line_no}_{idx + 1}_{predicted_char}_{confidence:.1f}",
+                    debug,
+                )
 
                 if debug:
                     info(

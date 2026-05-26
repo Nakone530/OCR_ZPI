@@ -153,6 +153,7 @@ def build_parser() -> argparse.ArgumentParser:
     mode.add_argument("--annotate", type=str, metavar="PLIK", help="Wycinki: popraw bboxy i zapisz wycinki + adnotacje")
     mode.add_argument("--folder", type=str, metavar="PLIK", help="Rozpoznaj zdjęcia w folderze")
     mode.add_argument("--page", type=str, metavar="PLIK", help="Separacja zdjęcia na wyrazy oraz ich rozpoznanie")
+    mode.add_argument("--crnn", type=str, metavar="PLIK", help="Rozpoznawanie CRNN (tekst z obrazu)")
     mode.add_argument("--ensemble", "-n", type=str, metavar="PLIK", help="Sprawdź kombinacle modeli")
     parser.add_argument("--trans", "-s", type=str, metavar="PLIK", help="Plik zawierający transkrypcje, do użycia z -n")
     # Cache
@@ -181,6 +182,14 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     parser.add_argument("--model-path", type=str, default=None, metavar="PLIK", help="Sciezka do wytrenowanego modelu")
+    parser.add_argument(
+        "--model-version",
+        type=str,
+        default=None,
+        metavar="WERSJA",
+        dest="model_version",
+        help="Filtruj modele ensemble po wersji glownej, np. --model-version 21",
+    )
     parser.add_argument("--annotation-dir", type=str, default="inference", metavar="KATALOG", help="Katalog wyjsciowy dla trybu --annotate")
     parser.add_argument("--no-edit", action="store_true", help="W trybie --annotate wylacz interaktywna edycje bboxow")
     parser.add_argument("--non-interactive", action="store_true", help="W trybie --annotate pomin pytania input() i zapisz automatycznie")
@@ -210,6 +219,27 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--json-pretty", action="store_true", help="Sformatuj JSON")
     parser.add_argument("--json-path", type=str, default=None, metavar="PLIK", help="Zapisz wynik JSON do pliku")
 
+        # Parametry segmentacji watershed
+    parser.add_argument("--ws-fg-ratio", type=float, default=0.45,
+                        help="Próg foreground dla watershed (ułamek max distance, domyślnie: 0.45)")
+    parser.add_argument("--ws-split-aspect", type=float, default=1.15,
+                        help="Kiedy komponent uznać za sklejony: warunek szerokość > ratio * wysokość (domyślnie: 1.15)")
+    parser.add_argument("--ws-min-comp-area", type=int, default=30,
+                        help="Minimalne pole komponentu, aby był kandydatem na literę (domyślnie: 30)")
+    parser.add_argument("--ws-split-min-area", type=int, default=250,
+                        help="Minimalne pole komponentu, od którego próbujemy podział watershed (domyślnie: 250)")
+    parser.add_argument("--ws-min-box-w", type=int, default=3,
+                        help="Minimalna szerokość boxa litery po segmentacji (domyślnie: 3)")
+    parser.add_argument("--ws-min-box-h", type=int, default=5,
+                        help="Minimalna wysokość boxa litery po segmentacji (domyślnie: 5)")
+    parser.add_argument("--ws-min-box-area", type=int, default=20,
+                        help="Minimalne pole boxa litery po segmentacji (domyślnie: 20)")
+    parser.add_argument("--ws-merge-gap", type=int, default=4,
+                        help="Maksymalna przerwa pozioma między fragmentami do scalenia (domyślnie: 4)")
+    parser.add_argument("--ws-merge-height-ratio", type=float, default=1.8,
+                        help="Maksymalny stosunek wysokości fragmentów do scalenia (domyślnie: 1.8)")
+    parser.add_argument("--ws-merge-vert-dist", type=int, default=4,
+                        help="Maksymalna odległość pionowa do scalenia fragmentów (domyślnie: 4)")
     return parser
 
 
@@ -352,7 +382,8 @@ def main(args=None, info=None, buffor=None):
                 "key": name,                            # klucz sortowania
                 "file": r["file"],
                 "text": r["text"],
-                "confidence": r["confidence"]
+                "confidence": r["confidence"],
+                "letter_vectors": r.get("letter_vectors", []),
             })
             
             # Dodaj do listy dla wyświetlania rozmieszczenia
@@ -369,14 +400,14 @@ def main(args=None, info=None, buffor=None):
         info("-" * 60)
 
         for r in table_rows:
-            if r["confidence"] is None:
-                autocorTXT = DictCorrect(r['text'])
-                info(f"{str(r['key']) if r['key'] else '-':<12} {autocorTXT:<20} {'-':<10}")
+            conf = r['confidence'] if r['confidence'] is not None else 50.0
+            autocorTXT = DictCorrect(r['text'], conf, letter_vectors=r.get('letter_vectors'))
+            if r['confidence'] is None:
+                info(f"{str(r['key']) if r['key'] else '-':<12} {r['text']:<20} {'-':<10} {autocorTXT:<20}")
             else:
-                autocorTXT = DictCorrect(r['text'])
-                info(f"{r['key']:<12} {r['text']:<20} {r['confidence']/100:<10.2%} {autocorTXT:<20} {'-':<10}")
+                info(f"{r['key']:<12} {r['text']:<20} {r['confidence']/100:<10.2%} {autocorTXT:<20}")
 
-        
+
         # Wyświetl w rozmieszczeniu
         #display_text_layout(layout_words, info)
         if args.json:
@@ -411,23 +442,21 @@ def main(args=None, info=None, buffor=None):
                 "key": name,                            # klucz sortowania
                 "file": r["file"],
                 "text": r["text"],
-                "confidence": r["confidence"]
+                "confidence": r["confidence"],
+                "letter_vectors": r.get("letter_vectors", []),
             })
         rows.sort(key=lambda r: r["key"] if r["key"] else "")
         info(f"\n{'NAME':<12} {'TEXT':<20} {'CONF':<10} {'AUTOCORRECT':<20}")
         info("-" * 45)
 
         for r in rows:
-            if r["confidence"] is None:
-                autocorTXT = DictCorrect(r['text'])
-                info(f"{str(r['key']) if r['key'] else '-':<12} {autocorTXT:<20} {'-':<10}")
+            conf = r['confidence'] if r['confidence'] is not None else 50.0
+            autocorTXT = DictCorrect(r['text'], conf, letter_vectors=r.get('letter_vectors'))
+            if r['confidence'] is None:
+                info(f"{str(r['key']) if r['key'] else '-':<12} {r['text']:<20} {'-':<10} {autocorTXT:<20}")
             else:
-                autocorTXT = DictCorrect(r['text'])
-                info(f"{r['key']:<12} {r['text']:<20} {r['confidence']/100:<10.2%} {autocorTXT:<20} {'-':<10}")
-        
-            
-            
-            
+                info(f"{r['key']:<12} {r['text']:<20} {r['confidence']/100:<10.2%} {autocorTXT:<20}")
+
         if args.json:
             payload = build_page_result_json(
                 image_path=args.lines,
@@ -528,7 +557,7 @@ def main(args=None, info=None, buffor=None):
                 info(f"{r['key']:<12} {r['text']:<20} {r['confidence']:.2f}%")
         info("----Po poprawie----")
         for r in rows:
-            autocorTXT = DictCorrect(r['text'])
+            autocorTXT = DictCorrect(r['text'], r['confidence'] if r['confidence'] is not None else 100.0)
             info(f"{str(r['key']) if r['key'] else '-':<12} {autocorTXT:<20} {'-':<10}")
 
 

@@ -50,6 +50,7 @@ from .utils import (
     to_serializable,
     aux_transform,
     select_version,
+    auto_select_models,
 )
 from .display import visualize_prediction, show_image
 from . import info
@@ -248,7 +249,15 @@ def _segment_letters(gray: np.ndarray, args=None) -> list[tuple[int, int, int, i
     Segmentuje litery bez opierania się na pustych przerwach pionowych.
     Najpierw CC, a szerokie komponenty próbuje dzielić watershed.
     """
+    ws_fg_ratio = float(getattr(args, "ws_fg_ratio", 0.45))
+    ws_split_aspect = float(getattr(args, "ws_split_aspect", 1.15))
+    ws_min_comp_area = int(getattr(args, "ws_min_comp_area", 30))
+    ws_split_min_area = int(getattr(args, "ws_split_min_area", 250))
+    ws_min_box_w = int(getattr(args, "ws_min_box_w", 3))
+    ws_min_box_h = int(getattr(args, "ws_min_box_h", 5))
+    ws_min_box_area = int(getattr(args, "ws_min_box_area", 20))
 
+    
     blur = cv2.GaussianBlur(gray, (3, 3), 0)
     _, binary_inv = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
 
@@ -291,7 +300,7 @@ def _segment_letters(gray: np.ndarray, args=None) -> list[tuple[int, int, int, i
     return boxes
 
 
-def _classify_letter(letter_gray: np.ndarray, model: nn.Module, device: torch.device, more, args) -> str:
+def _classify_letter(letter_gray: np.ndarray, model: nn.Module, device: torch.device, more, args, model_type=0) -> str:
     """
     Klasyfikuje pojedynczy wycięty fragment obrazu jako znak.
     
@@ -314,14 +323,66 @@ def _classify_letter(letter_gray: np.ndarray, model: nn.Module, device: torch.de
         >>> char = _classify_letter(letter_img, model, device, False)
         >>> char, conf, probs = _classify_letter(letter_img, model, device, True)
     """
-    pil = Image.fromarray(letter_gray).resize((28, 28)).convert("L")
-    tensor = aux_transform()(pil).unsqueeze(0).to(device)
-    probs = torch.softmax(model(tensor), dim=1)
-    confidence, predicted = torch.max(probs, 1)
-    if(more):
-        return _label_for_idx(predicted.item()), confidence.item() * 100, probs[0]
+    if model_type == 0:
+            # ---------------- CNN ----------------
+            pil = (
+                Image.fromarray(letter_gray)
+                .resize((28, 28))
+                .convert("L")
+            )
+
+            tensor = aux_transform()(pil).unsqueeze(0).to(device)
+            
+            logits = model(tensor)
+
+            probs = torch.softmax(logits, dim=1)
+
+            confidence, predicted = torch.max(probs, 1)
+
     else:
-        return _label_for_idx(predicted.item())
+        # ---------------- CRNN ----------------
+        # wysokość stała, szerokość proporcjonalna
+        h, w = letter_gray.shape[:2]
+
+        target_h = 32
+        scale = target_h / h
+        target_w = max(1, int(w * scale))
+
+        pil = (
+            Image.fromarray(letter_gray)
+            .resize((target_w, target_h))
+            .convert("L")
+        )
+
+        tensor = aux_transform()(pil).unsqueeze(0).to(device)
+        # [1,1,H,W]
+        show_before_after(pil, tensor)
+        logits = model(tensor)
+
+        # CRNN może zwrócić:
+        # [T,B,C]  albo [B,T,C]
+        if logits.dim() == 3:
+            if logits.shape[1] == 1:
+                # [T,B,C]
+                probs_seq = torch.softmax(logits, dim=2)
+                probs = probs_seq.mean(dim=0)      # [B,C]
+            else:
+                # [B,T,C]
+                probs_seq = torch.softmax(logits, dim=2)
+                probs = probs_seq.mean(dim=1)      # [B,C]
+        else:
+            probs = torch.softmax(logits, dim=1)
+
+        confidence, predicted = torch.max(probs, 1)
+
+    if more:
+        return (
+            _label_for_idx(predicted.item()),
+            confidence.item() * 100,
+            probs[0],
+        )
+
+    return _label_for_idx(predicted.item())
 
 
 def _mean_per_class(class_conf_samples: dict[str, list[float]]) -> dict[str, float]:
@@ -411,11 +472,16 @@ def process_folder(folder_path, args, models_dir, device, info):
         raise ValueError(f"To nie jest katalog: {folder_path}")
     
     models_dir = os.path.dirname(models_dir)
-    version = select_version()
-    models = list_models(models_dir, version)
-    default_model, selected_models = select_models(models)
+    version = getattr(args, "model_version", None)
+    default_model, selected_models = auto_select_models(models_dir, version)
 
-    loaded_models = load_models(models_dir, selected_models, device, info)
+    if not selected_models:
+        fallback_model = load_model(MODEL_PATH, device, info)
+        default_model = "model_ocr"
+        loaded_models = {default_model: fallback_model}
+    else:
+        info(f"Automatyczny wybór: {len(selected_models)} model(i), default: {default_model}")
+        loaded_models = load_models(models_dir, selected_models, device, info)
 
     bbox_data = _load_bbox_data(folder_path)
     bbox_index = 0
@@ -441,10 +507,20 @@ def process_folder(folder_path, args, models_dir, device, info):
 
             final_text = aggregate(per_model, default_model)
 
-            best_conf = max(
-                r["confidence"] for r in per_model.values()
-            )
+            # confidence modelu który wygrał głosowanie (lub domyślnego)
+            text_conf = {
+                name: res["confidence"]
+                for name, res in per_model.items()
+                if res["text"] == final_text
+            }
+            best_conf = float(np.mean(list(text_conf.values()))) if text_conf else 0.0
 
+            # letter_vectors z modelu który wyprodukował wybrany tekst (lub domyślnego)
+            winning_model = next(
+                (n for n in text_conf if n == default_model),
+                next(iter(text_conf), default_model)
+            )
+            letter_vectors = per_model.get(winning_model, {}).get("letter_vectors", [])
 
             bbox = None
             if bbox_data and bbox_index < len(bbox_data):
@@ -456,7 +532,8 @@ def process_folder(folder_path, args, models_dir, device, info):
                 "text": final_text,
                 "confidence": best_conf,
                 "bbox": bbox,
-                "per_model": per_model
+                "per_model": per_model,
+                "letter_vectors": letter_vectors,
             })
 
         except Exception as e:
@@ -781,6 +858,7 @@ def predict_letter(
 
         chars = []
         confidences = []
+        letter_vectors = []   # (litera, wektor_C) dla każdej rozpoznanej litery
 
         prev = 0  # blank
 
@@ -789,8 +867,8 @@ def predict_letter(
 
             if p != prev and p != 0:
                 chars.append(idx2char[p])
-
                 confidences.append(probs[t, 0, p].item())
+                letter_vectors.append((idx2char[p], probs[t, 0].cpu().numpy()))
 
             prev = p
 
@@ -813,7 +891,7 @@ def predict_letter(
         debug_crops.append((img_array.copy(), f"{text}_{confidence:.1f}"))
         _finalize_debug_crops(debug_crops, args, image_path, mode_tag="image")
 
-    return {"text": text, "confidence": confidence, "per_char_confidences": confidences, "probs": probs_out}
+    return {"text": text, "confidence": confidence, "per_char_confidences": confidences, "probs": probs_out, "letter_vectors": letter_vectors}
 
 
 # ── Predykcja tekstu modelem CRNN ─────────────────────────────────────────────
@@ -861,7 +939,7 @@ def predict_image(
         #img_array = preprocess_letter(img_array)
         preprocessed_shape = img_array.shape
         
-        letter = _classify_letter(img_array, model, device, 1, args)
+        letter = _classify_letter(img_array, model, device, 1, args, 1)
 
     if debug:
         predicted_char, confidence, probs = letter
@@ -936,7 +1014,7 @@ def predict_word(
 
             letter_img = preprocess_letter(letter_img)
 
-            predicted_char, confidence, probs = _classify_letter(letter_img, model, device, 1, args)
+            predicted_char, confidence, probs = _classify_letter(letter_img, model, device, 1, args, 1)
             word += predicted_char
             letter_confidences.append(confidence)
             class_conf_samples.setdefault(predicted_char, []).append(confidence)
@@ -1048,7 +1126,7 @@ def predict_segments(
                     continue
 
                 letter_img = preprocess_letter(letter_img)
-                predicted_char, confidence, probs = _classify_letter(letter_img, model, device, 1, args)
+                predicted_char, confidence, probs = _classify_letter(letter_img, model, device, 1, args, 1)
                 line_text += predicted_char
                 current_word_chars.append(predicted_char)
                 current_word_confs.append(confidence)

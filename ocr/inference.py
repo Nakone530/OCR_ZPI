@@ -356,7 +356,8 @@ def _classify_letter(letter_gray: np.ndarray, model: nn.Module, device: torch.de
 
         tensor = aux_transform()(pil).unsqueeze(0).to(device)
         # [1,1,H,W]
-        show_before_after(pil, tensor)
+        if getattr(args, "debug_show_crops", False):
+            show_before_after(pil, tensor)
         logits = model(tensor)
 
         # CRNN może zwrócić:
@@ -460,7 +461,9 @@ def _finalize_debug_crops(
 
         fig.suptitle(f"Debug crops: {source_stem} [{mode_tag}]", fontsize=12)
         fig.tight_layout()
-        plt.show()
+        plt.show(block=False)
+        plt.pause(3)
+        plt.close("all")
 
 
 # ── Przekazanie zdjęć folderu do predykcji ───────────────────────────────────────────────
@@ -839,13 +842,10 @@ def predict_letter(
         # UWAGA: zmień preprocess
         pil = Image.fromarray(img_array).convert("L")
         
-        if(debug):
-            #show_image(pil, "po crop", True)
-            img_before = pil
-            
+        img_before = pil
         tensor = get_inf_transform(args)(pil).unsqueeze(0).to(device)
-        
-        if(debug):
+
+        if getattr(args, "debug_show_crops", False):
             show_before_after(img_before, tensor)
             
         preprocessed_shape = tensor.shape
@@ -1197,7 +1197,9 @@ def show_before_after(pil_img, tensor_img):
     plt.imshow(after, cmap=cmap)
     plt.axis("off")
 
-    plt.show()
+    plt.show(block=False)
+    plt.pause(3)
+    plt.close("all")
 
 
 

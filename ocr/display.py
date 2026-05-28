@@ -57,7 +57,9 @@ def visualize_prediction(
     )
     plt.axis("off")
     plt.tight_layout()
-    plt.show()
+    plt.show(block=False)
+    plt.pause(3)
+    plt.close("all")
 
 
 # ── Wyniki w konsoli ───────────────────────────────────────────────────────────

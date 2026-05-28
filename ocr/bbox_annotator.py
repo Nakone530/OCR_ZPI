@@ -2,9 +2,23 @@ import json
 import os
 import re
 import shutil
+import sys
 
 import cv2
 import numpy as np
+
+
+def visualize_connected_components(thresh):
+    num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(thresh)
+    output = np.zeros((thresh.shape[0], thresh.shape[1], 3), dtype=np.uint8)
+    rng = np.random.default_rng(42)
+    colors = rng.integers(0, 255, size=(num_labels, 3))
+    colors[0] = [0, 0, 0]
+    h, w = thresh.shape
+    for y in range(h):
+        for x in range(w):
+            output[y, x] = colors[labels[y, x]]
+    return output, num_labels, stats
 
 
 def clamp_box(box, width, height, min_size=4):
@@ -91,6 +105,17 @@ def add_length_to_boxes(boxes):
 
 
 def sort_boxes_reading_order(boxes):
+    """
+    Sortuje listę bboxów (każdy element to dict z kluczem 'box') w kolejności czytania.
+
+    Heurystyka (zgodna z test_txtline.py):
+    - Oblicz medianę wysokości bboxów -> threshold = median_h * 0.8
+    - Posortuj po Y (górna krawędź) i przypisz do linii, jeśli różnica do średniego Y linii
+      jest <= threshold. W przeciwnym razie utwórz nową linię.
+    - Po zgrupowaniu sortuj linie po średnim Y, a elementy w linii po X (lewo->prawo).
+
+    Zwraca: lista elementów (oryginalne dicty) w czytelnym porządku.
+    """
     if not boxes:
         return boxes
 
@@ -100,27 +125,25 @@ def sort_boxes_reading_order(boxes):
         x1, y1, x2, y2 = item["box"]
         h = max(1, int(y2 - y1))
         heights.append(h)
-        prepared.append(
-            {
-                "item": item,
-                "x1": int(x1),
-                "x2": int(x2),
-                "y1": int(y1),
-                "y2": int(y2),
-                "h": h,
-                "cy": (float(y1) + float(y2)) / 2.0,
-            }
-        )
+        prepared.append({
+            "item": item,
+            "x1": int(x1),
+            "y1": int(y1),
+            "x2": int(x2),
+            "y2": int(y2),
+            "h": h,
+            "cy": (float(y1) + float(y2)) / 2.0,
+        })
 
     median_h = float(np.median(np.array(heights, dtype=np.float32))) if heights else 12.0
-    base_tol = max(4.0, 0.35 * median_h)
+    base_tol = max(4.0, 0.45 * median_h)
 
     prepared.sort(key=lambda d: (d["cy"], d["x1"]))
     lines = []
 
     for entry in prepared:
         best_idx = None
-        best_dist = 1e9
+        best_score = 1e9
 
         for idx, line in enumerate(lines):
             line_h = max(1.0, line["y2"] - line["y1"])
@@ -128,12 +151,12 @@ def sort_boxes_reading_order(boxes):
             dist = abs(entry["cy"] - line["cy"])
 
             overlap_h = max(0.0, min(entry["y2"], line["y2"]) - max(entry["y1"], line["y1"]))
-            min_h = max(1.0, min(float(entry["h"]), line_h))
-            overlap_ratio = overlap_h / min_h
+            overlap_ratio = overlap_h / max(1.0, min(float(entry["h"]), line_h))
 
-            if dist <= tol or overlap_ratio >= 0.65:
-                if dist < best_dist:
-                    best_dist = dist
+            if dist <= tol or overlap_ratio >= 0.45:
+                score = dist - (overlap_ratio * base_tol)
+                if score < best_score:
+                    best_score = score
                     best_idx = idx
 
         if best_idx is None:
@@ -153,6 +176,7 @@ def sort_boxes_reading_order(boxes):
             line["y2"] = max(line["y2"], float(entry["y2"]))
             line["cy"] = ((line["cy"] * (n - 1.0)) + entry["cy"]) / n
 
+    # Scal fragmenty tej samej linii
     lines.sort(key=lambda l: l["cy"])
     merged = []
     for line in lines:
@@ -163,26 +187,24 @@ def sort_boxes_reading_order(boxes):
         prev = merged[-1]
         prev_h = max(1.0, prev["y2"] - prev["y1"])
         line_h = max(1.0, line["y2"] - line["y1"])
-        join_tol = max(4.0, 0.20 * max(prev_h, line_h), 0.20 * median_h)
+        merge_tol = max(2.0, 0.18 * max(prev_h, line_h), 0.20 * median_h)
         center_dist = abs(line["cy"] - prev["cy"])
 
         overlap_h = max(0.0, min(line["y2"], prev["y2"]) - max(line["y1"], prev["y1"]))
         overlap_ratio = overlap_h / max(1.0, min(prev_h, line_h))
 
-        if center_dist <= join_tol or overlap_ratio >= 0.75:
+        if center_dist <= merge_tol and overlap_ratio >= 0.35:
             prev["items"].extend(line["items"])
-            n_prev = float(len(prev["items"]))
-            n_line = float(len(line["items"]))
             prev["y1"] = min(prev["y1"], line["y1"])
             prev["y2"] = max(prev["y2"], line["y2"])
-            prev["cy"] = ((prev["cy"] * (n_prev - n_line)) + (line["cy"] * n_line)) / n_prev
+            prev["cy"] = float(np.mean([e["cy"] for e in prev["items"]]))
         else:
             merged.append(line)
 
     ordered = []
     merged.sort(key=lambda l: l["cy"])
     for line in merged:
-        line["items"].sort(key=lambda d: (d["x1"], d["cy"]))
+        line["items"].sort(key=lambda d: d["x1"])
         ordered.extend(entry["item"] for entry in line["items"])
 
     return ordered
@@ -1491,6 +1513,13 @@ def process_letter(image_path, base_dir="inference", enable_box_edit=True, non_i
     cv2.imwrite(source_image_copy, img_cv2, [cv2.IMWRITE_JPEG_QUALITY, 95])
     print(f"Zapisano oryginalne zdjęcie: {source_image_copy}")
 
+    # Przed zapisem: ponownie sprawdź i uporządkuj kolejność czytania
+    try:
+        edited_boxes = sort_boxes_reading_order(edited_boxes)
+        print("Ponownie posortowano bboxy przed zapisem (kolejność czytania).")
+    except Exception:
+        print("Uwaga: nie udało się ponownie posortować bboxów przed zapisem. Zapisuję w obecnej kolejności.")
+
     # Otwórz plik boxes.jsonl do zapisu
     jsonl_path = os.path.join(output_dir, "boxes.jsonl")
     jsonl_file = open(jsonl_path, "w", encoding="utf-8")
@@ -1537,3 +1566,95 @@ def process_letter(image_path, base_dir="inference", enable_box_edit=True, non_i
 
     print(f"\nGotowe! Wszystkie wycinki z '{letter_name}' znajdziesz w: {output_dir}")
     return output_dir
+
+
+def run_debug_visualization(image_path, args):
+    if not getattr(args, "debug", False):
+        return
+
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    from test_txtline import detect_text_words, detect_text_lines, resize_keep_ratio
+
+    original = cv2.imread(image_path)
+    if original is None:
+        print(f"Debug: nie można wczytać obrazu: {image_path}")
+        return
+
+    output, thresh, dilated, words, w_output = detect_text_words(original.copy())
+    l_output, output, true_l_output, false_l_output, lines = detect_text_lines(original.copy(), output, words)
+
+    print(f"Znaleziono {len(words)} linii")
+    for i, w in enumerate(words):
+        print(f"{i}: idx={w.idx}, x={w.x}, y={w.y}, w={w.w}, h={w.h}")
+
+    print("--- Reading order ---")
+    for w in sorted(words, key=lambda x: x.idx):
+        print(f"idx={w.idx}: x={w.x}, y={w.y}, w={w.w}, h={w.h}")
+
+    cc_vis, _, _ = visualize_connected_components(thresh)
+    cc_vis_d, _, _ = visualize_connected_components(dilated)
+
+    thresh_bgr = cv2.cvtColor(thresh, cv2.COLOR_GRAY2BGR)
+    dilated_bgr = cv2.cvtColor(dilated, cv2.COLOR_GRAY2BGR)
+
+    gray = cv2.cvtColor(original, cv2.COLOR_BGR2GRAY)
+
+    f_clahe = cv2.createCLAHE(clipLimit=0.1, tileGridSize=(10, 10))
+    clahe_steps = f_clahe.apply(gray)
+
+    bilateral_steps = cv2.bilateralFilter(clahe_steps, d=5, sigmaColor=5, sigmaSpace=5)
+
+    _, binary_steps = cv2.threshold(
+        bilateral_steps, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU
+    )
+    kernel = np.ones((2, 2), np.uint8)
+    opened = cv2.morphologyEx(binary_steps, cv2.MORPH_OPEN, kernel)
+
+    debug_views = [
+        ("Output", output),
+        ("Wyrazy", w_output),
+        ("Linie", l_output),
+        ("Prawdziwe Linie", true_l_output),
+        ("Fałszywe Linie", false_l_output),
+        ("Original", original),
+        ("Gray", gray),
+        ("Binaryzacja", thresh_bgr),
+        ("Dylatacja", dilated_bgr),
+        ("CC", cc_vis),
+        ("CC Dilated", cc_vis_d),
+        ("Clahe", clahe_steps),
+        ("Bilateryzacja", bilateral_steps),
+        ("filtered Binaryzacja", binary_steps),
+        ("Binaryzacja", thresh_bgr),
+        ("final (g->c->bil->bin->m->o)", opened),
+    ]
+
+    debug_views = [(name, resize_keep_ratio(img)) for name, img in debug_views]
+
+    idx = 0
+    while True:
+        name, img = debug_views[idx]
+        display = img.copy()
+        cv2.putText(
+            display,
+            f"{idx+1}/{len(debug_views)} : {name}",
+            (20, 40),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            1,
+            (0, 255, 0),
+            2,
+        )
+        cv2.imshow("Debug", display)
+        key = cv2.waitKey(0)
+
+        if key == 27 or key == ord("q"):
+            cv2.destroyAllWindows()
+            return
+        elif key in [ord("d"), 83]:
+            idx = (idx + 1) % len(debug_views)
+        elif key in [ord("a"), 81]:
+            idx = (idx - 1) % len(debug_views)
+        elif key == 13:
+            break
+
+    cv2.destroyAllWindows()

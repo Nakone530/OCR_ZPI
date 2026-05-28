@@ -883,6 +883,141 @@ def draw_boxes_preview(image, boxes, selected_idx, temp_box=None):
     return preview
 
 
+class _TLWord:
+    def __init__(self, idx, x, y, w, h):
+        self.idx = idx
+        self.x = int(x)
+        self.y = int(y)
+        self.w = int(w)
+        self.h = int(h)
+        self.cx = float(self.x) + (float(self.w) / 2.0)
+        self.cy = float(self.y) + (float(self.h) / 2.0)
+        self.used = False
+
+
+def _candidate_neighbors(word, words, median_h):
+    candidates = []
+    for other in words:
+        if other.idx == word.idx:
+            continue
+        dx = other.cx - word.cx
+        dy = other.cy - word.cy
+        if dx <= 0:
+            continue
+        if dx > median_h * 15:
+            continue
+        if abs(dy) > median_h * 1.5:
+            continue
+        candidates.append((other, dx, dy))
+    return candidates
+
+
+def _neighbor_score(word, other):
+    dx = other.cx - word.cx
+    dy = other.cy - word.cy
+    slope = abs(dy / max(dx, 1))
+    height_ratio = abs(other.h - word.h) / max(word.h, 1)
+    score = (
+        abs(dy) * 2.0 +
+        slope * 30.0 +
+        dx * 0.1 +
+        height_ratio * 25.0
+    )
+    return score
+
+
+def _best_neighbor(word, words, median_h):
+    candidates = _candidate_neighbors(word, words, median_h)
+    if not candidates:
+        return None
+    scored = []
+    for other, dx, dy in candidates:
+        score = _neighbor_score(word, other)
+        scored.append((score, other))
+    scored.sort(key=lambda x: x[0])
+    return scored[0][1]
+
+
+def _grow_line(start_word, words, median_h):
+    line = [start_word]
+    current = start_word
+    current.used = True
+    while True:
+        nxt = _best_neighbor(current, words, median_h)
+        if nxt is None:
+            break
+        if nxt.used:
+            break
+        nxt.used = True
+        line.append(nxt)
+        current = nxt
+    return line
+
+
+def visualize_text_lines_from_boxes(img, output, boxes):
+    """Draw reading-line visualization similar to test_txtline.detect_text_lines.
+
+    Returns: img, output, true_l, false_l, lines
+    """
+    lines = []
+    true_l = img.copy()
+    false_l = img.copy()
+
+    # Build word-like objects from boxes
+    words = []
+    for i, item in enumerate(boxes):
+        x1, y1, x2, y2 = item["box"]
+        w = max(1, int(x2 - x1))
+        h = max(1, int(y2 - y1))
+        words.append(_TLWord(i, int(x1), int(y1), w, h))
+
+    if not words:
+        return img, output, true_l, false_l, lines
+
+    heights = [w.h for w in words]
+    median_h = float(np.median(heights))
+
+    for word in words:
+        if word.used:
+            continue
+        line = _grow_line(word, words, median_h)
+        if len(line) > 0:
+            lines.append(line)
+
+    for line in lines:
+        for i in range(len(line) - 1):
+            w1 = line[i]
+            w2 = line[i + 1]
+            pc1 = (int(w1.cx), int(w1.cy))
+            pc2 = (int(w2.cx), int(w2.cy))
+            y1 = int(w1.cy)
+            y2 = int(w2.cy)
+
+            p1 = (int(w1.x), y1)
+            p2 = (int(w1.x + w1.w), y1)
+            cv2.line(output, p1, p2, (0, 0, 255), 2)
+            cv2.line(img, p1, p2, (0, 0, 255), 2)
+            cv2.line(false_l, p1, p2, (0, 0, 255), 2)
+
+            p3 = (int(w1.x + w1.w), y1)
+            p4 = (int(w2.x), y2)
+            cv2.line(output, p3, p4, (0, 0, 255), 2)
+            cv2.line(img, p3, p4, (0, 0, 255), 2)
+            cv2.line(false_l, p3, p4, (0, 0, 255), 2)
+
+            p5 = (int(w2.x), y2)
+            p6 = (int(w2.x + w2.w), y2)
+            cv2.line(output, p5, p6, (255, 0, 0), 2)
+            cv2.line(img, p5, p6, (255, 0, 0), 2)
+            cv2.line(false_l, p5, p6, (0, 0, 255), 2)
+
+            cv2.line(output, pc1, pc2, (255, 0, 0), 2)
+            cv2.line(img, pc1, pc2, (255, 0, 0), 2)
+            cv2.line(true_l, pc1, pc2, (255, 0, 0), 2)
+
+    return img, output, true_l, false_l, lines
+
+
 def point_in_box(x, y, box):
     x1, y1, x2, y2 = box
     return x1 <= x <= x2 and y1 <= y <= y2
@@ -1068,6 +1203,7 @@ def edit_boxes_interactive(image, boxes):
         "pan_anchor": None,
         "pan_start_offset": None,
         "view_mode": "original",
+        "show_lines": False,
     }
 
     print("\nTryb poprawy bboxów:")
@@ -1081,6 +1217,7 @@ def edit_boxes_interactive(image, boxes):
     print("x lub Delete - usuń aktualny box")
     print("a - automatycznie wykryj boxy ponownie")
     print("v - przełącz widok: oryginał / preprocessing")
+    print("L - przełącz widok linii (overlay)")
     print("ENTER - zatwierdź, q - anuluj edycję")
 
     window_name = "Korekta bounding boxow"
@@ -1205,6 +1342,14 @@ def edit_boxes_interactive(image, boxes):
         preview_boxes = [dict(item, box=scale_box(item["box"], display_scale)) for item in boxes]
         temp_box = scale_box(state["temp_box"], display_scale) if state["temp_box"] is not None else None
         preview = draw_boxes_preview(display_image, preview_boxes, selected_idx, temp_box)
+        if state["show_lines"]:
+            try:
+                # preview_boxes are already in display image coords; draw lines on a copy
+                img_with_lines, _, _, _, _ = visualize_text_lines_from_boxes(preview.copy(), preview.copy(), preview_boxes)
+                preview = img_with_lines
+            except Exception:
+                # ignore visualization errors and fall back to normal preview
+                pass
         view = preview[view_y:view_y + view_h, view_x:view_x + view_w]
         cv2.imshow(window_name, view)
         key = cv2.waitKeyEx(30)
@@ -1244,6 +1389,11 @@ def edit_boxes_interactive(image, boxes):
         if key == ord("v"):
             state["view_mode"] = "preprocessed" if state["view_mode"] == "original" else "original"
             print(f"Widok: {state['view_mode']}")
+            continue
+
+        if key == ord("L"):
+            state["show_lines"] = not state["show_lines"]
+            print(f"Widok linii: {'ON' if state['show_lines'] else 'OFF'}")
             continue
 
         if key == ord("b"):

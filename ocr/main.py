@@ -334,8 +334,9 @@ def main(args=None, info=None, buffor=None):
     elif args.annotate:
         _require_file(args.annotate, info)
         info(f"\nUruchamianie adnotacji : {args.annotate}")
-        from ocr.bbox_annotator import process_letter
+        from ocr.bbox_annotator import process_letter, run_debug_visualization
 
+        run_debug_visualization(args.annotate, args)
         output_dir = process_letter(
             image_path=args.annotate,
             base_dir=args.annotation_dir,
@@ -348,8 +349,9 @@ def main(args=None, info=None, buffor=None):
     elif args.page:
         _require_file(args.page, info)
         info(f"\nUruchamianie adnotacji : {args.page}")
-        from ocr.bbox_annotator import process_letter
+        from ocr.bbox_annotator import process_letter, run_debug_visualization
 
+        run_debug_visualization(args.page, args)
         output_dir = process_letter(
             image_path=args.page,
             base_dir=args.annotation_dir,

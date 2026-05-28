@@ -396,6 +396,47 @@ def split_wide_box_by_projection(image, box):
     return split_boxes if split_boxes else [[x1, y1, x2, y2]]
 
 
+def split_lines_from_roi(roi, x, y, median_height, min_peak_distance=10):
+    projection = np.sum(roi > 0, axis=1).astype(np.float32)
+    if projection.size == 0 or np.max(projection) == 0:
+        return []
+
+    projection = projection / (np.max(projection) + 1e-6)
+
+    peaks = []
+    for i in range(1, len(projection) - 1):
+        if projection[i] > projection[i - 1] and projection[i] > projection[i + 1]:
+            if projection[i] > 0.4:
+                peaks.append(i)
+
+    if len(peaks) < 2:
+        return [(x, y, roi.shape[1], roi.shape[0])]
+
+    cuts = []
+    for i in range(len(peaks) - 1):
+        start = peaks[i]
+        end = peaks[i + 1]
+
+        valley_region = projection[start:end]
+        if len(valley_region) == 0:
+            continue
+
+        cut_y = start + int(np.argmin(valley_region))
+        cuts.append(cut_y)
+
+    segments = []
+    prev = 0
+    for cut in cuts:
+        if cut - prev > min_peak_distance:
+            segments.append((prev, cut))
+        prev = cut
+
+    if roi.shape[0] - prev > min_peak_distance:
+        segments.append((prev, roi.shape[0]))
+
+    return [(x, y + s, roi.shape[1], e - s) for s, e in segments]
+
+
 def merge_boxes_into_words(boxes):
     if not boxes:
         return boxes
@@ -838,10 +879,28 @@ def detect_word_boxes_auto(image):
         tightened = tighten_box_to_foreground(image, box)
         tightened_boxes.extend(split_wide_box_by_projection(image, tightened))
 
+    split_tall_boxes = []
+    max_line_h = 3.0 * median_h
+    min_keep_h = max(6.0, 0.45 * median_h)
+    for box in tightened_boxes:
+        bx1, by1, bx2, by2 = box
+        bw = max(1, bx2 - bx1)
+        bh = max(1, by2 - by1)
+
+        if bh > max_line_h:
+            roi = clean[int(by1):int(by2), int(bx1):int(bx2)]
+            split = split_lines_from_roi(roi, int(bx1), int(by1), int(median_h))
+            for sx, sy, sw, sh in split:
+                if sw < 5 or sh < min_keep_h:
+                    continue
+                split_tall_boxes.append([sx, sy, sx + sw, sy + sh])
+        else:
+            split_tall_boxes.append(box)
+
     # Usuń ekstremalnie małe śmieci po segmentacji, ale zostaw prawdziwe krótkie słowa i liczby.
     cleaned_boxes = []
     areas = []
-    for box in tightened_boxes:
+    for box in split_tall_boxes:
         bx1, by1, bx2, by2 = box
         areas.append(max(1, (bx2 - bx1) * (by2 - by1)))
 
@@ -850,7 +909,7 @@ def detect_word_boxes_auto(image):
     min_keep_w = max(4, int(round(0.20 * effective_w)))
     min_keep_h = max(4, int(round(0.22 * median_h)))
 
-    for box in tightened_boxes:
+    for box in split_tall_boxes:
         bx1, by1, bx2, by2 = box
         bw = bx2 - bx1
         bh = by2 - by1

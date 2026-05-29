@@ -28,10 +28,11 @@ from torchvision import datasets
 
 from .config import (
     DATA_DIR, MODEL_PATH, CHECKPOINT_PATH,
-    MODEL_ARCHIVE_DIR, MODEL_ARCHIVE_KEEP_COUNT, IMAGES_DIR, CHARS, char2idx, idx2char, DATA_ROOT_DIR
+    MODEL_ARCHIVE_DIR, MODEL_ARCHIVE_KEEP_COUNT, IMAGES_DIR, CHARS, char2idx, idx2char, DATA_ROOT_DIR,
+    PHSF_DATA_DIR,
 )
 from .model import MainModel
-from .utils import get_train_transform, load_all_datasets
+from .utils import get_train_transform, load_all_datasets, load_phsf_znaki
 from .model_archive import ModelArchiver
 from .OCRDataset import OCRDataset
 from . import info
@@ -561,7 +562,8 @@ def init_or_load_model(num_classes, model_path=None, info=None):
 
 
 def train_model(epochs=10, batch_size=32, model_path=None, info=None, args=None,
-                config: Optional['TrainingConfig'] = None, save_path: Optional[str] = None):
+                config: Optional['TrainingConfig'] = None, save_path: Optional[str] = None,
+                preloaded_data: Optional[list] = None):
     """
     Trenuje model OCR.
 
@@ -593,16 +595,28 @@ def train_model(epochs=10, batch_size=32, model_path=None, info=None, args=None,
     else:
         info("Brak poprzedniego modelu – pierwszy trening.")
 
-    info("3. Ładowanie datasetu OCR...")
-    data = load_all_datasets(DATA_ROOT_DIR)
+    if preloaded_data is not None:
+        info(f"3. Używam przekazanego datasetu ({len(preloaded_data)} próbek).")
+        data = preloaded_data
+    else:
+        info("3. Ładowanie datasetu OCR...")
+        data = load_phsf_znaki(PHSF_DATA_DIR)
+        info(f"   ttData: {len(data)} próbek")
+
+##        if os.path.isdir(PHSF_DATA_DIR):
+##            phsf_data = load_phsf_znaki(PHSF_DATA_DIR)
+##            info(f"   PHSF znaki: {len(phsf_data)} próbek")
+##            data = data + phsf_data
+##        else:
+##            info(f"   PHSF pominięty (brak katalogu: {PHSF_DATA_DIR})")
 
     dataset = OCRDataset(
         json_data=data,
         images_dir=None,
         transform=get_train_transform(args, denoise_prob=denoise_prob, max_padding=max_padding)
     )
-    
-    info(f"4. Dataset załadowany: {len(dataset)} obrazów")
+
+    info(f"4. Dataset załadowany: {len(dataset)} obrazów łącznie")
 
     train_size = int(0.8 * len(dataset))
     val_size = len(dataset) - train_size
@@ -650,7 +664,8 @@ def train_model(epochs=10, batch_size=32, model_path=None, info=None, args=None,
             input_lengths = torch.full(
                 size=(images.size(0),),
                 fill_value=outputs.size(0),
-                dtype=torch.long
+                dtype=torch.long,
+                device=GLOBAL_DEVICE,
             )
 
             loss = GLOBAL_CRITERION(
@@ -684,9 +699,10 @@ def train_model(epochs=10, batch_size=32, model_path=None, info=None, args=None,
                 input_lengths = torch.full(
                     size=(images.size(0),),
                     fill_value=outputs.size(0),
-                    dtype=torch.long
+                    dtype=torch.long,
+                    device=GLOBAL_DEVICE,
                 )
-                
+
                 loss = GLOBAL_CRITERION(
                     log_probs,
                     targets,
@@ -806,6 +822,17 @@ def multi_train(
         info(f"  {i}. [{cfg.name}] {cfg.description}")
     info("=" * 60 + "\n")
 
+    info("\nŁadowanie datasetu (raz dla wszystkich presetów)...")
+    shared_data = load_all_datasets(DATA_ROOT_DIR)
+    info(f"  ttData: {len(shared_data)} próbek")
+    if os.path.isdir(PHSF_DATA_DIR):
+        phsf_data = load_phsf_znaki(PHSF_DATA_DIR)
+        info(f"  PHSF znaki: {len(phsf_data)} próbek")
+        shared_data = shared_data + phsf_data
+    else:
+        info(f"  PHSF pominięty (brak katalogu: {PHSF_DATA_DIR})")
+    info(f"  Łącznie: {len(shared_data)} próbek\n")
+
     results = []
     overall_start = time.time()
 
@@ -823,7 +850,7 @@ def multi_train(
         BEST_MODEL_STATE = None
         _GLOBAL_MAJOR_VERSION = None
         _GLOBAL_MINOR_VERSION = None
-        
+
         cfg_epochs = config.epochs if config.epochs is not None else epochs
         cfg_batch_size = config.batch_size if config.batch_size is not None else batch_size
         base_dir = config.model_path or "./models"
@@ -840,6 +867,7 @@ def multi_train(
                 info=info,
                 config=config,
                 save_path=save_path,
+                preloaded_data=shared_data,
             )
         except Exception as exc:
             status = "BŁĄD"
@@ -987,8 +1015,9 @@ def infinite_train(batch_size=32, model_path=None, checkpoint_interval=5, info=N
     TRAINING_PAUSED = False
     TRAINING_STOP = False
     GLOBAL_BEST_ACC = float('inf')
-    
-    
+
+    signal.signal(signal.SIGINT, infinite_handler)
+
     try:
         info("1. Ładowanie datasetu...")
         
@@ -997,14 +1026,22 @@ def infinite_train(batch_size=32, model_path=None, checkpoint_interval=5, info=N
         
         info("3. Ładowanie datasetu OCR...")
         data = load_all_datasets(DATA_ROOT_DIR)
-        
+        info(f"   ttData: {len(data)} próbek")
+
+        if os.path.isdir(PHSF_DATA_DIR):
+            phsf_data = load_phsf_znaki(PHSF_DATA_DIR)
+            info(f"   PHSF znaki: {len(phsf_data)} próbek")
+            data = data + phsf_data
+        else:
+            info(f"   PHSF pominięty (brak katalogu: {PHSF_DATA_DIR})")
+
         dataset = OCRDataset(
             json_data=data,
             images_dir=None,
             transform=get_train_transform()
         )
 
-        info(f"4. Dataset załadowany: {len(dataset)} obrazów")
+        info(f"4. Dataset załadowany: {len(dataset)} obrazów łącznie")
         
         train_size = int(0.8 * len(dataset))
         val_size = len(dataset) - train_size
@@ -1067,9 +1104,10 @@ def infinite_train(batch_size=32, model_path=None, checkpoint_interval=5, info=N
                 input_lengths = torch.full(
                     size=(images.size(0),),
                     fill_value=outputs.size(0),
-                    dtype=torch.long
+                    dtype=torch.long,
+                    device=GLOBAL_DEVICE,
                 )
-                
+
                 loss = GLOBAL_CRITERION(
                     log_probs,
                     targets,
@@ -1111,9 +1149,10 @@ def infinite_train(batch_size=32, model_path=None, checkpoint_interval=5, info=N
                     input_lengths = torch.full(
                         size=(images.size(0),),
                         fill_value=outputs.size(0),
-                        dtype=torch.long
+                        dtype=torch.long,
+                        device=GLOBAL_DEVICE,
                     )
-                    
+
                     loss = GLOBAL_CRITERION(
                         log_probs,
                         targets,
@@ -1175,4 +1214,5 @@ def infinite_train(batch_size=32, model_path=None, checkpoint_interval=5, info=N
         info(f"\nBłąd podczas treningu: {e}")
         import traceback
         info(traceback.format_exc())
-
+    finally:
+        signal.signal(signal.SIGINT, handler)

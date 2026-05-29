@@ -7,6 +7,8 @@ Narzędzia pomocnicze:
 """
 
 import os
+import re
+import math
 from datetime import date
 from pathlib import Path
 import random
@@ -411,6 +413,46 @@ def load_all_datasets(root_dir):
 
     return all_data
 
+
+def load_phsf_znaki(phsf_dir: str) -> list:
+    """
+    Ładuje dataset znaków PHSF (znaki/png/0..88).
+
+    Parsuje numeracja.txt, dla każdego folderu zbiera pliki PNG
+    i buduje listę {"image_path": ..., "text": znak}.
+    Pomija znaki nieobsługiwane przez model (spoza char2idx po lowercase).
+    """
+    numeracja_path = os.path.join(phsf_dir, "numeracja.txt")
+    znaki_dir = os.path.join(phsf_dir, "znaki", "png")
+
+    folder_to_char: dict[int, str] = {}
+    with open(numeracja_path, "r", encoding="utf-8") as f:
+        for line in f:
+            m = re.match(r"(\d+)\s*=\s*(.+)", line.strip())
+            if m:
+                folder_to_char[int(m.group(1))] = m.group(2).strip()
+
+    items = []
+    skipped_chars: set[str] = set()
+
+    for folder_num, char in sorted(folder_to_char.items()):
+        if char.lower() not in char2idx:
+            skipped_chars.add(char)
+            continue
+
+        folder_path = os.path.join(znaki_dir, str(folder_num))
+        if not os.path.isdir(folder_path):
+            continue
+
+        for fname in os.listdir(folder_path):
+            if fname.lower().endswith(".png"):
+                items.append({
+                    "image_path": os.path.join(folder_path, fname),
+                    "text": char,
+                })
+
+    return items
+
 # ── Zapis do folderu z datą ────────────────────────────────────────────────────
 
 def get_today_folder() -> str:
@@ -559,7 +601,7 @@ def load_model(model_path: str = MODEL_PATH, device: torch.device = None, info=N
         if(model_type == 1):
             model = MainModel(num_classes=len(CHARS) + 1)
         else:
-            model = AuxModel(num_classes=len(AuxCHARS))
+            model = AuxModel(num_classes=len(CHARS) + 1)
         model.load_state_dict(state_dict)
         info("Model wczytany!")
 
@@ -568,7 +610,7 @@ def load_model(model_path: str = MODEL_PATH, device: torch.device = None, info=N
         if(model_type == 1):
             model = MainModel(num_classes=len(CHARS) + 1)
         else:
-            model = AuxModel(num_classes=len(AuxCHARS))
+            model = AuxModel(num_classes=len(CHARS) + 1)
 
     model.to(device)
     model.eval()
@@ -633,6 +675,39 @@ def select_models(models):
 
     return default_model, ensemble
 
+
+DEFAULT_MODELS = [
+    "v4", "v4.1", "v4.4",
+    "v6.2", "v6.5",
+    "v7.2", "v7.4", "v7.5",
+    "v8.2",
+    "v10.2", "v10.3", "v10.4", "v10.5",
+    "v11.1", "v11.2", "v11.3", "v11.4", "v11.5",
+]
+
+DEFAULT_MODEL = "v11.5"
+
+
+def auto_select_models(models_dir: str, version: str | None = None):
+    all_models = list_models(models_dir)
+
+    if version:
+        candidates = [m for m in all_models if m.startswith(f"v{version}")]
+    else:
+        candidates = [m for m in DEFAULT_MODELS if m in all_models]
+
+    if not candidates:
+        if all_models:
+            candidates = [all_models[-1]]
+        else:
+            return DEFAULT_MODEL, []
+
+    if version:
+        default = candidates[-1]
+    else:
+        default = DEFAULT_MODEL if DEFAULT_MODEL in candidates else candidates[-1]
+
+    return default, candidates
 
 
 def load_models(models_dir, selected_models, device, info):
@@ -779,42 +854,274 @@ def save_results_csv(rows, path="results.csv"):
                 "confidence": r["confidence"],
                 "accuracy": r["accuracy"]
             })
+# ── Embedding-based autokorekta HTR ──────────────────────────────────────────
+
+_EMBED_DIM = 2048
+_NGRAM_SIZES = (2, 3)
+
+# Cache słownikowych embeddingów (ładowany raz na sesję)
+_embed_cache: tuple[str, list[str], np.ndarray] | None = None
+
+# Mapowanie polskich diakrytyków na ASCII — używane przed embeddingiem
+# żeby HTR-owe "sloce" trafiało w to samo przestrzeń co słownikowe "słońce"
+_DIACRITIC_MAP = str.maketrans(
+    "ąćęłńóśźżĄĆĘŁŃÓŚŹŻ",
+    "acelnoszzACELNOSZZ",
+)
+
+
+def _to_ascii(word: str) -> str:
+    """Usuwa polskie diakrytyki: 'słońce' → 'slonce', 'życiem' → 'zyciem'."""
+    return word.translate(_DIACRITIC_MAP)
+
+
+def _stable_hash(s: str, mod: int) -> int:
+    """Deterministyczny hash stringa (niezależny od PYTHONHASHSEED)."""
+    h = 0
+    for c in s:
+        h = (h * 31 + ord(c)) % mod
+    return h
+
+
+def _word_embedding(word: str, dim: int = _EMBED_DIM) -> np.ndarray:
+    """
+    Zamienia słowo na wektor character n-gram (styl FastText).
+    Przed embeddingiem normalizuje diakrytyki do ASCII, dzięki czemu
+    HTR-owe 'sloce' i słownikowe 'słońce' trafiają w podobną przestrzeń.
+    """
+    normalized = _to_ascii(word.lower())
+    padded = f"<{normalized}>"
+    vec = np.zeros(dim, dtype=np.float32)
+    for n in _NGRAM_SIZES:
+        for i in range(len(padded) - n + 1):
+            gram = padded[i : i + n]
+            vec[_stable_hash(gram, dim)] += 1.0
+    norm = float(np.linalg.norm(vec))
+    if norm > 0.0:
+        vec /= norm
+    return vec
+
+
+def _get_dict_embeddings(dict_path: str = ÐICT_PATH) -> tuple[list[str], np.ndarray]:
+    """
+    Zwraca (words, matrix) z cache'em na poziomie modułu.
+    matrix[i] to L2-znormalizowany embedding words[i].
+    """
+    global _embed_cache
+    if _embed_cache is not None and _embed_cache[0] == dict_path:
+        return _embed_cache[1], _embed_cache[2]
+
+    words = load_dictionary(dict_path)
+    matrix = np.stack([_word_embedding(w) for w in words])  # (N, dim)
+    _embed_cache = (dict_path, words, matrix)
+    return words, matrix
+
+
+def _rerank_score(candidate: str, query: str, embed_sim: float) -> float:
+    """
+    Drugi etap scoringu (reranking) łączący kilka sygnałów:
+      - cosine similarity z fazy 1 (embedding)
+      - SequenceMatcher (dokładniejsze porównanie znaków)
+      - podobieństwo długości
+      - bonus za zgodność pierwszego znaku
+    """
+    # Porównanie po ASCII — żeby 'sloce' vs 'słońce' miało wysokie seq_sim
+    q_ascii = _to_ascii(query.lower())
+    c_ascii = _to_ascii(candidate.lower())
+    seq_sim = SequenceMatcher(None, q_ascii, c_ascii).ratio()
+    lq, lc = len(query), len(candidate)
+    len_sim = 1.0 - abs(lq - lc) / max(lq, lc, 1)
+    prefix = 0.1 if (q_ascii and c_ascii and q_ascii[0] == c_ascii[0]) else 0.0
+    return 0.40 * embed_sim + 0.40 * seq_sim + 0.15 * len_sim + prefix
+
+
+def _score_candidate_with_vectors(
+    candidate: str,
+    letter_vectors: list,
+) -> float:
+    """
+    Ocenia kandydata ze słownika używając wektorów prawdopodobieństwa modelu.
+
+    Używa DTW (Dynamic Time Warping) do optymalnego wyrównania liter modelu
+    do liter kandydata — działa poprawnie nawet gdy długości się różnią
+    (HTR odczytał za mało lub za dużo liter).
+
+    letter_vectors: lista (litera, np.ndarray kształtu C) z predict_letter()
+    Zwraca: score w zakresie (-inf, 0] — wyższy = lepszy kandydat
+    """
+    if not letter_vectors:
+        return -999.0
+
+    n_obs  = len(letter_vectors)
+    n_cand = len(candidate)
+
+    # Odrzuć kandydatów drastycznie różniących się długością (>2x)
+    if n_cand == 0 or n_obs / n_cand > 2.5 or n_cand / max(n_obs, 1) > 2.5:
+        return -999.0
+
+    # Macierz kosztu: cost[i][j] = -log P(candidate[j] | wektor timestep i)
+    cost = np.empty((n_obs, n_cand), dtype=np.float32)
+    for i, (_, prob_vec) in enumerate(letter_vectors):
+        for j in range(n_cand):
+            c = candidate[j]
+            c_ascii = _to_ascii(c)
+            p = 1e-9
+            for ch in (c, c_ascii, c.upper(), c_ascii.upper()):
+                idx = char2idx.get(ch)
+                if idx is not None and idx < len(prob_vec):
+                    p = max(p, float(prob_vec[idx]))
+            cost[i, j] = -math.log(p)
+
+    # DTW: dp[i][j] = minimalny koszt wyrównania obs[0..i] → cand[0..j]
+    dp = np.full((n_obs + 1, n_cand + 1), np.inf, dtype=np.float64)
+    dp[0, 0] = 0.0
+    for i in range(1, n_obs + 1):
+        for j in range(1, n_cand + 1):
+            dp[i, j] = cost[i - 1, j - 1] + min(
+                dp[i - 1, j - 1],   # dopasowanie 1:1
+                dp[i - 1, j],       # pominięcie obserwowanej litery (HTR za dużo)
+                dp[i, j - 1],       # pominięcie litery kandydata (HTR za mało)
+            )
+
+    path_len = max(n_obs, n_cand)
+    return -dp[n_obs, n_cand] / path_len  # normalizacja do [-inf, 0]
+
+
+# ── Częstość słów polskich (prior językowy) ───────────────────────────────────
+# Wartości znormalizowane do [0, 1]: 1.0 = najczęstsze słowa funkcyjne,
+# 0.65 = częste słowa treściowe, 0.35 = umiarkowanie częste.
+# Słowa spoza listy domyślnie: 0.05 (obecne w słowniku, ale rzadkie).
+_WORD_FREQ: dict[str, float] = {
+    # Tier 1 — stopwords i słowa funkcyjne (~60 słów)
+    **{w: 1.0 for w in [
+        "nie", "się", "to", "jest", "jak", "co", "do", "na", "że", "już",
+        "też", "ale", "po", "tak", "czy", "go", "mi", "mu", "jej", "jego",
+        "ich", "nas", "je", "tam", "tu", "ze", "przy", "przez", "dla", "we",
+        "od", "za", "bo", "sobie", "wszystko", "kiedy", "gdzie", "jeszcze",
+        "tylko", "więc", "bardzo", "tego", "tej", "ten", "ta", "te", "sam",
+        "być", "mieć", "i", "w", "z", "o", "a", "u", "ni", "nic", "kto",
+        "pan", "pani", "temu", "tą", "tych", "tymi", "tego",
+    ]},
+    # Tier 2 — częste słowa treściowe (~100 słów)
+    **{w: 0.65 for w in [
+        "dom", "człowiek", "rok", "czas", "dzień", "noc", "życie", "świat",
+        "ręka", "głowa", "oko", "słowo", "droga", "serce", "praca", "woda",
+        "ziemia", "ludzie", "chwila", "myśl", "twarz", "drzwi", "okno",
+        "niebo", "nikt", "coś", "ktoś", "każdy", "razem", "teraz", "właśnie",
+        "może", "pewnie", "chyba", "naprawdę", "jeden", "dwa", "trzy", "raz",
+        "miejsce", "kraj", "miasto", "las", "góra", "morze", "księżyc",
+        "słońce", "gwiazda", "kwiat", "drzewo", "ptak", "ryba", "kot", "pies",
+        "miał", "mówić", "widzieć", "powiedzieć", "robić", "wziąć", "dać",
+        "iść", "stać", "siedzieć", "czuć", "myśleć", "znać", "wracać",
+        "nowe", "stare", "duże", "małe", "dobre", "złe", "wielkie", "długie",
+        "pierwsze", "drugie", "całe", "własne", "ludzkie", "inne", "same",
+        "często", "zawsze", "nigdy", "wszędzie", "gdzieś", "kiedyś", "czegoś",
+        "domu", "czasu", "dnia", "nocy", "życia", "świata", "ręki", "głowy",
+        "oczu", "słów", "drogi", "serca", "pracy", "wody", "ziemi", "ludzi",
+        "chwili", "myśli", "twarzy", "nieba", "słońca", "gwiazd", "kwiatów",
+    ]},
+    # Tier 3 — umiarkowanie częste (~80 słów)
+    **{w: 0.35 for w in [
+        "przyczyna", "przyczyny", "przyczynie", "przyczynę",
+        "zdarzać", "zdarza", "zdarzył", "zdarzyła", "zdarzyć", "zdarzę",
+        "słoneczna", "słoneczny", "słoneczne", "słonecznej",
+        "prawa", "prawem", "prawny", "prawo", "prawem", "prawda", "prawdy",
+        "wróbel", "wróble", "wróbli", "wróblom",
+        "drzewo", "drzewa", "drzewem", "drzew",
+        "morze", "morza", "morzem", "mórz",
+        "góra", "góry", "górze", "gór",
+        "rzeka", "rzeki", "rzece", "rzek",
+        "kamień", "kamienia", "kamieniu", "kamieni",
+        "ogień", "ognia", "ogniu", "ogniem",
+        "powietrze", "powietrza", "powietrzem",
+        "cisza", "ciszy", "ciszą", "ciszę",
+        "radość", "radości", "radością",
+        "smutek", "smutku", "smutkiem",
+        "miłość", "miłości", "miłością",
+        "wieczór", "wieczoru", "wieczorem",
+        "ranek", "ranka", "rankiem",
+        "wiatr", "wiatru", "wiatrem",
+        "deszcz", "deszczu", "deszczem",
+        "śnieg", "śniegu", "śniegiem",
+    ]},
+}
+
+
+def _freq_score(word: str) -> float:
+    """Zwraca znormalizowaną częstość słowa [0, 1]. Default 0.05 dla słów spoza listy."""
+    return _WORD_FREQ.get(word.lower(), 0.05)
+
+
 #--- Autokorekta------
 def DictCorrect(
     text: str,
-    threshold: float = 0.8,
+    confidence: float = 100.0,
+    threshold: float = 0.55,
+    top_k: int = 30,
+    letter_vectors: list | None = None,
 ) -> str:
     """
-    Szuka najbardziej podobnego słowa w słowniku.
-    
-    Jeśli podobieństwo >= threshold:
-        zwraca słowo ze słownika
-    W przeciwnym razie:
-        zwraca oryginalny tekst
-    """
-    dictionary = load_dictionary()
-    text = text.strip()
+    Pipeline autokorekty HTR:
+      embedding → cosine similarity → TOP-5 → reranking → wybór najlepszego.
 
+    Etapy rerankingu (w kolejności priorytetu):
+      1. _score_candidate_with_vectors — używa wektorów prawdopodobieństwa
+         modelu per litera (jeśli letter_vectors dostarczone i długości zgodne)
+      2. _rerank_score — embedding + SequenceMatcher + długość (fallback)
+
+    confidence (0-100): pewność modelu HTR.
+    letter_vectors: lista (litera, np.ndarray) z predict_letter() — opcjonalna.
+    """
+    text = text.strip()
     if not text:
         return text
 
-    best_match = None
-    best_score = 0.0
+    # Jeśli słowo jest już w słowniku — nie ma co korygować
+    words_check, _ = _get_dict_embeddings()
+    if text.lower() in {w.lower() for w in words_check}:
+        return text
 
-    text_lower = text.lower()
+    # 1. Embedding słowa wejściowego (HTR output)
+    query_vec = _word_embedding(text)
 
-    for word in dictionary:
-        score = SequenceMatcher(
-            None,
-            text_lower,
-            word.lower()
-        ).ratio()
+    # 2. Porównanie ze słownikiem przez cosine similarity
+    words, dict_matrix = _get_dict_embeddings()
+    similarities = dict_matrix @ query_vec  # (N,) — szybki iloczyn macierzowy
 
-        if score > best_score:
-            best_score = score
-            best_match = word
+    # 3. TOP-K kandydatów według embeddingu
+    k = min(top_k, len(words))
+    top_idx = np.argpartition(similarities, -k)[-k:]
+    top_idx = top_idx[np.argsort(similarities[top_idx])[::-1]]
+    top_candidates = [(words[i], float(similarities[i])) for i in top_idx]
 
-    if best_score >= threshold:
-        return best_match
+    # 4. Reranking: jeśli mamy letter_vectors — używamy wektorów modelu
+    #    W przeciwnym razie fallback do SequenceMatcher + embedding
+    use_vectors = bool(letter_vectors)
 
+    def _combined_score(word: str, embed_sim: float) -> float:
+        freq = _freq_score(word)
+        if use_vectors:
+            vec_score = _score_candidate_with_vectors(word, letter_vectors)
+            if vec_score > -999.0:
+                vec_norm = math.exp(vec_score)
+                return 0.46 * vec_norm + 0.27 * embed_sim + 0.18 * _rerank_score(word, text, embed_sim) + 0.09 * freq
+        return _rerank_score(word, text, embed_sim) + 0.09 * freq
+
+    reranked = sorted(
+        top_candidates,
+        key=lambda x: _combined_score(x[0], x[1]),
+        reverse=True,
+    )
+
+    # 5. Wybór najlepszego słowa z uwzględnieniem confidence modelu HTR
+    conf_factor = confidence / 100.0
+    effective_threshold = threshold + (0.90 - threshold) * conf_factor
+
+    best_word, best_embed_sim = reranked[0]
+    best_score = _combined_score(best_word, best_embed_sim)
+
+    if best_score >= effective_threshold:
+        if text and text[0].isupper():
+            best_word = best_word[0].upper() + best_word[1:]
+        return best_word
     return text

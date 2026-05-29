@@ -26,6 +26,7 @@ import re
 # Katalog lokalny na przechowywanie danych
 DATA_DIR = "./data"
 DATA_ROOT_DIR = "./ttData"
+PHSF_DATA_DIR = "./data/phsf"
 
 IMAGES_DIR = "./ttData"
 

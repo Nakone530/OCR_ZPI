@@ -175,6 +175,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--resume", "-r", type=str, metavar="PLIK", help="Wznow trening z checkpointu")
 
+    parser.add_argument("--cycle-lr", action="store_true", help="Wlacz cykliczny scheduler LR (CyclicLR)")
+    parser.add_argument("--cycle-base-lr", type=float, default=1e-5, help="Dolny LR dla CyclicLR")
+    parser.add_argument("--cycle-max-lr", type=float, default=1e-4, help="Gorny LR dla CyclicLR")
+    parser.add_argument("--cycle-step-size", type=int, default=None, help="Liczba krokow do max LR (domyslnie: len(train_loader))")
+    parser.add_argument("--log-lr", action="store_true", help="Loguj aktualny LR co 50 krokow")
+
     parser.add_argument("--denoise", action="store_true", help="Wlacz odszumianie")
     parser.add_argument(
         "--denoise-method",
@@ -318,7 +324,7 @@ def main(args=None, info=None, buffor=None):
         train_crnn(epochs=args.epochs, batch_size=args.batch_size, model_path=args.resume, info=info, args=args)
 
     elif args.train_cnn:
-        train_cnn(epochs=args.epochs, batch_size=args.batch_size, model_path=args.resume, info=info)
+        train_cnn(epochs=args.epochs, batch_size=args.batch_size, model_path=args.resume, info=info, args=args)
 
     elif args.multi_train is not None:
         preset_names = args.multi_train or None  # [] -> None oznacza "wszystkie"
@@ -337,6 +343,7 @@ def main(args=None, info=None, buffor=None):
             model_path=args.resume,
             checkpoint_interval=args.checkpoint_interval,
             info=info,
+            args=args,
         )
 
     elif args.annotate:

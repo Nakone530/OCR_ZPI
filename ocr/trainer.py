@@ -98,6 +98,7 @@ GLOBAL_MODEL = None
 GLOBAL_OPTIMIZER = None
 GLOBAL_CRITERION = None
 GLOBAL_DEVICE = None
+GLOBAL_SCHEDULER = None
 GLOBAL_CLASS_NAMES = None
 
 GLOBAL_EPOCH = 0
@@ -587,7 +588,7 @@ def train_model(epochs=10, batch_size=32, model_path=None, info=None, args=None,
         save_path: ścieżka zapisu wytrenowanego modelu.
                    Gdy None – używana jest stała MODEL_PATH.
     """
-    global GLOBAL_MODEL, GLOBAL_OPTIMIZER, GLOBAL_CRITERION
+    global GLOBAL_MODEL, GLOBAL_OPTIMIZER, GLOBAL_CRITERION, GLOBAL_SCHEDULER
     global GLOBAL_DEVICE, GLOBAL_EPOCH, GLOBAL_BEST_ACC, GLOBAL_CLASS_NAMES, GLOBAL_VAL_ACCURACY
 
     if info is None:
@@ -645,6 +646,25 @@ def train_model(epochs=10, batch_size=32, model_path=None, info=None, args=None,
     # init albo load
     if GLOBAL_MODEL is None:
         init_or_load_model(len(CHARS) + 1, model_path, info)
+
+    if args is not None and getattr(args, "cycle_lr", False):
+        step_size = getattr(args, "cycle_step_size", None)
+        if step_size is None:
+            step_size = max(1, len(train_loader))
+        GLOBAL_SCHEDULER = torch.optim.lr_scheduler.CyclicLR(
+            GLOBAL_OPTIMIZER,
+            base_lr=getattr(args, "cycle_base_lr", 1e-5),
+            max_lr=getattr(args, "cycle_max_lr", 1e-4),
+            step_size_up=step_size,
+            mode="triangular2",
+            cycle_momentum=False,
+        )
+        info(
+            f"CyclicLR aktywny: base_lr={getattr(args, 'cycle_base_lr', 1e-5)} "
+            f"max_lr={getattr(args, 'cycle_max_lr', 1e-4)} step_size_up={step_size}"
+        )
+    else:
+        GLOBAL_SCHEDULER = None
     
     info("8. Rozpoczynanie treningu...")
     total_steps = len(train_loader)
@@ -691,11 +711,17 @@ def train_model(epochs=10, batch_size=32, model_path=None, info=None, args=None,
 
             loss.backward()
             GLOBAL_OPTIMIZER.step()
+            if GLOBAL_SCHEDULER is not None:
+                GLOBAL_SCHEDULER.step()
 
             running_loss += loss.item()
 
             if step % 50 == 0:
-                info(f"Epoch {epoch+1} Step {step} Loss: {loss.item():.4f}")
+                if args is not None and getattr(args, "log_lr", False):
+                    lr = GLOBAL_OPTIMIZER.param_groups[0]["lr"]
+                    info(f"Epoch {epoch+1} Step {step} Loss: {loss.item():.4f} | LR: {lr:.6g}")
+                else:
+                    info(f"Epoch {epoch+1} Step {step} Loss: {loss.item():.4f}")
 
         # WALIDACJA
         GLOBAL_MODEL.eval()
@@ -801,7 +827,7 @@ def train_crnn(epochs=10, batch_size=32, model_path=None, info=None, args=None,
     Dane: ttData – obrazy słów/sekwencji z etykietami tekstowymi.
     Strata: CTCLoss.
     """
-    global GLOBAL_MODEL, GLOBAL_OPTIMIZER, GLOBAL_CRITERION
+    global GLOBAL_MODEL, GLOBAL_OPTIMIZER, GLOBAL_CRITERION, GLOBAL_SCHEDULER
     global GLOBAL_DEVICE, GLOBAL_EPOCH, GLOBAL_BEST_ACC, GLOBAL_CLASS_NAMES, GLOBAL_VAL_ACCURACY
 
     if info is None:
@@ -849,6 +875,25 @@ def train_crnn(epochs=10, batch_size=32, model_path=None, info=None, args=None,
     if GLOBAL_MODEL is None:
         init_or_load_model(len(CHARS) + 1, model_path, info)
 
+    if args is not None and getattr(args, "cycle_lr", False):
+        step_size = getattr(args, "cycle_step_size", None)
+        if step_size is None:
+            step_size = max(1, len(train_loader))
+        GLOBAL_SCHEDULER = torch.optim.lr_scheduler.CyclicLR(
+            GLOBAL_OPTIMIZER,
+            base_lr=getattr(args, "cycle_base_lr", 1e-5),
+            max_lr=getattr(args, "cycle_max_lr", 1e-4),
+            step_size_up=step_size,
+            mode="triangular2",
+            cycle_momentum=False,
+        )
+        info(
+            f"CyclicLR aktywny: base_lr={getattr(args, 'cycle_base_lr', 1e-5)} "
+            f"max_lr={getattr(args, 'cycle_max_lr', 1e-4)} step_size_up={step_size}"
+        )
+    else:
+        GLOBAL_SCHEDULER = None
+
     info("8. Rozpoczynanie treningu CRNN...")
     total_steps = len(train_loader)
     training_start = time.time()
@@ -885,10 +930,16 @@ def train_crnn(epochs=10, batch_size=32, model_path=None, info=None, args=None,
             loss = GLOBAL_CRITERION(log_probs, targets, input_lengths, target_lengths)
             loss.backward()
             GLOBAL_OPTIMIZER.step()
+            if GLOBAL_SCHEDULER is not None:
+                GLOBAL_SCHEDULER.step()
             running_loss += loss.item()
 
             if step % 50 == 0:
-                info(f"Epoch {epoch+1} Step {step} Loss: {loss.item():.4f}")
+                if args is not None and getattr(args, "log_lr", False):
+                    lr = GLOBAL_OPTIMIZER.param_groups[0]["lr"]
+                    info(f"Epoch {epoch+1} Step {step} Loss: {loss.item():.4f} | LR: {lr:.6g}")
+                else:
+                    info(f"Epoch {epoch+1} Step {step} Loss: {loss.item():.4f}")
 
         GLOBAL_MODEL.eval()
         val_loss = 0.0
@@ -951,14 +1002,14 @@ def train_crnn(epochs=10, batch_size=32, model_path=None, info=None, args=None,
     info("=" * 60)
 
 
-def train_cnn(epochs=10, batch_size=32, model_path=None, info=None,
+def train_cnn(epochs=10, batch_size=32, model_path=None, info=None, args=None,
               save_path=None, preloaded_data=None):
     """
     Trening modelu CNN do klasyfikacji pojedynczych znaków.
     Dane: phsf – obrazy pojedynczych znaków podzielone na klasy.
     Strata: CrossEntropyLoss.
     """
-    global GLOBAL_MODEL, GLOBAL_OPTIMIZER, GLOBAL_CRITERION
+    global GLOBAL_MODEL, GLOBAL_OPTIMIZER, GLOBAL_CRITERION, GLOBAL_SCHEDULER
     global GLOBAL_DEVICE, GLOBAL_EPOCH, GLOBAL_BEST_ACC, GLOBAL_CLASS_NAMES, GLOBAL_VAL_ACCURACY
 
     if info is None:
@@ -997,6 +1048,25 @@ def train_cnn(epochs=10, batch_size=32, model_path=None, info=None,
     GLOBAL_OPTIMIZER = torch.optim.Adam(GLOBAL_MODEL.parameters(), lr=0.0001)
     GLOBAL_EPOCH = 0
 
+    if args is not None and getattr(args, "cycle_lr", False):
+        step_size = getattr(args, "cycle_step_size", None)
+        if step_size is None:
+            step_size = max(1, len(train_loader))
+        GLOBAL_SCHEDULER = torch.optim.lr_scheduler.CyclicLR(
+            GLOBAL_OPTIMIZER,
+            base_lr=getattr(args, "cycle_base_lr", 1e-5),
+            max_lr=getattr(args, "cycle_max_lr", 1e-4),
+            step_size_up=step_size,
+            mode="triangular2",
+            cycle_momentum=False,
+        )
+        info(
+            f"CyclicLR aktywny: base_lr={getattr(args, 'cycle_base_lr', 1e-5)} "
+            f"max_lr={getattr(args, 'cycle_max_lr', 1e-4)} step_size_up={step_size}"
+        )
+    else:
+        GLOBAL_SCHEDULER = None
+
     if model_path and os.path.exists(model_path):
         info(f"Wczytywanie modelu z: {model_path}")
         checkpoint = torch.load(model_path, map_location=GLOBAL_DEVICE)
@@ -1034,6 +1104,8 @@ def train_cnn(epochs=10, batch_size=32, model_path=None, info=None,
             loss = GLOBAL_CRITERION(outputs, labels)
             loss.backward()
             GLOBAL_OPTIMIZER.step()
+            if GLOBAL_SCHEDULER is not None:
+                GLOBAL_SCHEDULER.step()
 
             running_loss += loss.item()
             preds = outputs.argmax(1)
@@ -1041,7 +1113,11 @@ def train_cnn(epochs=10, batch_size=32, model_path=None, info=None,
             total += labels.size(0)
 
             if step % 50 == 0:
-                info(f"Epoch {epoch+1} Step {step} Loss: {loss.item():.4f}")
+                if args is not None and getattr(args, "log_lr", False):
+                    lr = GLOBAL_OPTIMIZER.param_groups[0]["lr"]
+                    info(f"Epoch {epoch+1} Step {step} Loss: {loss.item():.4f} | LR: {lr:.6g}")
+                else:
+                    info(f"Epoch {epoch+1} Step {step} Loss: {loss.item():.4f}")
 
         train_acc = correct / total * 100
 
@@ -1289,7 +1365,7 @@ def show_infinite_menu(info=None):
             info("\nNieprawidłowy wybór! Wybierz 1-5.")
 
 
-def infinite_train(batch_size=32, model_path=None, checkpoint_interval=5, info=None):
+def infinite_train(batch_size=32, model_path=None, checkpoint_interval=5, info=None, args=None):
     """
     Nieskończony trening modelu OCR.
     
@@ -1307,7 +1383,7 @@ def infinite_train(batch_size=32, model_path=None, checkpoint_interval=5, info=N
         checkpoint_interval: Co ile epok zapisywać checkpoint (domyślnie 5)
         info: Funkcja do logowania (domyślnie print)
     """
-    global GLOBAL_MODEL, GLOBAL_OPTIMIZER, GLOBAL_CRITERION
+    global GLOBAL_MODEL, GLOBAL_OPTIMIZER, GLOBAL_CRITERION, GLOBAL_SCHEDULER
     global GLOBAL_DEVICE, GLOBAL_EPOCH, GLOBAL_BEST_ACC, GLOBAL_CLASS_NAMES
     global TRAINING_PAUSED, TRAINING_STOP
     
@@ -1359,6 +1435,25 @@ def infinite_train(batch_size=32, model_path=None, checkpoint_interval=5, info=N
         # init albo load
         if GLOBAL_MODEL is None:
             init_or_load_model(len(CHARS) + 1, model_path, info)
+
+        if args is not None and getattr(args, "cycle_lr", False):
+            step_size = getattr(args, "cycle_step_size", None)
+            if step_size is None:
+                step_size = max(1, len(train_loader))
+            GLOBAL_SCHEDULER = torch.optim.lr_scheduler.CyclicLR(
+                GLOBAL_OPTIMIZER,
+                base_lr=getattr(args, "cycle_base_lr", 1e-5),
+                max_lr=getattr(args, "cycle_max_lr", 1e-4),
+                step_size_up=step_size,
+                mode="triangular2",
+                cycle_momentum=False,
+            )
+            info(
+                f"CyclicLR aktywny: base_lr={getattr(args, 'cycle_base_lr', 1e-5)} "
+                f"max_lr={getattr(args, 'cycle_max_lr', 1e-4)} step_size_up={step_size}"
+            )
+        else:
+            GLOBAL_SCHEDULER = None
         
 
         info("8. Rozpoczynanie treningu...")
@@ -1419,15 +1514,21 @@ def infinite_train(batch_size=32, model_path=None, checkpoint_interval=5, info=N
                 )
                 loss.backward()
                 GLOBAL_OPTIMIZER.step()
+                if GLOBAL_SCHEDULER is not None:
+                    GLOBAL_SCHEDULER.step()
                 
                 running_loss += loss.item()
                 
                 # log co 50 kroków
                 if step % 50 == 0 or step == total_steps:
                     elapsed = datetime.now() - start_time
-
-                    info(f"Epoch [{epoch+1}] Step [{step}/{total_steps}] "
-                         f"Loss: {loss.item():.4f} | Czas: {elapsed}")
+                    if args is not None and getattr(args, "log_lr", False):
+                        lr = GLOBAL_OPTIMIZER.param_groups[0]["lr"]
+                        info(f"Epoch [{epoch+1}] Step [{step}/{total_steps}] "
+                             f"Loss: {loss.item():.4f} | LR: {lr:.6g} | Czas: {elapsed}")
+                    else:
+                        info(f"Epoch [{epoch+1}] Step [{step}/{total_steps}] "
+                             f"Loss: {loss.item():.4f} | Czas: {elapsed}")
 
                 # Zwolnij referencje po każdym kroku dla stabilności długiego treningu.
                 del outputs, loss, images, targets, target_lengths, log_probs, input_lengths

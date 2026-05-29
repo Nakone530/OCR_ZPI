@@ -1303,7 +1303,6 @@ def process_letter(image_path, base_dir="inference", enable_box_edit=True, non_i
         if crop_img.size == 0:
             continue
 
-        # Konwersja do skali szarości dla zgodności z OCR
         if crop_img.ndim == 3:
             crop_gray = cv2.cvtColor(crop_img, cv2.COLOR_BGR2GRAY)
         else:

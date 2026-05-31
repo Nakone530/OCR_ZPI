@@ -142,6 +142,7 @@ def split_lines_from_roi(roi, x, y, median_height, min_peak_distance=10):
     ]
 
 
+
 def sort_boxes_reading_order(boxes):
     if not boxes:
         return boxes
@@ -547,11 +548,67 @@ def merge_boxes_into_words(boxes):
 
     return merged
 
+def normalize_by_stroke_width(
+    image,
+    target_stroke=2.5
+):
+    gray = (
+        cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        if image.ndim == 3
+        else image.copy()
+    )
+
+    binary = cv2.adaptiveThreshold(
+        gray,
+        255,
+        cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+        cv2.THRESH_BINARY_INV,
+        31,
+        12,
+    )
+
+    dist = cv2.distanceTransform(
+        binary,
+        cv2.DIST_L2,
+        5,
+    )
+
+    vals = dist[dist > 0]
+
+    if len(vals) == 0:
+        return image, 1.0
+
+    stroke = np.percentile(vals, 75)
+
+    estimated = stroke * 2
+
+    scale = target_stroke / estimated
+
+    scale = np.clip(scale, 0.1, 5.0)
+
+    h, w = image.shape[:2]
+
+    resized = cv2.resize(
+        image,
+        (
+            int(w * scale),
+            int(h * scale),
+        ),
+        interpolation=(
+            cv2.INTER_CUBIC
+            if scale > 1
+            else cv2.INTER_AREA
+        ),
+    )
+
+    return resized, scale
 
 def detect_word_boxes_auto(image):
     if image is None or image.size == 0:
         return []
 
+    
+    
     height, width = image.shape[:2]
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if image.ndim == 3 else image.copy()
 
@@ -562,7 +619,7 @@ def detect_word_boxes_auto(image):
         cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU,
     )
 
-    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (10, 2))
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (10, 3))
     dilated = cv2.dilate(thresh, kernel, iterations=1)
 
     contours, _ = cv2.findContours(
@@ -599,8 +656,7 @@ def detect_word_boxes_auto(image):
         else:
             too_large.append((x, y, w, h))
             roi = thresh[y:y + h, x:x + w]
-            if roi.size == 0:
-                continue
+
             split = split_lines_from_roi(roi, x, y, median_height)
 
             most_safe = [
@@ -1094,8 +1150,16 @@ def edit_boxes_interactive(image, boxes):
 
         if key == ord("a"):
             print("\nPonowna automatyczna detekcja boxow...")
-            auto_boxes = detect_word_boxes_auto(image)
-            if auto_boxes:
+            edited_boxes = []
+            scaled, scale = normalize_by_stroke_width(image)
+            auto_boxes = detect_word_boxes_auto(scaled)
+            for item in auto_boxes:
+                item["box"] = scale_to_original(
+                    item["box"],
+                    scale,
+                )
+                edited_boxes.append(item)
+            if edited_boxes:
                 boxes.clear()
                 boxes.extend(auto_boxes)
                 selected_idx = 0
@@ -1203,6 +1267,33 @@ def edit_boxes_interactive(image, boxes):
 
         boxes[selected_idx]["box"] = clamp_box([x1, y1, x2, y2], width, height)
 
+def scale_to_original(box, scale):
+    x, y, w, h = box
+
+    return (
+        int(round(x / scale)),
+        int(round(y / scale)),
+        int(round(w / scale)),
+        int(round(h / scale)),
+    )
+
+def restore_original_scale(image, scale):
+    h, w = image.shape[:2]
+
+    new_w = max(1, int(round(w / scale)))
+    new_h = max(1, int(round(h / scale)))
+
+    interpolation = (
+        cv2.INTER_AREA
+        if scale > 1
+        else cv2.INTER_CUBIC
+    )
+
+    return cv2.resize(
+        image,
+        (new_w, new_h),
+        interpolation=interpolation,
+    )
 
 def process_letter(image_path, base_dir="inference", enable_box_edit=True, non_interactive=False):
     if not os.path.exists(image_path):
@@ -1210,12 +1301,13 @@ def process_letter(image_path, base_dir="inference", enable_box_edit=True, non_i
         return None
 
     letter_name = os.path.splitext(os.path.basename(image_path))[0]
-
+    
     img_cv2 = cv2.imread(image_path)
+    original = img_cv2.copy()
     if img_cv2 is None:
         print(f"Błąd: nie udało się wczytać obrazu '{image_path}'.")
         return None
-
+    img_cv2, scale = normalize_by_stroke_width(img_cv2)
     img_h, img_w = img_cv2.shape[:2]
 
     previous_dir = get_latest_output_dir(base_dir, letter_name)
@@ -1231,7 +1323,18 @@ def process_letter(image_path, base_dir="inference", enable_box_edit=True, non_i
             boxes = [{"box": [0, 0, img_w, img_h]}]
             print("Nie wykryto bboxów. Tryb bez edycji: utworzono 1 box obejmujący cały obraz.")
 
-    edited_boxes = boxes
+    edited_boxes = []
+
+    for item in boxes:
+        item["box"] = scale_to_original(
+            item["box"],
+            scale,
+        )
+        
+
+        edited_boxes.append(item)
+        
+    img_cv2 = original
     if enable_box_edit:
         edited_boxes = edit_boxes_interactive(img_cv2, boxes)
         if edited_boxes is None:

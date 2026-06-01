@@ -25,10 +25,10 @@ import re
 
 # Katalog lokalny na przechowywanie danych
 DATA_DIR = "./data"
-DATA_ROOT_DIR = "./ttData"
+DATA_ROOT_DIR = "./data/ttData"
 PHSF_DATA_DIR = "./data/phsf"
 
-IMAGES_DIR = "./ttData"
+IMAGES_DIR = "./data/ttData"
 
 ÐICT_PATH = "./data/dictionary.json"
 # ── Model ─────────────────────────────────────────────────────────────────────

@@ -31,8 +31,8 @@ from .config import (
     MODEL_ARCHIVE_DIR, MODEL_ARCHIVE_KEEP_COUNT, IMAGES_DIR, CHARS, char2idx, idx2char, DATA_ROOT_DIR,
     PHSF_DATA_DIR,
 )
-from .model import MainModel
-from .utils import get_train_transform, load_all_datasets, load_phsf_znaki
+from .model import MainModel, CNNClassifier
+from .utils import get_train_transform, get_cnn_train_transform, load_all_datasets, load_phsf_znaki
 from .model_archive import ModelArchiver
 from .OCRDataset import OCRDataset
 from . import info
@@ -203,6 +203,20 @@ def collate_fn(batch):
 
     return images, targets, target_lengths
 
+
+def collate_fn_cnn(batch):
+    """
+    Collate dla treningu CNN na pojedynczych znakach.
+    Zakłada: każdy element to (tensor 1×32×32, tekst pojedynczego znaku).
+    Zwraca: (images: B×1×32×32, labels: B) – etykiety 0-indeksowane dla CrossEntropy.
+    """
+    images, texts = zip(*batch)
+    images = torch.stack(list(images))
+    labels = torch.tensor(
+        [char2idx[text] - 1 for text in texts],
+        dtype=torch.long,
+    )
+    return images, labels
 
 
 # -- Trening
@@ -780,6 +794,295 @@ def save_checkpoint_model(model, epoch, ratio):
         f.write(f"ratio: {ratio}\n")
         f.write(f"model_version: v{major}.{int(ratio*10) - 4}\n")
         
+def train_crnn(epochs=10, batch_size=32, model_path=None, info=None, args=None,
+               config=None, save_path=None, preloaded_data=None):
+    """
+    Trening modelu CRNN (CNN + LSTM + CTC).
+    Dane: ttData – obrazy słów/sekwencji z etykietami tekstowymi.
+    Strata: CTCLoss.
+    """
+    global GLOBAL_MODEL, GLOBAL_OPTIMIZER, GLOBAL_CRITERION
+    global GLOBAL_DEVICE, GLOBAL_EPOCH, GLOBAL_BEST_ACC, GLOBAL_CLASS_NAMES, GLOBAL_VAL_ACCURACY
+
+    if info is None:
+        info = print
+
+    effective_save_path = save_path or MODEL_PATH
+    denoise_prob = config.denoise_prob if config is not None else 0.3
+    max_padding = config.max_padding if config is not None else 20
+    checkpoint_ratios = [0.5, 0.6, 0.7, 0.8, 0.9]
+    checkpoint_saved = {r: False for r in checkpoint_ratios}
+
+    prev_accuracy = get_stored_accuracy(effective_save_path)
+    backup_path = effective_save_path + ".backup"
+    _make_backup_as(effective_save_path, backup_path)
+    if prev_accuracy >= 0:
+        info(f"Poprzednia dokładność modelu: {prev_accuracy:.2f}%")
+    else:
+        info("Brak poprzedniego modelu – pierwszy trening.")
+
+    if preloaded_data is not None:
+        info(f"3. Używam przekazanego datasetu ({len(preloaded_data)} próbek).")
+        data = preloaded_data
+    else:
+        info("3. Ładowanie datasetu CRNN (ttData)...")
+        data = load_all_datasets(DATA_ROOT_DIR)
+        info(f"   ttData: {len(data)} próbek")
+
+    dataset = OCRDataset(
+        json_data=data,
+        images_dir=None,
+        transform=get_train_transform(args, denoise_prob=denoise_prob, max_padding=max_padding),
+    )
+    info(f"4. Dataset załadowany: {len(dataset)} obrazów łącznie")
+
+    train_size = int(0.8 * len(dataset))
+    val_size = len(dataset) - train_size
+    info(f"5. Splitting: {train_size} trening, {val_size} walidacja")
+    train_dataset, val_dataset = torch.utils.data.random_split(dataset, [train_size, val_size])
+
+    info("6. Tworzenie DataLoader...")
+    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True, collate_fn=collate_fn)
+    val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=batch_size, shuffle=False, collate_fn=collate_fn)
+
+    info("7. Inicjalizacja lub ładowanie modelu CRNN...")
+    if GLOBAL_MODEL is None:
+        init_or_load_model(len(CHARS) + 1, model_path, info)
+
+    info("8. Rozpoczynanie treningu CRNN...")
+    total_steps = len(train_loader)
+    training_start = time.time()
+    target_epoch = GLOBAL_EPOCH + epochs
+
+    info("\n" + "=" * 60)
+    info("  TRENING CRNN (ttData)")
+    info("=" * 60)
+    info(f"  Urządzenie: {GLOBAL_DEVICE}")
+    info(f"  Batch size: {batch_size}")
+    info(f"  Epoki do wykonania: {epochs}")
+    info(f"  Zakres epok: {GLOBAL_EPOCH + 1} -> {target_epoch}")
+    info("=" * 60 + "\n")
+
+    for epoch in range(GLOBAL_EPOCH, target_epoch):
+        epoch_start = time.time()
+        GLOBAL_MODEL.train()
+        running_loss = 0.0
+
+        for step, (images, targets, target_lengths) in enumerate(train_loader, start=1):
+            images = images.to(GLOBAL_DEVICE)
+            targets = targets.to(GLOBAL_DEVICE)
+            target_lengths = target_lengths.to(GLOBAL_DEVICE)
+
+            GLOBAL_OPTIMIZER.zero_grad(set_to_none=True)
+            outputs = GLOBAL_MODEL(images)
+            log_probs = outputs.log_softmax(2)
+            input_lengths = torch.full(
+                size=(images.size(0),),
+                fill_value=outputs.size(0),
+                dtype=torch.long,
+                device=GLOBAL_DEVICE,
+            )
+            loss = GLOBAL_CRITERION(log_probs, targets, input_lengths, target_lengths)
+            loss.backward()
+            GLOBAL_OPTIMIZER.step()
+            running_loss += loss.item()
+
+            if step % 50 == 0:
+                info(f"Epoch {epoch+1} Step {step} Loss: {loss.item():.4f}")
+
+        GLOBAL_MODEL.eval()
+        val_loss = 0.0
+        with torch.inference_mode():
+            for images, targets, target_lengths in val_loader:
+                images = images.to(GLOBAL_DEVICE)
+                targets = targets.to(GLOBAL_DEVICE)
+                target_lengths = target_lengths.to(GLOBAL_DEVICE)
+                outputs = GLOBAL_MODEL(images)
+                log_probs = outputs.log_softmax(2)
+                input_lengths = torch.full(
+                    size=(images.size(0),),
+                    fill_value=outputs.size(0),
+                    dtype=torch.long,
+                    device=GLOBAL_DEVICE,
+                )
+                loss = GLOBAL_CRITERION(log_probs, targets, input_lengths, target_lengths)
+                val_loss += loss.item()
+
+        val_loss /= len(val_loader)
+        epoch_time = time.time() - epoch_start
+        info(f"Epoch {epoch+1} | train_loss={running_loss:.4f} | val_loss={val_loss:.4f} | time={epoch_time:.1f}s")
+
+        progress = (epoch + 1) / target_epoch
+        for ratio in checkpoint_ratios:
+            if not checkpoint_saved[ratio] and progress >= ratio:
+                info(f"[CHECKPOINT] Saving model at {int(ratio*100)}% (epoch {epoch+1})")
+                save_checkpoint_model(GLOBAL_MODEL, epoch + 1, ratio)
+                checkpoint_saved[ratio] = True
+
+        GLOBAL_EPOCH = epoch + 1
+
+    total_training_time = time.time() - training_start
+
+    info("\nObliczanie dokładności znakowej na zbiorze walidacyjnym...")
+    new_accuracy = _compute_val_char_accuracy(GLOBAL_MODEL, val_loader, GLOBAL_DEVICE)
+    GLOBAL_VAL_ACCURACY = new_accuracy
+    info(f"Nowa dokładność: {new_accuracy:.2f}%")
+
+    if prev_accuracy < 0:
+        info("Pierwszy model – zapisuję jako punkt odniesienia.")
+        capture_best_model(info, path=effective_save_path)
+    elif new_accuracy >= prev_accuracy:
+        info(f"Poprawa: {prev_accuracy:.2f}% -> {new_accuracy:.2f}% – zapisuję nowy model.")
+        capture_best_model(info, path=effective_save_path)
+    else:
+        info(f"Brak poprawy: {prev_accuracy:.2f}% -> {new_accuracy:.2f}% – przywracam poprzedni model.")
+        if os.path.exists(backup_path):
+            shutil.copy2(backup_path, effective_save_path)
+
+    if os.path.exists(backup_path):
+        os.remove(backup_path)
+
+    info("\n" + "=" * 60)
+    info("  PODSUMOWANIE TRENINGU CRNN")
+    info("=" * 60)
+    info(f"  Zakończona epoka: {GLOBAL_EPOCH}")
+    info(f"  Dokładność znakowa (val): {GLOBAL_VAL_ACCURACY:.2f}%")
+    info(f"  Całkowity czas treningu: {total_training_time:.1f}s")
+    info("=" * 60)
+
+
+def train_cnn(epochs=10, batch_size=32, model_path=None, info=None,
+              save_path=None, preloaded_data=None):
+    """
+    Trening modelu CNN do klasyfikacji pojedynczych znaków.
+    Dane: phsf – obrazy pojedynczych znaków podzielone na klasy.
+    Strata: CrossEntropyLoss.
+    """
+    global GLOBAL_MODEL, GLOBAL_OPTIMIZER, GLOBAL_CRITERION
+    global GLOBAL_DEVICE, GLOBAL_EPOCH, GLOBAL_BEST_ACC, GLOBAL_CLASS_NAMES, GLOBAL_VAL_ACCURACY
+
+    if info is None:
+        info = print
+
+    effective_save_path = save_path or MODEL_PATH
+
+    if preloaded_data is not None:
+        info(f"3. Używam przekazanego datasetu ({len(preloaded_data)} próbek).")
+        data = preloaded_data
+    else:
+        info("3. Ładowanie datasetu CNN (phsf)...")
+        data = load_phsf_znaki(PHSF_DATA_DIR)
+        info(f"   phsf: {len(data)} próbek")
+
+    dataset = OCRDataset(
+        json_data=data,
+        images_dir=None,
+        transform=get_cnn_train_transform(),
+    )
+    info(f"4. Dataset załadowany: {len(dataset)} obrazów łącznie")
+
+    train_size = int(0.8 * len(dataset))
+    val_size = len(dataset) - train_size
+    info(f"5. Splitting: {train_size} trening, {val_size} walidacja")
+    train_dataset, val_dataset = torch.utils.data.random_split(dataset, [train_size, val_size])
+
+    info("6. Tworzenie DataLoader...")
+    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True, collate_fn=collate_fn_cnn)
+    val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=batch_size, shuffle=False, collate_fn=collate_fn_cnn)
+
+    info("7. Inicjalizacja lub ładowanie modelu CNN...")
+    GLOBAL_DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    GLOBAL_MODEL = CNNClassifier(num_classes=len(CHARS)).to(GLOBAL_DEVICE)
+    GLOBAL_CRITERION = nn.CrossEntropyLoss()
+    GLOBAL_OPTIMIZER = torch.optim.Adam(GLOBAL_MODEL.parameters(), lr=0.0001)
+    GLOBAL_EPOCH = 0
+
+    if model_path and os.path.exists(model_path):
+        info(f"Wczytywanie modelu z: {model_path}")
+        checkpoint = torch.load(model_path, map_location=GLOBAL_DEVICE)
+        state_dict = checkpoint.get("model_state_dict", checkpoint) if isinstance(checkpoint, dict) else checkpoint
+        GLOBAL_MODEL.load_state_dict(state_dict)
+        GLOBAL_EPOCH = checkpoint.get("epoch", 0) if isinstance(checkpoint, dict) else 0
+
+    info("8. Rozpoczynanie treningu CNN...")
+    target_epoch = GLOBAL_EPOCH + epochs
+    training_start = time.time()
+    best_val_acc = 0.0
+
+    info("\n" + "=" * 60)
+    info("  TRENING CNN (phsf – klasyfikacja znaków)")
+    info("=" * 60)
+    info(f"  Urządzenie: {GLOBAL_DEVICE}")
+    info(f"  Batch size: {batch_size}")
+    info(f"  Epoki do wykonania: {epochs}")
+    info(f"  Zakres epok: {GLOBAL_EPOCH + 1} -> {target_epoch}")
+    info("=" * 60 + "\n")
+
+    for epoch in range(GLOBAL_EPOCH, target_epoch):
+        epoch_start = time.time()
+        GLOBAL_MODEL.train()
+        running_loss = 0.0
+        correct = 0
+        total = 0
+
+        for step, (images, labels) in enumerate(train_loader, start=1):
+            images = images.to(GLOBAL_DEVICE)
+            labels = labels.to(GLOBAL_DEVICE)
+
+            GLOBAL_OPTIMIZER.zero_grad(set_to_none=True)
+            outputs = GLOBAL_MODEL(images)
+            loss = GLOBAL_CRITERION(outputs, labels)
+            loss.backward()
+            GLOBAL_OPTIMIZER.step()
+
+            running_loss += loss.item()
+            preds = outputs.argmax(1)
+            correct += (preds == labels).sum().item()
+            total += labels.size(0)
+
+            if step % 50 == 0:
+                info(f"Epoch {epoch+1} Step {step} Loss: {loss.item():.4f}")
+
+        train_acc = correct / total * 100
+
+        GLOBAL_MODEL.eval()
+        val_correct = 0
+        val_total = 0
+        val_loss = 0.0
+        with torch.inference_mode():
+            for images, labels in val_loader:
+                images = images.to(GLOBAL_DEVICE)
+                labels = labels.to(GLOBAL_DEVICE)
+                outputs = GLOBAL_MODEL(images)
+                loss = GLOBAL_CRITERION(outputs, labels)
+                val_loss += loss.item()
+                preds = outputs.argmax(1)
+                val_correct += (preds == labels).sum().item()
+                val_total += labels.size(0)
+
+        val_acc = val_correct / val_total * 100
+        val_loss /= len(val_loader)
+        epoch_time = time.time() - epoch_start
+        info(f"Epoch {epoch+1} | train_acc={train_acc:.2f}% | val_acc={val_acc:.2f}% | val_loss={val_loss:.4f} | time={epoch_time:.1f}s")
+
+        GLOBAL_EPOCH = epoch + 1
+        GLOBAL_VAL_ACCURACY = val_acc
+
+        if val_acc > best_val_acc:
+            best_val_acc = val_acc
+            capture_best_model(info, path=effective_save_path)
+
+    total_training_time = time.time() - training_start
+
+    info("\n" + "=" * 60)
+    info("  PODSUMOWANIE TRENINGU CNN")
+    info("=" * 60)
+    info(f"  Zakończona epoka: {GLOBAL_EPOCH}")
+    info(f"  Najlepsza dokładność (val): {best_val_acc:.2f}%")
+    info(f"  Całkowity czas treningu: {total_training_time:.1f}s")
+    info("=" * 60)
+
+
 def multi_train(
     preset_names: Optional[List[str]] = None,
     epochs: int = 10,

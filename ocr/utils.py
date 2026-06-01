@@ -117,6 +117,21 @@ def get_inf_transform(args) -> transforms.Compose:
     return transforms.Compose(pack)
 
 
+def get_cnn_train_transform(denoise_prob: float = 0.3) -> transforms.Compose:
+    """
+    Transformacja do treningu CNN na pojedynczych znakach (phsf).
+    Wyjście: tensor (1, 32, 32) – stały rozmiar kwadratowy.
+    """
+    return transforms.Compose([
+        transforms.RandomRotation(5),
+        RandomDenoise(p=denoise_prob),
+        transforms.Grayscale(num_output_channels=1),
+        transforms.Resize((32, 32)),
+        transforms.ToTensor(),
+        transforms.Normalize((0.5,), (0.5,)),
+    ])
+
+
 def get_train_transform(args=None, denoise_prob: float = 0.3, max_padding: int = 20) -> transforms.Compose:
     """
     Zwraca pipeline transformacji obrazu do trenowania modelu (z augmentacją danych).
@@ -664,14 +679,14 @@ def save_aligned_boxes_jsonl(
 
     os.makedirs(saveto_dir, exist_ok=True)
 
-    img = cv2.imread(page_path)
-    img_h, img_w = img.shape[:2]
-
+    img = cv2.imdecode(np.fromfile(page_path, dtype=np.uint8), cv2.IMREAD_COLOR)
     if img is None:
         raise ValueError(f"Nie udało się wczytać obrazu: {page_path}")
 
+    img_h, img_w = img.shape[:2]
+
     edited_boxes = load_boxes_from_annotations(box_dir, img_w, img_h)
-    
+
     transcript_words = load_transcription(trans_path)
 
 
@@ -744,6 +759,84 @@ def save_aligned_boxes_jsonl(
         f"| słów={len(transcript_words)} "
         f"| zapisano={total}"
     )
+
+    return jsonl_path
+
+
+def convert_aligned_to_ttdata(
+    aligned_jsonl_path: str,
+    page_image_path: str,
+    ttdata_dir: str = "ttData",
+) -> str:
+    """
+    Konwertuje aligned_jsonl na strukturę ttData gotową do treningu.
+
+    Tworzy ttData/{name}/ z:
+      - source_image.jpg
+      - word_000.png, word_001.png, ... (wycinki słów)
+      - boxes.jsonl (format kompatybilny z load_all_datasets)
+
+    Pomija wpisy bez boxa lub bez tekstu.
+    Nadpisuje istniejący folder.
+    """
+    entries = load_aligned_jsonl(aligned_jsonl_path)
+
+    File, _ = os.path.splitext(os.path.basename(page_image_path))
+    out_dir = os.path.join(ttdata_dir, File)
+    os.makedirs(out_dir, exist_ok=True)
+
+    img = cv2.imdecode(np.fromfile(page_image_path, dtype=np.uint8), cv2.IMREAD_COLOR)
+    if img is None:
+        raise ValueError(f"Nie udało się wczytać obrazu: {page_image_path}")
+
+    dest_image = os.path.join(out_dir, "source_image.jpg")
+    cv2.imwrite(dest_image, img)
+    abs_source = os.path.relpath(dest_image, start=os.getcwd())
+
+    img_h, img_w = img.shape[:2]
+    jsonl_path = os.path.join(out_dir, "boxes.jsonl")
+
+    written = 0
+    with open(jsonl_path, "w", encoding="utf-8") as f:
+        for entry in entries:
+            box = entry.get("box")
+            text = entry.get("text", "").strip()
+
+            if not box or not text:
+                continue
+
+            word_id = entry.get("id", f"word_{written:03d}")
+            crop_filename = f"{word_id}.png"
+            crop_path = os.path.join(out_dir, crop_filename)
+
+            x1, y1, x2, y2 = [int(v) for v in box]
+            x1 = max(0, x1)
+            y1 = max(0, y1)
+            x2 = min(img_w, x2)
+            y2 = min(img_h, y2)
+
+            if x2 > x1 and y2 > y1:
+                cv2.imwrite(crop_path, img[y1:y2, x1:x2])
+            else:
+                continue
+
+            record = {
+                "id": written,
+                "crop_file": crop_filename,
+                "bbox_xyxy": [x1, y1, x2, y2],
+                "text": text,
+                "suggested_text": text,
+                "prediction_score": 0.0,
+                "text_override": True,
+                "prob": 1.0,
+                "source_image": abs_source,
+            }
+            f.write(json.dumps(record, ensure_ascii=False) + "\n")
+            written += 1
+
+    print(f"[ttData] {out_dir}  ({written} wpisów)")
+    return out_dir
+
 
 def load_aligned_jsonl(jsonl_path):
     """

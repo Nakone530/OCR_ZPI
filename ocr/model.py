@@ -137,7 +137,7 @@ class AuxModel(nn.Module):
 ##            nn.Conv2d(64, 128, kernel_size=3, padding=1),
 ##            nn.BatchNorm2d(128),
 ##            nn.ReLU(inplace=True),
-##            
+##
 ##            nn.Conv2d(128, 128, kernel_size=3, padding=1),
 ##            nn.BatchNorm2d(128),
 ##            nn.ReLU(inplace=True),
@@ -148,7 +148,7 @@ class AuxModel(nn.Module):
 ##            nn.BatchNorm2d(256),
 ##            nn.ReLU(inplace=True),
 ##        )
-##        
+##
 ##        self.classifier = nn.Sequential(
 ##            nn.Flatten(),
 ##            nn.Linear(256 * 3 * 3, 512),
@@ -161,3 +161,48 @@ class AuxModel(nn.Module):
 ##        x = self.features(x)
 ##        x = self.classifier(x)
 ##        return x
+
+
+class CNNClassifier(nn.Module):
+    """Czysty CNN do klasyfikacji pojedynczych znaków (bez LSTM)."""
+
+    def __init__(self, num_classes=64):
+        super().__init__()
+
+        self.features = nn.Sequential(
+            nn.Conv2d(1, 32, kernel_size=3, padding=1),
+            nn.BatchNorm2d(32),
+            nn.ReLU(inplace=False),
+            nn.MaxPool2d(2, 2),
+
+            nn.Conv2d(32, 64, kernel_size=3, padding=1),
+            nn.BatchNorm2d(64),
+            nn.ReLU(inplace=False),
+            nn.MaxPool2d(2, 2),
+
+            nn.Conv2d(64, 128, kernel_size=3, padding=1),
+            nn.BatchNorm2d(128),
+            nn.ReLU(inplace=False),
+            nn.Conv2d(128, 128, kernel_size=3, padding=1),
+            nn.BatchNorm2d(128),
+            nn.ReLU(inplace=False),
+            nn.MaxPool2d(2, 2),
+
+            nn.Conv2d(128, 256, kernel_size=3, padding=1),
+            nn.BatchNorm2d(256),
+            nn.ReLU(inplace=False),
+        )
+
+        self.classifier = nn.Sequential(
+            nn.AdaptiveAvgPool2d((4, 4)),
+            nn.Flatten(),
+            nn.Linear(256 * 4 * 4, 512),
+            nn.ReLU(inplace=False),
+            nn.Dropout(0.5),
+            nn.Linear(512, num_classes),
+        )
+
+    def forward(self, x):
+        x = self.features(x)
+        x = self.classifier(x)
+        return x

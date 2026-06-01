@@ -6,6 +6,163 @@ import shutil
 import cv2
 import numpy as np
 
+CONTROL_WINDOW = "controls"
+PREVIEW_WINDOW = "preview"
+DEBUG_DEFAULTS = {
+    "dilate_x": 10,
+    "dilate_y": 2,
+    "split_amp": 0.35,
+    "overlap": 0.45,
+    "pad_top": 2,
+}
+
+def interactive_debug(image):
+
+    setup_debug_ui()
+
+    cv2.namedWindow(
+        PREVIEW_WINDOW,
+        cv2.WINDOW_NORMAL,
+    )
+
+    while True:
+
+        params = get_debug_params()
+
+        boxes = detect_word_boxes_auto(
+            image,
+            params,
+        )
+
+        canvas = image.copy()
+
+        if canvas.ndim == 2:
+            canvas = cv2.cvtColor(
+                canvas,
+                cv2.COLOR_GRAY2BGR,
+            )
+
+        for item in boxes:
+
+            box = item["box"]
+
+            x1, y1, x2, y2 = box
+
+            cv2.rectangle(
+                canvas,
+                (x1, y1),
+                (x2, y2),
+                (0, 255, 0),
+                2,
+            )
+
+        cv2.imshow(
+            PREVIEW_WINDOW,
+            canvas,
+        )
+
+        key = cv2.waitKey(20)
+
+        # ESC
+        if key == 27:
+            break
+
+        # s = print params
+        if key == ord("s"):
+            print(params)
+
+    cv2.destroyAllWindows()
+
+def nothing(_):
+    pass
+
+
+def setup_debug_ui():
+    cv2.namedWindow(CONTROL_WINDOW, cv2.WINDOW_NORMAL)
+
+    # morphology
+    cv2.createTrackbar(
+        "dilate_x",
+        CONTROL_WINDOW,
+        10,
+        40,
+        nothing,
+    )
+
+    cv2.createTrackbar(
+        "dilate_y",
+        CONTROL_WINDOW,
+        2,
+        20,
+        nothing,
+    )
+
+    # split threshold
+    cv2.createTrackbar(
+        "split_amp",
+        CONTROL_WINDOW,
+        35,
+        100,
+        nothing,
+    )
+
+    # overlap merge
+    cv2.createTrackbar(
+        "overlap",
+        CONTROL_WINDOW,
+        45,
+        100,
+        nothing,
+    )
+
+    # vertical padding
+    cv2.createTrackbar(
+        "pad_top",
+        CONTROL_WINDOW,
+        10,
+        50,
+        nothing,
+    )
+
+
+def get_debug_params():
+
+    return {
+        "dilate_x":
+            cv2.getTrackbarPos(
+                "dilate_x",
+                CONTROL_WINDOW,
+            ),
+
+        "dilate_y":
+            max(
+                1,
+                cv2.getTrackbarPos(
+                    "dilate_y",
+                    CONTROL_WINDOW,
+                ),
+            ),
+
+        "split_amp":
+            cv2.getTrackbarPos(
+                "split_amp",
+                CONTROL_WINDOW,
+            ) / 100.0,
+
+        "overlap":
+            cv2.getTrackbarPos(
+                "overlap",
+                CONTROL_WINDOW,
+            ) / 100.0,
+
+        "pad_top":
+            cv2.getTrackbarPos(
+                "pad_top",
+                CONTROL_WINDOW,
+            ),
+    }
+
+
 def box_intersection(a, b):
     ax, ay, aw, ah = a
     bx, by, bw, bh = b
@@ -60,13 +217,18 @@ def merge_two_boxes(a, b):
 
 def merge_overlapping_boxes(
     boxes,
-    overlap_threshold=0.35,
+    params=None,
 ):
     """
     Łączy boxy które pokrywają się
     co najmniej overlap_threshold
     względem mniejszego boxa.
     """
+
+    if params is None:
+        params = get_debug_params()
+
+    overlap_threshold = params["overlap"]
 
     boxes = list(boxes)
 
@@ -760,7 +922,11 @@ def normalize_by_stroke_width(
 
     return resized, scale
 
-def detect_word_boxes_auto(image):
+def detect_word_boxes_auto(image, params=None):
+
+    if params is None:
+        params = get_debug_params()
+    
     if image is None or image.size == 0:
         return []
 
@@ -776,7 +942,7 @@ def detect_word_boxes_auto(image):
         cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU,
     )
 
-    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (10, 2))
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (params["dilate_x"], params["dilate_y"],))
     dilated = cv2.dilate(thresh, kernel, iterations=1)
 
     contours, _ = cv2.findContours(
@@ -806,11 +972,7 @@ def detect_word_boxes_auto(image):
     words = []
     for cnt in contours:
         x, y, w, h = cv2.boundingRect(cnt)
-        pad_y_top = max(1, int(0.1 * median_height))
-        pad_y_bottom = max(1, int(0.05 * median_height))
 
-        y = max(0, y - pad_y_top)
-        h = min(gray.shape[0] - y, h + pad_y_top + pad_y_bottom)
         
         if 5 + 0.2 * median_height <= h <= 3.0 * median_height:
             if w > 5:
@@ -1177,7 +1339,8 @@ def edit_boxes_interactive(image, boxes):
 
     window_name = "Korekta bounding boxow"
     cv2.namedWindow(window_name, cv2.WINDOW_AUTOSIZE)
-
+    setup_debug_ui()
+    
     def get_display_image_and_scale():
         display_scale = preview_scale * state["zoom"]
         base = preview_original if state["view_mode"] == "original" else preview_preprocessed
@@ -1306,9 +1469,11 @@ def edit_boxes_interactive(image, boxes):
 
         if key in (13, 10):
             cv2.destroyWindow(window_name)
+            cv2.destroyWindow(CONTROL_WINDOW)
             return boxes
         if key == ord("q"):
             cv2.destroyWindow(window_name)
+            cv2.destroyWindow(CONTROL_WINDOW)
             return None
 
         if key in (ord("n"), 9) and boxes:
@@ -1321,24 +1486,44 @@ def edit_boxes_interactive(image, boxes):
             continue
 
         if key == ord("a"):
+
             print("\nPonowna automatyczna detekcja boxow...")
+
+            params = get_debug_params()
+
             edited_boxes = []
+
             scaled, scale = normalize_by_stroke_width(image)
-            auto_boxes = detect_word_boxes_auto(scaled)
+
+            auto_boxes = detect_word_boxes_auto(
+                scaled,
+                params=params,
+            )
+
             for item in auto_boxes:
+
                 item["box"] = scale_to_original(
                     item["box"],
                     scale,
                 )
+
                 edited_boxes.append(item)
+
             if edited_boxes:
                 boxes.clear()
-                boxes.extend(auto_boxes)
-                selected_idx = 0
+                boxes.extend(edited_boxes)
+
                 state["selected_idx"] = 0
-                print(f"Wykryto {len(boxes)} boxow automatycznie.")
+
+                print(
+                    f"Wykryto {len(boxes)} boxow "
+                    f"(dilate_x={params['dilate_x']}, "
+                    f"dilate_y={params['dilate_y']})"
+                )
+
             else:
                 print("Nie wykryto boxow - pozostawiono obecne.")
+
             continue
 
         if key == ord("v"):
@@ -1471,7 +1656,6 @@ def process_letter(image_path, base_dir="inference", enable_box_edit=True, non_i
     if not os.path.exists(image_path):
         print(f"Błąd: Plik '{image_path}' nie istnieje.")
         return None
-
     letter_name = os.path.splitext(os.path.basename(image_path))[0]
 
 
@@ -1613,3 +1797,5 @@ def process_letter(image_path, base_dir="inference", enable_box_edit=True, non_i
 
     print(f"\nGotowe! Wszystkie wycinki z '{letter_name}' znajdziesz w: {output_dir}")
     return output_dir
+
+

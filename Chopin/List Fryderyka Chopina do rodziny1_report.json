@@ -1,0 +1,72 @@
+{
+  "image_path": "/home/freblu/Documents/Programowanie/Studia/OCR_ZPI/Czytnie /Chopin/List Fryderyka Chopina do rodziny1.jpg",
+  "image_shape": [
+    1570,
+    2500
+  ],
+  "grayscale": {
+    "method": "cv2.COLOR_BGR2GRAY"
+  },
+  "illumination_correction": {
+    "method": "divide_by_gaussian",
+    "ksize": 51
+  },
+  "binarization_global": {
+    "method": "otsu",
+    "type": "THRESH_BINARY_INV + THRESH_OTSU"
+  },
+  "color_blocks": {
+    "space": "LAB",
+    "min_area": 600,
+    "chroma_thresh": 6.0,
+    "morph_kernel": [
+      5,
+      5
+    ],
+    "morph_open_iter": 1,
+    "morph_close_iter": 2,
+    "count": 1
+  },
+  "binarization_color_blocks": {
+    "method": "otsu_per_block",
+    "thresholds": [
+      {
+        "bbox": [
+          0,
+          0,
+          2500,
+          1570
+        ],
+        "threshold": 216.0
+      }
+    ]
+  },
+  "morphology": {
+    "dilate_kernel": [
+      10,
+      2
+    ],
+    "dilate_iterations": 1
+  },
+  "connected_components": {
+    "min_area": 20,
+    "median_height": 14,
+    "median_width": 13,
+    "mean_height": 17.633604104318085,
+    "mean_width": 18.205215904232578,
+    "count": 2339
+  },
+  "letter_size": {
+    "avg_height": 17.633604104318085,
+    "avg_width": 18.205215904232578,
+    "median_height": 14,
+    "median_width": 13,
+    "count": 2339
+  },
+  "line_filtering": {
+    "min_w": 5,
+    "min_h_base": 5,
+    "min_h_ratio": 0.2,
+    "max_h_ratio": 3.0
+  }
+}

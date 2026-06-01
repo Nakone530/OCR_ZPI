@@ -356,120 +356,270 @@ def main(args=None, info=None, buffor=None):
             info(f"Adnotacje zapisane w: {output_dir}")
 
     elif args.page:
-        _require_file(args.page, info)
-        info(f"\nUruchamianie adnotacji : {args.page}")
         from ocr.bbox_annotator import process_letter
 
-        output_dir = process_letter(
-            image_path=args.page,
-            base_dir=args.annotation_dir,
-            enable_box_edit=not args.no_edit,
-            non_interactive=args.non_interactive,
+        def iter_files(root, exts):
+            if os.path.isfile(root):
+                yield root
+                return
+
+            for base, _, files in os.walk(root):
+                for f in sorted(files):
+                    if os.path.splitext(f)[1].lower() in exts:
+                        yield os.path.join(base, f)
+
+        def find_matching_trans(page_path, trans_root):
+            if not trans_root:
+                return None
+
+            if os.path.isfile(trans_root):
+                return trans_root
+
+            page_name, _ = os.path.splitext(
+                os.path.basename(page_path)
+            )
+
+            candidates = list(
+                iter_files(
+                    trans_root,
+                    {".txt", ".json", ".jsonl"}
+                )
+            )
+
+            # idealne dopasowanie nazwy
+            for c in candidates:
+                n, _ = os.path.splitext(
+                    os.path.basename(c)
+                )
+                if n == page_name:
+                    return c
+
+            # brak matcha
+            return None
+
+        image_paths = list(
+            iter_files(
+                args.page,
+                {".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff"},
+            )
         )
-        if output_dir:
-            info(f"Adnotacje zapisane w: {output_dir}")
 
-        results = process_folder(output_dir, args, model_path, device, info)
-        
-        # Przygotuj dane do wyświetlania w rozmieszczeniu
-        table_rows = []
-        layout_words = []  # słowa z informacją o linii
-        
-        for r in results:
-            if "error" in r:
+        for page_path in image_paths:
+            _require_file(page_path, info)
+
+            info(f"\nUruchamianie adnotacji : {page_path}")
+
+            output_dir = process_letter(
+                image_path=page_path,
+                base_dir=args.annotation_dir,
+                enable_box_edit=not args.no_edit,
+                non_interactive=args.non_interactive,
+            )
+
+            if output_dir:
+                info(f"Adnotacje zapisane w: {output_dir}")
+
+            results = process_folder(
+                output_dir,
+                args,
+                model_path,
+                device,
+                info,
+            )
+
+            table_rows = []
+            layout_words = []
+
+            for r in results:
+                if "error" in r:
+                    table_rows.append({
+                        "key": None,
+                        "file": r["file"],
+                        "text": f"ERROR: {r['error']}",
+                        "confidence": None
+                    })
+                    continue
+
+                filename = os.path.basename(r["file"])
+                name, _ = os.path.splitext(filename)
+
                 table_rows.append({
-                    "key": None,
+                    "key": name,
                     "file": r["file"],
-                    "text": f"ERROR: {r['error']}",
-                    "confidence": None
+                    "text": r["text"],
+                    "confidence": r["confidence"],
+                    "letter_vectors": r.get(
+                        "letter_vectors",
+                        [],
+                    ),
                 })
-                continue
 
-            filename = os.path.basename(r["file"])      # word_061.png
-            name, _ = os.path.splitext(filename)        # word_061
+                layout_words.append({
+                    "text": r["text"],
+                    "confidence": r["confidence"],
+                    "bbox": r.get("bbox"),
+                })
 
-            table_rows.append({
-                "key": name,                            # klucz sortowania
-                "file": r["file"],
-                "text": r["text"],
-                "confidence": r["confidence"],
-                "letter_vectors": r.get("letter_vectors", []),
-            })
-            
-            # Dodaj do listy dla wyświetlania rozmieszczenia
-            layout_words.append({
-                "text": r["text"],
-                "confidence": r["confidence"],
-                "bbox": r.get("bbox")
-            })
-        
-        table_rows.sort(key=lambda r: r["key"] if r["key"] else "")
-        
-        # Wyświetl tabelę
-        info(f"\n{'NAME':<12} {'TEXT':<20} {'CONF':<10} {'AUTOCORRECT':<20}")
-        info("-" * 60)
-
-        for r in table_rows:
-            conf = r['confidence'] if r['confidence'] is not None else 50.0
-            autocorTXT = DictCorrect(r['text'], conf, letter_vectors=r.get('letter_vectors'))
-            if r['confidence'] is None:
-                info(f"{str(r['key']) if r['key'] else '-':<12} {r['text']:<20} {'-':<10} {autocorTXT:<20}")
-            else:
-                info(f"{r['key']:<12} {r['text']:<20} {r['confidence']/100:<10.2%} {autocorTXT:<20}")
-
-
-        # Wyświetl w rozmieszczeniu
-        #display_text_layout(layout_words, info)
-        if args.json:
-            saved_copy_path = save_image_to_today_folder(args.page, info)
-            payload = build_page_result_json(
-                image_path=args.page,
-                saved_copy_path=saved_copy_path,
-                rows=table_rows,
-                device=str(device),
-            )
-            jsFile, _ = os.path.splitext(os.path.basename(saved_copy_path))
-            jsFile = jsFile + ".json"
-            jsPath = os.path.join(os.path.dirname(saved_copy_path), jsFile)
-            write_json(jsPath, payload, pretty=args.json_pretty)
-
-        if args.trans:
-            File, _ = os.path.splitext(os.path.basename(args.page))
-            saveto = os.path.join("tData", File)
-            saveto = os.path.join("data", saveto)
-            aligned_path = save_aligned_boxes_jsonl(
-                page_path=args.page,
-                trans_path=args.trans,
-                saveto_dir=saveto,
-                box_dir=output_dir,
-            )
-            convert_aligned_to_ttdata(aligned_path, args.page)
-        elif args.aligned:
-            img = cv2.imread(args.page)
-
-            entries = load_aligned_jsonl(
-                args.aligned
+            table_rows.sort(
+                key=lambda r: r["key"] if r["key"] else ""
             )
 
-            editor_boxes = aligned_to_editor_boxes(
-                entries
+            info(
+                f"\n{'NAME':<12} "
+                f"{'TEXT':<20} "
+                f"{'CONF':<10} "
+                f"{'AUTOCORRECT':<20}"
             )
+            info("-" * 60)
 
-            # TWOJA funkcja:
-            edited_boxes = edit_boxes_interactive(
-                img,
-                editor_boxes,
-            )
+            for r in table_rows:
+                conf = (
+                    r["confidence"]
+                    if r["confidence"] is not None
+                    else 50.0
+                )
 
-            updated = merge_editor_changes(
-                entries,
-                edited_boxes,
-            )
+                autocorTXT = DictCorrect(
+                    r["text"],
+                    conf,
+                    letter_vectors=r.get(
+                        "letter_vectors"
+                    ),
+                )
 
-            save_aligned_jsonl(
-                args.aligned,
-                updated,
-            )
+                if r["confidence"] is None:
+                    info(
+                        f"{str(r['key']) if r['key'] else '-':<12} "
+                        f"{r['text']:<20} "
+                        f"{'-':<10} "
+                        f"{autocorTXT:<20}"
+                    )
+                else:
+                    info(
+                        f"{r['key']:<12} "
+                        f"{r['text']:<20} "
+                        f"{r['confidence']/100:<10.2%} "
+                        f"{autocorTXT:<20}"
+                    )
+
+            # JSON
+            if args.json:
+                saved_copy_path = save_image_to_today_folder(
+                    page_path,
+                    info,
+                )
+
+                payload = build_page_result_json(
+                    image_path=page_path,
+                    saved_copy_path=saved_copy_path,
+                    rows=table_rows,
+                    device=str(device),
+                )
+
+                jsFile, _ = os.path.splitext(
+                    os.path.basename(saved_copy_path)
+                )
+                jsPath = os.path.join(
+                    os.path.dirname(saved_copy_path),
+                    jsFile + ".json",
+                )
+
+                write_json(
+                    jsPath,
+                    payload,
+                    pretty=args.json_pretty,
+                )
+
+            # ALIGN
+            if args.trans:
+                trans_path = find_matching_trans(
+                    page_path,
+                    args.trans,
+                )
+
+                page_name, _ = os.path.splitext(
+                    os.path.basename(page_path)
+                )
+
+                if trans_path:
+                    trans_name, _ = os.path.splitext(
+                        os.path.basename(trans_path)
+                    )
+
+                    if trans_name != page_name:
+                        info(
+                            "\nNazwy plików się nie zgadzają:"
+                        )
+                        info(
+                            f"page : {page_name}"
+                        )
+                        info(
+                            f"trans: {trans_name}"
+                        )
+
+                        reply = input(
+                            "ENTER = kontynuuj / "
+                            "podaj inną ścieżkę trans: "
+                        ).strip()
+
+                        if reply:
+                            trans_path = reply
+
+                else:
+                    reply = input(
+                        f"\nBrak trans dla {page_name}.\n"
+                        "Podaj ścieżkę lub ENTER by pominąć: "
+                    ).strip()
+
+                    if not reply:
+                        trans_path = None
+                    else:
+                        trans_path = reply
+
+                if trans_path:
+                    saveto = os.path.join(
+                        "data",
+                        "tData",
+                        page_name,
+                    )
+
+                    aligned_path = save_aligned_boxes_jsonl(
+                        page_path=page_path,
+                        trans_path=trans_path,
+                        saveto_dir=saveto,
+                        box_dir=output_dir,
+                    )
+
+                    convert_aligned_to_ttdata(
+                        aligned_path,
+                        page_path,
+                    )
+                elif args.aligned:
+                    img = cv2.imread(args.page)
+
+                    entries = load_aligned_jsonl(
+                        args.aligned
+                    )
+
+                    editor_boxes = aligned_to_editor_boxes(
+                        entries
+                    )
+
+                    # TWOJA funkcja:
+                    edited_boxes = edit_boxes_interactive(
+                        img,
+                        editor_boxes,
+                    )
+
+                    updated = merge_editor_changes(
+                        entries,
+                        edited_boxes,
+                    )
+
+                    save_aligned_jsonl(
+                        args.aligned,
+                        updated,
+                    )
             
     elif args.folder:
         results = process_folder(args.folder, args, model_path, device, info)

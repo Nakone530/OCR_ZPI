@@ -21,7 +21,7 @@ import torch
 from ocr.config import MODEL_PATH, OCR_MODEL_PATH
 from ocr.inference import run_ensemble_generation, compute_accuracy, test_models, test_cache_models, get_active_chars, load_model, predict_image, predict_letter, predict_segments, predict_word, process_folder
 from ocr.output import OCRResult, create_output_handler
-from ocr.utils import save_aligned_jsonl, merge_editor_changes, aligned_to_editor_boxes, load_aligned_jsonl, save_aligned_boxes_jsonl, save_image_to_today_folder, DictCorrect, list_models, generate_model_ensembles, load_transcription, save_results_csv
+from ocr.utils import save_aligned_jsonl, merge_editor_changes, aligned_to_editor_boxes, load_aligned_jsonl, save_aligned_boxes_jsonl, convert_aligned_to_ttdata, save_image_to_today_folder, DictCorrect, list_models, generate_model_ensembles, load_transcription, save_results_csv
 from ocr.trainer import train_model, infinite_train, multi_train, TRAINING_PRESETS, get_preset_names
 from ocr.json_output import (
     build_image_result_json,
@@ -426,12 +426,13 @@ def main(args=None, info=None, buffor=None):
             write_json(jsPath, payload, pretty=args.json_pretty)
 
         if args.trans:
-            save_aligned_boxes_jsonl(
+            aligned_path = save_aligned_boxes_jsonl(
                 page_path=args.page,
                 trans_path=args.trans,
                 saveto_dir="aligned_jsonl",
                 box_dir=output_dir,
             )
+            convert_aligned_to_ttdata(aligned_path, args.page)
         elif args.aligned:
             img = cv2.imread(args.page)
 

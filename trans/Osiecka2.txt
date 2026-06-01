@@ -1,0 +1,9 @@
+word_000 Piosenki
+word_001 w
+word_002 dużych
+word_003 słonecznych
+word_004 kapeluszach
+word_005 po
+word_006 śniadaniu
+word_007 z
+word_008 nadzieją

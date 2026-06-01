@@ -1,0 +1,11 @@
+word_000 Trochę
+word_001 poważniejsze
+word_002 kawałki
+word_003 Zbyszek
+word_004 W
+word_005 tym
+word_006 nie
+word_007 ma
+word_008 żadnej
+word_009 chronologii
+word_010 rozumiesz

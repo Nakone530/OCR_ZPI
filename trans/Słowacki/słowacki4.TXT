@@ -1,13 +1,64 @@
-O zachodzie słońca na morzu.
-Smutno mi Boże! Dla mnie na zachodzie
-Rozlałeś tęczę blasków promienistą
-Przedemną gasisz w szafirowej wodzie
-Gwiazdę ognistą —
-Choć mi tak niebo mi ty złocisz i morze
-Smutno mi Boże!
-Jako puste kłosy z podniesioną pochyloną głową
-Stoją rozkoszy próżen i dosytu
-Dla obcych ludzi mam twarz jednakową
-Ciszę błękitu
-Ale przed Tobą głąb serca otworzę
-Smutno mi Boże!
+word_000 O
+word_001 zachodzie
+word_002 słońca
+word_003 na
+word_004 morzu
+word_005 Smutno
+word_006 mi
+word_007 Boże
+word_008 Dla
+word_009 mnie
+word_010 na
+word_011 zachodzie
+word_012 Rozlałeś
+word_013 tęczę
+word_014 blasków
+word_015 promienistą
+word_016 Przedemną
+word_017 gasisz
+word_018 w
+word_019 szafirowej
+word_020 wodzie
+word_021 Gwiazdę
+word_022 ognistą
+word_023 Choć
+word_024 mi
+word_025 tak
+word_026 niebo
+word_027 mi
+word_028 ty
+word_029 złocisz
+word_030 i
+word_031 morze
+word_032 Smutno
+word_033 mi
+word_034 Boże
+word_035 Jako
+word_036 puste
+word_037 kłosy
+word_038 z
+word_039 podniesioną
+word_040 pochyloną
+word_041 głową
+word_042 Stoją
+word_043 rozkoszy
+word_044 próżen
+word_045 i
+word_046 dosytu
+word_047 Dla
+word_048 obcych
+word_049 ludzi
+word_050 mam
+word_051 twarz
+word_052 jednakową
+word_053 Ciszę
+word_054 błękitu
+word_055 Ale
+word_056 przed
+word_057 Tobą
+word_058 głąb
+word_059 serca
+word_060 otworzę
+word_061 Smutno
+word_062 mi
+word_063 Boże

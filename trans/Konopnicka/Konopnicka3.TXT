@@ -1,7 +1,28 @@
-Szanowny Redaktorze.
-Uprzejmie proszę o pomieszczenie
-w Piśmie swojem załączonych drugostronnie
-słów kilku. O mnie inne pisma
-też je powtórzyć zechcą.
-Marya Konopnicka
-d. 31/X 1902 r.
+word_000 Szanowny
+word_001 Redaktorze
+word_002 Uprzejmie
+word_003 proszę
+word_004 o
+word_005 pomieszczenie
+word_006 w
+word_007 Piśmie
+word_008 swojem
+word_009 załączonych
+word_010 drugostronnie
+word_011 słów
+word_012 kilku
+word_013 O
+word_014 mnie
+word_015 inne
+word_016 pisma
+word_017 też
+word_018 je
+word_019 powtórzyć
+word_020 zechcą
+word_021 Marya
+word_022 Konopnicka
+word_023 d
+word_024 31
+word_025 X
+word_026 1902
+word_027 r

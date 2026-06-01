@@ -1,7 +1,37 @@
-Napierski” powstał z wiary i uczuć,
-które w swej szczerej, prawda dzikiej,
-pełni i najszczerszych „majaczeniach”
-powołują życie – dla tego przyznaję
-z wyrazem najwyższej czci i szacunku
-i pychy – poczętemu dla bogów, tchnieniu
-co „marzyło o Bogu
+word_000 Napierski
+word_001 powstał
+word_002 z
+word_003 wiary
+word_004 i
+word_005 uczuć
+word_006 które
+word_007 w
+word_008 swej
+word_009 szczerej
+word_010 prawda
+word_011 dzikiej
+word_012 pełni
+word_013 i
+word_014 najszczerszych
+word_015 majaczeniach
+word_016 powołują
+word_017 życie
+word_018 dla
+word_019 tego
+word_020 przyznaję
+word_021 z
+word_022 wyrazem
+word_023 najwyższej
+word_024 czci
+word_025 i
+word_026 szacunku
+word_027 i
+word_028 pychy
+word_029 poczętemu
+word_030 dla
+word_031 bogów
+word_032 tchnieniu
+word_033 co
+word_034 marzyło
+word_035 o
+word_036 Bogu

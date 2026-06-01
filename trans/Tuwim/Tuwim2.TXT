@@ -1,17 +1,74 @@
-Prośba
-Jedni niech będą rycerze:
-Wojenne niech noszą szaty,
-Niech mają miecze, pancerze,
-... Inni niech będą jak kwiaty.
-Jedni niech lędą za czynem,
-Niech skronie laurami wiążą,
-Inni – kwitnącym jaśminem,
-Inni – niech cicho się sączą.
-Jedni niech walczą! Niechaj
-Gnieść im pomaga twa ręka.
-... Inni niech w żniwach idą w pole
-I nucą tęskne piosenki.
-Lecz tych i tamtych niech bierze
-Słońce dla ducha objęty!
-Choć jedni będą rycerze,
-A inni będą jak kwiaty.
+word_000 Prośba
+word_001 Jedni
+word_002 niech
+word_003 będą
+word_004 rycerze
+word_005 Wojenne
+word_006 niech
+word_007 noszą
+word_008 szaty
+word_009 Niech
+word_010 mają
+word_011 miecze
+word_012 pancerze
+word_013 Inni
+word_014 niech
+word_015 będą
+word_016 jak
+word_017 kwiaty
+word_018 Jedni
+word_019 niech
+word_020 lędą
+word_021 za
+word_022 czynem
+word_023 Niech
+word_024 skronie
+word_025 laurami
+word_026 wiążą
+word_027 Inni
+word_028 kwitnącym
+word_029 jaśminem
+word_030 Inni
+word_031 niech
+word_032 cicho
+word_033 się
+word_034 sączą
+word_035 Jedni
+word_036 niech
+word_037 walczą
+word_038 Niechaj
+word_039 Gnieść
+word_040 im
+word_041 pomaga
+word_042 twa
+word_043 ręka
+word_044 Inni
+word_045 niech
+word_046 w
+word_047 żniwach
+word_048 idą
+word_049 w
+word_050 pole
+word_051 I
+word_052 nucą
+word_053 tęskne
+word_054 piosenki
+word_055 Lecz
+word_056 tych
+word_057 i
+word_058 tamtych
+word_059 niech
+word_060 bierze
+word_061 Słońce
+word_062 dla
+word_063 ducha
+word_064 objęty
+word_065 Choć
+word_066 jedni
+word_067 będą
+word_068 rycerze
+word_069 A
+word_070 inni
+word_071 będą
+word_072 jak
+word_073 kwiaty

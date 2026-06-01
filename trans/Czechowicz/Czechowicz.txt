@@ -1,25 +1,188 @@
-Lublin 19 XII 1932
-
-Szanowny Panie!
-
-Ależ nic pierw się nie czyń znaczony. Milczenie moje było skutkiem
-nawału pracy. W ciągu kilku tygodni z nikim się zamieniłem listu, ale to
-nie ma żadnego głębszego znaczenia, szczególnie w naszej korespondencji.
-
-O zbiorku Pańskim bardzo proszę. Martwię się tylko na co go z Panem
-wymienić, bo nic ostatnio nie wydałem i nie tak prędko wydam. Chyba, że
-zechce Pan za wyjściem uiścić należność, wycofaną z handlu zbiorek
-Brzęczkowskiego, który obecnie Panu przesyłam. Ze swoich mam w domu
-tylko “Kamień”, ale ten już Pan otrzymał.
-
-Adresy Lublinian: J. Amsterdamska: Lublin Złota 2 W. Kasprzycki:
-Rejoniec pod Lublinem J. Łobodowski: Lublin Staszica 10 A. Madej —
-Wieniawska 6 m. 42 B. L. Michalski: Sienkiewicza koło Jarosława (leży
-tam do 1. II. 33 r.)
-
-Adresu Brzęczkowskiego nie jest mi znany, zresztą on „złamał pióro”,
-zapewne nie pisze. Listy do Amsterdamskiej, Madeja i Łobodowskiego może
-Pan zapakować w jedną kopertę i przesłać na mój adres. Drogi im na
-zebrania Związku Czechów jestem bardzo o ile już porusza się nowymi Pana
-praca, bo sądzę, że sporo zbiera materiału, rzecz posuwa się naprzód
-bodajby w rozbudowie koncepcji.
+word_000 Lublin
+word_001 19
+word_002 XII
+word_003 1932
+word_004 Szanowny
+word_005 Panie
+word_006 Ależ
+word_007 nic
+word_008 pierw
+word_009 się
+word_010 nie
+word_011 czyń
+word_012 znaczony
+word_013 Milczenie
+word_014 moje
+word_015 było
+word_016 skutkiem
+word_017 nawału
+word_018 pracy
+word_019 W
+word_020 ciągu
+word_021 kilku
+word_022 tygodni
+word_023 z
+word_024 nikim
+word_025 się
+word_026 zamieniłem
+word_027 listu
+word_028 ale
+word_029 to
+word_030 nie
+word_031 ma
+word_032 żadnego
+word_033 głębszego
+word_034 znaczenia
+word_035 szczególnie
+word_036 w
+word_037 naszej
+word_038 korespondencji
+word_039 O
+word_040 zbiorku
+word_041 Pańskim
+word_042 bardzo
+word_043 proszę
+word_044 Martwię
+word_045 się
+word_046 tylko
+word_047 na
+word_048 co
+word_049 go
+word_050 z
+word_051 Panem
+word_052 wymienić
+word_053 bo
+word_054 nic
+word_055 ostatnio
+word_056 nie
+word_057 wydałem
+word_058 i
+word_059 nie
+word_060 tak
+word_061 prędko
+word_062 wydam
+word_063 Chyba
+word_064 że
+word_065 zechce
+word_066 Pan
+word_067 za
+word_068 wyjściem
+word_069 uiścić
+word_070 należność
+word_071 wycofaną
+word_072 z
+word_073 handlu
+word_074 zbiorek
+word_075 Brzęczkowskiego
+word_076 który
+word_077 obecnie
+word_078 Panu
+word_079 przesyłam
+word_080 Ze
+word_081 swoich
+word_082 mam
+word_083 w
+word_084 domu
+word_085 tylko
+word_086 Kamień
+word_087 ale
+word_088 ten
+word_089 już
+word_090 Pan
+word_091 otrzymał
+word_092 Adresy
+word_093 Lublinian
+word_094 J
+word_095 Amsterdamska
+word_096 Lublin
+word_097 Złota
+word_098 2
+word_099 W
+word_100 Kasprzycki
+word_101 Rejoniec
+word_102 pod
+word_103 Lublinem
+word_104 J
+word_105 Łobodowski
+word_106 Lublin
+word_107 Staszica
+word_108 10
+word_109 A
+word_110 Madej
+word_111 Wieniawska
+word_112 6
+word_113 m
+word_114 42
+word_115 B
+word_116 L
+word_117 Michalski
+word_118 Sienkiewicza
+word_119 koło
+word_120 Jarosława
+word_121 leży
+word_122 tam
+word_123 do
+word_124 1
+word_125 II
+word_126 33
+word_127 r
+word_128 Adresu
+word_129 Brzęczkowskiego
+word_130 nie
+word_131 jest
+word_132 mi
+word_133 znany
+word_134 zresztą
+word_135 on
+word_136 złamał
+word_137 pióro
+word_138 zapewne
+word_139 nie
+word_140 pisze
+word_141 Listy
+word_142 do
+word_143 Amsterdamskiej
+word_144 Madeja
+word_145 i
+word_146 Łobodowskiego
+word_147 może
+word_148 Pan
+word_149 zapakować
+word_150 w
+word_151 jedną
+word_152 kopertę
+word_153 i
+word_154 przesłać
+word_155 na
+word_156 mój
+word_157 adres
+word_158 Drogi
+word_159 im
+word_160 na
+word_161 zebrania
+word_162 Związku
+word_163 Czechów
+word_164 jestem
+word_165 bardzo
+word_166 o
+word_167 ile
+word_168 już
+word_169 porusza
+word_170 się
+word_171 nowymi
+word_172 Pana
+word_173 praca
+word_174 bo
+word_175 sądzę
+word_176 że
+word_177 sporo
+word_178 zbiera
+word_179 materiału
+word_180 rzecz
+word_181 posuwa
+word_182 się
+word_183 naprzód
+word_184 bodajby
+word_185 w
+word_186 rozbudowie
+word_187 koncepcji

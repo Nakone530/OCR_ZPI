@@ -1,15 +1,36 @@
-Treść listu
-SŁAWOMIR MROŻEK
-5, AV. FRANCO-RUSSE
-75007 PARIS
-6. 05. 83
-TYGODNIK POWSZECHNY
-Red. JERZY TUROWICZ
-Drogi Panie,
-W załączeniu przesyłam cztery krótkie opowiadania:
-EPIDEMIA
-SEKRET
-HODOWLA
-KRAWIEC
-... oraz wiele serdecznych pozdrowień
-Sł. Mrożek
+word_000 Treść
+word_001 listu
+word_002 SŁAWOMIR
+word_003 MROŻEK
+word_004 5
+word_005 AV
+word_006 FRANCO
+word_007 RUSSE
+word_008 75007
+word_009 PARIS
+word_010 6
+word_011 05
+word_012 83
+word_013 TYGODNIK
+word_014 POWSZECHNY
+word_015 Red
+word_016 JERZY
+word_017 TUROWICZ
+word_018 Drogi
+word_019 Panie
+word_020 W
+word_021 załączeniu
+word_022 przesyłam
+word_023 cztery
+word_024 krótkie
+word_025 opowiadania
+word_026 EPIDEMIA
+word_027 SEKRET
+word_028 HODOWLA
+word_029 KRAWIEC
+word_030 oraz
+word_031 wiele
+word_032 serdecznych
+word_033 pozdrowień
+word_034 Sł
+word_035 Mrożek

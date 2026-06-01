@@ -1,19 +1,113 @@
-17. IX
-Moja bezbronna ojczyzna przyjmie cię najeźdźco
-A droga która Twą stopę dotknęła szybko
-się zassie nad piachem
-Drogi rzeki mosty latarnie mi obce to podopis
-Wierne sprzęty Twoich uśmiechów będę spalił dalej
-Wiedź Twoich wiedźm nieproszony gościu
-Ale synowie ziemi nocą się zgromadzą
-Smętnymi kordonami — Spiskową wolnością
-Będą ostrożnie owijali swoje mroczne dłonie
-Przysięgali na batok i na dwoje kołaczy
-A potem tak jak zawsze — Turyści i tułacze
-Malowani chłopcy bezsenni dowódcy
-plecaki pełne klęski pełne ryżu pola chwały
-Księżyc wiedzie za kordonem
-Moja bezbronna ojczyzna przyjmie cię najeźdźco
-i da ci sążeń ziemi pod wierzbą — i spokój
-By ci co po nas przyjdą uczyli się znowu
-najtrudniejszego kunsztu — odpuszczania win
+word_000 17
+word_001 IX
+word_002 Moja
+word_003 bezbronna
+word_004 ojczyzna
+word_005 przyjmie
+word_006 cię
+word_007 najeźdźco
+word_008 A
+word_009 droga
+word_010 która
+word_011 Twą
+word_012 stopę
+word_013 dotknęła
+word_014 szybko
+word_015 się
+word_016 zassie
+word_017 nad
+word_018 piachem
+word_019 Drogi
+word_020 rzeki
+word_021 mosty
+word_022 latarnie
+word_023 mi
+word_024 obce
+word_025 to
+word_026 podopis
+word_027 Wierne
+word_028 sprzęty
+word_029 Twoich
+word_030 uśmiechów
+word_031 będę
+word_032 spalił
+word_033 dalej
+word_034 Wiedź
+word_035 Twoich
+word_036 wiedźm
+word_037 nieproszony
+word_038 gościu
+word_039 Ale
+word_040 synowie
+word_041 ziemi
+word_042 nocą
+word_043 się
+word_044 zgromadzą
+word_045 Smętnymi
+word_046 kordonami
+word_047 Spiskową
+word_048 wolnością
+word_049 Będą
+word_050 ostrożnie
+word_051 owijali
+word_052 swoje
+word_053 mroczne
+word_054 dłonie
+word_055 Przysięgali
+word_056 na
+word_057 batok
+word_058 i
+word_059 na
+word_060 dwoje
+word_061 kołaczy
+word_062 A
+word_063 potem
+word_064 tak
+word_065 jak
+word_066 zawsze
+word_067 Turyści
+word_068 i
+word_069 tułacze
+word_070 Malowani
+word_071 chłopcy
+word_072 bezsenni
+word_073 dowódcy
+word_074 plecaki
+word_075 pełne
+word_076 klęski
+word_077 pełne
+word_078 ryżu
+word_079 pola
+word_080 chwały
+word_081 Księżyc
+word_082 wiedzie
+word_083 za
+word_084 kordonem
+word_085 Moja
+word_086 bezbronna
+word_087 ojczyzna
+word_088 przyjmie
+word_089 cię
+word_090 najeźdźco
+word_091 i
+word_092 da
+word_093 ci
+word_094 sążeń
+word_095 ziemi
+word_096 pod
+word_097 wierzbą
+word_098 i
+word_099 spokój
+word_100 By
+word_101 ci
+word_102 co
+word_103 po
+word_104 nas
+word_105 przyjdą
+word_106 uczyli
+word_107 się
+word_108 znowu
+word_109 najtrudniejszego
+word_110 kunsztu
+word_111 odpuszczania
+word_112 win

@@ -1,4 +1,11 @@
-Własność: T. Białynicki-Birula
-Zakopane
-ul. Zamoyskiego willa „Alma”
-№ 243
+word_000 Własność
+word_001 T
+word_002 Białynicki
+word_003 Birula
+word_004 Zakopane
+word_005 ul
+word_006 Zamoyskiego
+word_007 willa
+word_008 Alma
+word_009 №
+word_010 243

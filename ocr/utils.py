@@ -117,6 +117,21 @@ def get_inf_transform(args) -> transforms.Compose:
     return transforms.Compose(pack)
 
 
+def get_cnn_train_transform(denoise_prob: float = 0.3) -> transforms.Compose:
+    """
+    Transformacja do treningu CNN na pojedynczych znakach (phsf).
+    Wyjście: tensor (1, 32, 32) – stały rozmiar kwadratowy.
+    """
+    return transforms.Compose([
+        transforms.RandomRotation(5),
+        RandomDenoise(p=denoise_prob),
+        transforms.Grayscale(num_output_channels=1),
+        transforms.Resize((32, 32)),
+        transforms.ToTensor(),
+        transforms.Normalize((0.5,), (0.5,)),
+    ])
+
+
 def get_train_transform(args=None, denoise_prob: float = 0.3, max_padding: int = 20) -> transforms.Compose:
     """
     Zwraca pipeline transformacji obrazu do trenowania modelu (z augmentacją danych).

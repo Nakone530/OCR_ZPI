@@ -22,7 +22,7 @@ from ocr.config import MODEL_PATH, OCR_MODEL_PATH
 from ocr.inference import run_ensemble_generation, compute_accuracy, test_models, test_cache_models, get_active_chars, load_model, predict_image, predict_letter, predict_segments, predict_word, process_folder
 from ocr.output import OCRResult, create_output_handler
 from ocr.utils import save_image_to_today_folder, DictCorrect, list_models, generate_model_ensembles, load_transcription, save_results_csv
-from ocr.trainer import train_model, infinite_train, multi_train, TRAINING_PRESETS, get_preset_names
+from ocr.trainer import train_model, train_crnn, train_cnn, infinite_train, multi_train, TRAINING_PRESETS, get_preset_names
 from ocr.json_output import (
     build_image_result_json,
     build_word_result_json,
@@ -134,6 +134,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--train", "-t", action="store_true", help="Trenuj model (okreslona liczba epok)")
+    mode.add_argument("--train-crnn", action="store_true", dest="train_crnn", help="Trening CRNN na danych ttData (CTC loss)")
+    mode.add_argument("--train-cnn", action="store_true", dest="train_cnn", help="Trening CNN na danych phsf (klasyfikacja znakow)")
     mode.add_argument("--infinite", action="store_true", help="Nieskonczony trening do przerwania (Ctrl+C)")
     mode.add_argument(
         "--multi-train",
@@ -172,6 +174,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="Co ile epok zapisywac checkpoint w trybie infinite (domyslnie: 5)",
     )
     parser.add_argument("--resume", "-r", type=str, metavar="PLIK", help="Wznow trening z checkpointu")
+
+    parser.add_argument("--cycle-lr", action="store_true", help="Wlacz cykliczny scheduler LR (CyclicLR)")
+    parser.add_argument("--cycle-base-lr", type=float, default=1e-5, help="Dolny LR dla CyclicLR")
+    parser.add_argument("--cycle-max-lr", type=float, default=1e-4, help="Gorny LR dla CyclicLR")
+    parser.add_argument("--cycle-step-size", type=int, default=None, help="Liczba krokow do max LR (domyslnie: len(train_loader))")
+    parser.add_argument("--log-lr", action="store_true", help="Loguj aktualny LR co 50 krokow")
 
     parser.add_argument("--denoise", action="store_true", help="Wlacz odszumianie")
     parser.add_argument(
@@ -312,6 +320,12 @@ def main(args=None, info=None, buffor=None):
     if args.train:
         train_model(epochs=args.epochs, batch_size=args.batch_size, model_path=args.resume, info=info, args=args)
 
+    elif args.train_crnn:
+        train_crnn(epochs=args.epochs, batch_size=args.batch_size, model_path=args.resume, info=info, args=args)
+
+    elif args.train_cnn:
+        train_cnn(epochs=args.epochs, batch_size=args.batch_size, model_path=args.resume, info=info, args=args)
+
     elif args.multi_train is not None:
         preset_names = args.multi_train or None  # [] -> None oznacza "wszystkie"
         multi_train(
@@ -329,6 +343,7 @@ def main(args=None, info=None, buffor=None):
             model_path=args.resume,
             checkpoint_interval=args.checkpoint_interval,
             info=info,
+            args=args,
         )
 
     elif args.annotate:

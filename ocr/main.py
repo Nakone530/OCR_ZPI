@@ -15,14 +15,14 @@ import json
 import logging
 import os
 import sys
-
+import cv2
 import torch
 
 from ocr.config import MODEL_PATH, OCR_MODEL_PATH
 from ocr.inference import run_ensemble_generation, compute_accuracy, test_models, test_cache_models, get_active_chars, load_model, predict_image, predict_letter, predict_segments, predict_word, process_folder
 from ocr.output import OCRResult, create_output_handler
 from ocr.utils import save_image_to_today_folder, DictCorrect, list_models, generate_model_ensembles, load_transcription, save_results_csv
-from ocr.trainer import train_model, infinite_train, multi_train, TRAINING_PRESETS, get_preset_names
+from ocr.trainer import train_model, train_crnn, train_cnn, infinite_train, multi_train, TRAINING_PRESETS, get_preset_names
 from ocr.json_output import (
     build_image_result_json,
     build_word_result_json,
@@ -41,6 +41,7 @@ from ocr.display import (
     print_text_result,
     visualize_prediction,
 )
+from ocr.bbox_annotator import edit_boxes_interactive
 #--State
 
 
@@ -134,6 +135,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--train", "-t", action="store_true", help="Trenuj model (okreslona liczba epok)")
+    mode.add_argument("--train-crnn", action="store_true", dest="train_crnn", help="Trening CRNN na danych ttData (CTC loss)")
+    mode.add_argument("--train-cnn", action="store_true", dest="train_cnn", help="Trening CNN na danych phsf (klasyfikacja znakow)")
     mode.add_argument("--infinite", action="store_true", help="Nieskonczony trening do przerwania (Ctrl+C)")
     mode.add_argument(
         "--multi-train",
@@ -240,6 +243,7 @@ def build_parser() -> argparse.ArgumentParser:
                         help="Maksymalny stosunek wysokości fragmentów do scalenia (domyślnie: 1.8)")
     parser.add_argument("--ws-merge-vert-dist", type=int, default=4,
                         help="Maksymalna odległość pionowa do scalenia fragmentów (domyślnie: 4)")
+    parser.add_argument("--aligned",type=str,)
     return parser
 
 
@@ -311,6 +315,12 @@ def main(args=None, info=None, buffor=None):
     # ── Trening ──
     if args.train:
         train_model(epochs=args.epochs, batch_size=args.batch_size, model_path=args.resume, info=info, args=args)
+
+    elif args.train_crnn:
+        train_crnn(epochs=args.epochs, batch_size=args.batch_size, model_path=args.resume, info=info, args=args)
+
+    elif args.train_cnn:
+        train_cnn(epochs=args.epochs, batch_size=args.batch_size, model_path=args.resume, info=info)
 
     elif args.multi_train is not None:
         preset_names = args.multi_train or None  # [] -> None oznacza "wszystkie"
@@ -422,6 +432,42 @@ def main(args=None, info=None, buffor=None):
             jsFile = jsFile + ".json"
             jsPath = os.path.join(os.path.dirname(saved_copy_path), jsFile)
             write_json(jsPath, payload, pretty=args.json_pretty)
+
+        if args.trans:
+            aligned_path = save_aligned_boxes_jsonl(
+                page_path=args.page,
+                trans_path=args.trans,
+                saveto_dir="aligned_jsonl",
+                box_dir=output_dir,
+            )
+            convert_aligned_to_ttdata(aligned_path, args.page)
+        elif args.aligned:
+            img = cv2.imread(args.page)
+
+            entries = load_aligned_jsonl(
+                args.aligned
+            )
+
+            editor_boxes = aligned_to_editor_boxes(
+                entries
+            )
+
+            # TWOJA funkcja:
+            edited_boxes = edit_boxes_interactive(
+                img,
+                editor_boxes,
+            )
+
+            updated = merge_editor_changes(
+                entries,
+                edited_boxes,
+            )
+
+            save_aligned_jsonl(
+                args.aligned,
+                updated,
+            )
+            
     elif args.folder:
         results = process_folder(args.folder, args, model_path, device, info)
         rows = []

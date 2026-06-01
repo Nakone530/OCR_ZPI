@@ -1350,9 +1350,12 @@ def process_letter(image_path, base_dir="inference", enable_box_edit=True, non_i
         return None
 
     letter_name = os.path.splitext(os.path.basename(image_path))[0]
-    
-    img_cv2 = cv2.imread(image_path)
-    original = img_cv2.copy()
+
+
+    img_cv2 = cv2.imdecode(np.fromfile(image_path, dtype=np.uint8), cv2.IMREAD_COLOR)
+    original = img_cv2.copy() if img_cv2 is not None else None
+
+
     if img_cv2 is None:
         print(f"Błąd: nie udało się wczytać obrazu '{image_path}'.")
         return None

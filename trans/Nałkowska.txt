@@ -1,0 +1,25 @@
+word_000 Na
+word_001 pamiątkę
+word_002 tego
+word_003 prześlicznego
+word_004 niezapomnianego
+word_005 dla
+word_006 mnie
+word_007 wieczoru
+word_008 w
+word_009 Towarzystwie
+word_010 CzeskoSlovenskoPolskiem
+word_011 i
+word_012 z
+word_013 prośbą
+word_014 o
+word_015 pamięć
+word_016 życzliwą
+word_017 Zofia
+word_018 Nałkowska
+word_019 Praha
+word_020 5
+word_021 XI
+word_022 1930
+word_023 r
+

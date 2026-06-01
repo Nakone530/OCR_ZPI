@@ -619,7 +619,7 @@ def detect_word_boxes_auto(image):
         cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU,
     )
 
-    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (10, 3))
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (10, 2))
     dilated = cv2.dilate(thresh, kernel, iterations=1)
 
     contours, _ = cv2.findContours(

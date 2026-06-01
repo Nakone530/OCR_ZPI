@@ -701,7 +701,7 @@ def save_aligned_boxes_jsonl(
 
     jsonl_path = os.path.join(
         saveto_dir,
-        f"{page_name}_aligned.jsonl",
+        "boxes.jsonl",
     )
 
     with open(
@@ -781,11 +781,9 @@ def convert_aligned_to_ttdata(
     """
     entries = load_aligned_jsonl(aligned_jsonl_path)
 
-    stem = Path(aligned_jsonl_path).stem
-    if stem.endswith("_aligned"):
-        stem = stem[: -len("_aligned")]
-
-    out_dir = os.path.join(ttdata_dir, stem)
+    File, _ = os.path.splitext(os.path.basename(page_image_path))
+    out_dir = os.path.join(ttdata_dir, File)
+    out_dir = os.path.join("data", out_dir)
     os.makedirs(out_dir, exist_ok=True)
 
     img = cv2.imdecode(np.fromfile(page_image_path, dtype=np.uint8), cv2.IMREAD_COLOR)
@@ -794,9 +792,10 @@ def convert_aligned_to_ttdata(
 
     dest_image = os.path.join(out_dir, "source_image.jpg")
     cv2.imwrite(dest_image, img)
-    abs_source = os.path.abspath(dest_image)
+    abs_source = os.path.relpath(dest_image, start=os.getcwd())
 
     img_h, img_w = img.shape[:2]
+    
     jsonl_path = os.path.join(out_dir, "boxes.jsonl")
 
     written = 0

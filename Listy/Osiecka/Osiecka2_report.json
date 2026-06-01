@@ -1,0 +1,387 @@
+{
+  "image_path": "/home/freblu/Documents/Programowanie/Studia/OCR_ZPI/Czytnie /Listy/Osiecka/Osiecka2.jpg",
+  "image_shape": [
+    2332,
+    1616
+  ],
+  "grayscale": {
+    "method": "cv2.COLOR_BGR2GRAY"
+  },
+  "illumination_correction": {
+    "method": "divide_by_gaussian",
+    "ksize": 51
+  },
+  "binarization_global": {
+    "method": "otsu",
+    "type": "THRESH_BINARY_INV + THRESH_OTSU"
+  },
+  "color_blocks": {
+    "space": "LAB",
+    "min_area": 600,
+    "chroma_thresh": 6.0,
+    "morph_kernel": [
+      5,
+      5
+    ],
+    "morph_open_iter": 1,
+    "morph_close_iter": 2,
+    "count": 36
+  },
+  "binarization_color_blocks": {
+    "method": "otsu_per_block",
+    "thresholds": [
+      {
+        "bbox": [
+          0,
+          0,
+          225,
+          363
+        ],
+        "threshold": 247.0
+      },
+      {
+        "bbox": [
+          784,
+          0,
+          273,
+          59
+        ],
+        "threshold": 242.0
+      },
+      {
+        "bbox": [
+          1183,
+          0,
+          127,
+          36
+        ],
+        "threshold": 239.0
+      },
+      {
+        "bbox": [
+          1511,
+          0,
+          105,
+          154
+        ],
+        "threshold": 236.0
+      },
+      {
+        "bbox": [
+          415,
+          15,
+          233,
+          61
+        ],
+        "threshold": 241.0
+      },
+      {
+        "bbox": [
+          356,
+          20,
+          42,
+          44
+        ],
+        "threshold": 235.0
+      },
+      {
+        "bbox": [
+          671,
+          32,
+          48,
+          22
+        ],
+        "threshold": 238.0
+      },
+      {
+        "bbox": [
+          1484,
+          95,
+          44,
+          33
+        ],
+        "threshold": 250.0
+      },
+      {
+        "bbox": [
+          1576,
+          201,
+          40,
+          75
+        ],
+        "threshold": 248.0
+      },
+      {
+        "bbox": [
+          0,
+          368,
+          20,
+          583
+        ],
+        "threshold": 248.0
+      },
+      {
+        "bbox": [
+          277,
+          443,
+          79,
+          160
+        ],
+        "threshold": 226.0
+      },
+      {
+        "bbox": [
+          464,
+          482,
+          287,
+          123
+        ],
+        "threshold": 226.0
+      },
+      {
+        "bbox": [
+          989,
+          487,
+          409,
+          183
+        ],
+        "threshold": 226.0
+      },
+      {
+        "bbox": [
+          389,
+          524,
+          64,
+          60
+        ],
+        "threshold": 225.0
+      },
+      {
+        "bbox": [
+          355,
+          527,
+          17,
+          63
+        ],
+        "threshold": 222.0
+      },
+      {
+        "bbox": [
+          838,
+          531,
+          78,
+          62
+        ],
+        "threshold": 222.0
+      },
+      {
+        "bbox": [
+          265,
+          640,
+          278,
+          141
+        ],
+        "threshold": 226.0
+      },
+      {
+        "bbox": [
+          811,
+          710,
+          107,
+          100
+        ],
+        "threshold": 225.0
+      },
+      {
+        "bbox": [
+          1029,
+          710,
+          545,
+          274
+        ],
+        "threshold": 228.0
+      },
+      {
+        "bbox": [
+          571,
+          720,
+          223,
+          138
+        ],
+        "threshold": 225.0
+      },
+      {
+        "bbox": [
+          202,
+          857,
+          144,
+          135
+        ],
+        "threshold": 227.0
+      },
+      {
+        "bbox": [
+          443,
+          860,
+          157,
+          67
+        ],
+        "threshold": 225.0
+      },
+      {
+        "bbox": [
+          405,
+          863,
+          32,
+          78
+        ],
+        "threshold": 223.0
+      },
+      {
+        "bbox": [
+          602,
+          863,
+          503,
+          121
+        ],
+        "threshold": 226.0
+      },
+      {
+        "bbox": [
+          1090,
+          971,
+          36,
+          61
+        ],
+        "threshold": 223.0
+      },
+      {
+        "bbox": [
+          418,
+          977,
+          421,
+          99
+        ],
+        "threshold": 227.0
+      },
+      {
+        "bbox": [
+          251,
+          982,
+          116,
+          71
+        ],
+        "threshold": 225.0
+      },
+      {
+        "bbox": [
+          861,
+          1008,
+          195,
+          173
+        ],
+        "threshold": 226.0
+      },
+      {
+        "bbox": [
+          0,
+          1368,
+          210,
+          964
+        ],
+        "threshold": 249.0
+      },
+      {
+        "bbox": [
+          1375,
+          1674,
+          241,
+          630
+        ],
+        "threshold": 250.0
+      },
+      {
+        "bbox": [
+          1328,
+          1904,
+          72,
+          48
+        ],
+        "threshold": 252.0
+      },
+      {
+        "bbox": [
+          143,
+          2054,
+          945,
+          278
+        ],
+        "threshold": 250.0
+      },
+      {
+        "bbox": [
+          128,
+          2088,
+          48,
+          40
+        ],
+        "threshold": 248.0
+      },
+      {
+        "bbox": [
+          493,
+          2144,
+          46,
+          56
+        ],
+        "threshold": 249.0
+      },
+      {
+        "bbox": [
+          540,
+          2151,
+          46,
+          57
+        ],
+        "threshold": 250.0
+      },
+      {
+        "bbox": [
+          1427,
+          2160,
+          73,
+          80
+        ],
+        "threshold": 250.0
+      }
+    ]
+  },
+  "morphology": {
+    "dilate_kernel": [
+      10,
+      2
+    ],
+    "dilate_iterations": 1
+  },
+  "connected_components": {
+    "min_area": 20,
+    "median_height": 10,
+    "median_width": 10,
+    "mean_height": 16.272151898734176,
+    "mean_width": 16.5126582278481,
+    "count": 632
+  },
+  "letter_size": {
+    "avg_height": 16.272151898734176,
+    "avg_width": 16.5126582278481,
+    "median_height": 10,
+    "median_width": 10,
+    "count": 632
+  },
+  "line_filtering": {
+    "min_w": 5,
+    "min_h_base": 5,
+    "min_h_ratio": 0.2,
+    "max_h_ratio": 3.0
+  }
+}

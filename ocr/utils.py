@@ -783,6 +783,7 @@ def convert_aligned_to_ttdata(
 
     File, _ = os.path.splitext(os.path.basename(page_image_path))
     out_dir = os.path.join(ttdata_dir, File)
+    out_dir = os.path.join("data", out_dir)
     os.makedirs(out_dir, exist_ok=True)
 
     img = cv2.imdecode(np.fromfile(page_image_path, dtype=np.uint8), cv2.IMREAD_COLOR)
@@ -794,6 +795,7 @@ def convert_aligned_to_ttdata(
     abs_source = os.path.relpath(dest_image, start=os.getcwd())
 
     img_h, img_w = img.shape[:2]
+    
     jsonl_path = os.path.join(out_dir, "boxes.jsonl")
 
     written = 0

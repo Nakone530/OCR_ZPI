@@ -436,6 +436,7 @@ def main(args=None, info=None, buffor=None):
         if args.trans:
             File, _ = os.path.splitext(os.path.basename(args.page))
             saveto = os.path.join("tData", File)
+            saveto = os.path.join("data", saveto)
             aligned_path = save_aligned_boxes_jsonl(
                 page_path=args.page,
                 trans_path=args.trans,

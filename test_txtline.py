@@ -23,6 +23,61 @@ def collect_images(path):
 
     return sorted(files)
 
+def normalize_by_stroke_width(
+    image,
+    target_stroke=2.5
+):
+    gray = (
+        cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        if image.ndim == 3
+        else image.copy()
+    )
+
+    binary = cv2.adaptiveThreshold(
+        gray,
+        255,
+        cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+        cv2.THRESH_BINARY_INV,
+        31,
+        12,
+    )
+
+    dist = cv2.distanceTransform(
+        binary,
+        cv2.DIST_L2,
+        5,
+    )
+
+    vals = dist[dist > 0]
+
+    if len(vals) == 0:
+        return image, 1.0
+
+    stroke = np.percentile(vals, 75)
+
+    estimated = stroke * 2
+
+    scale = target_stroke / estimated
+
+    scale = np.clip(scale, 0.1, 5.0)
+
+    h, w = image.shape[:2]
+
+    resized = cv2.resize(
+        image,
+        (
+            int(w * scale),
+            int(h * scale),
+        ),
+        interpolation=(
+            cv2.INTER_CUBIC
+            if scale > 1
+            else cv2.INTER_AREA
+        ),
+    )
+
+    return resized, scale
+
 def resize_keep_ratio(
     img,
     max_h=900,
@@ -208,6 +263,8 @@ def detect_text_words(img):
         Word(0, box)
         for box in words
     ]
+    for box in words :
+     print(box)
 
     # Grupowanie w linie: dopasowanie po cy + pionowym overlapie (bardziej stabilne)
     if words:
@@ -565,10 +622,10 @@ if __name__ == "__main__":
 
         if original is None:
             raise ValueError(f"Nie można wczytać obrazu: {image_path}")
-        
-        output, thresh, dilated, words, w_output = detect_text_words(original.copy())
+        stroked, st_scale = normalize_by_stroke_width(original)
+        output, thresh, dilated, words, w_output = detect_text_words(stroked.copy())
 
-        l_output, output, true_l_output, false_l_output, lines  = detect_text_lines(original.copy(), output, words)        
+        l_output, output, true_l_output, false_l_output, lines  = detect_text_lines(stroked.copy(), output, words)        
         print(f"Znaleziono {len(words)} linii")
 
         for i, w in enumerate(words):
@@ -634,6 +691,15 @@ if __name__ == "__main__":
                 2
             )
 
+            cv2.putText(
+                display,
+                f"{st_scale:.2f}",
+                (20, 70),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                1,
+                (0, 255, 0),
+                2
+            )
             cv2.imshow("Debug", display)
 
             key = cv2.waitKey(0)

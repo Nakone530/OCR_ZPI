@@ -42,6 +42,7 @@ import matplotlib.pyplot as plt
 import itertools
 from .config import IMAGE_SIZE, MEAN, STD, CHARS, AuxCHARS, MODEL_PATH, NUM_CLASSES, char2idx, idx2char, VERSION_RE, ÐICT_PATH
 from .model import MainModel, AuxModel
+from .bbox_annotator import load_boxes_from_annotations, sort_boxes_reading_order, detect_word_boxes_auto, edit_boxes_interactive
 from . import info
 
 def load_dictionary(json_path: str = ÐICT_PATH) -> list[str]:
@@ -635,24 +636,304 @@ def load_model(model_path: str = MODEL_PATH, device: torch.device = None, info=N
 
 #------Zarządzanie transkrypcjami------
 
-def load_transcription(path):
-    mapping = {}
+def load_transcription(path, return_dict=False):
+    """
+    word_000 nic
+    word_001 dwa
+    """
+
+    pairs = []
 
     with open(path, "r", encoding="utf-8") as f:
         for line in f:
-            parts = line.strip().split(maxsplit=1)
-            if len(parts) != 2:
+            line = line.strip()
+
+            if not line:
                 continue
 
-            key, text = parts
+            parts = line.split(maxsplit=1)
 
-            # usuń rozszerzenie jeśli jest
-            key = key.replace(".png", "")
+            if len(parts) == 1:
+                key = parts[0].replace(".png", "")
+                text = ""
+            else:
+                key, text = parts
+                key = key.replace(".png", "")
 
-            mapping[key] = text
+            pairs.append((key, text))
 
-    return mapping
+    if return_dict:
+        return dict(pairs)
 
+    return [text for _, text in pairs]
+
+def save_aligned_boxes_jsonl(
+    page_path,
+    trans_path,
+    saveto_dir,
+    box_dir,
+):
+    """
+    Łączy boxy + transkrypcję i zapisuje jsonl.
+    """
+
+    os.makedirs(saveto_dir, exist_ok=True)
+
+    img = cv2.imdecode(np.fromfile(page_path, dtype=np.uint8), cv2.IMREAD_COLOR)
+    if img is None:
+        raise ValueError(f"Nie udało się wczytać obrazu: {page_path}")
+
+    img_h, img_w = img.shape[:2]
+
+    edited_boxes = load_boxes_from_annotations(box_dir, img_w, img_h)
+
+    transcript_words = load_transcription(trans_path)
+
+
+    total = max(
+        len(edited_boxes),
+        len(transcript_words),
+    )
+
+    page_name = os.path.splitext(
+        os.path.basename(page_path)
+    )[0]
+
+    jsonl_path = os.path.join(
+        saveto_dir,
+        f"{page_name}_aligned.jsonl",
+    )
+
+    with open(
+        jsonl_path,
+        "w",
+        encoding="utf-8",
+    ) as f:
+
+        for idx in range(total):
+
+            # box
+            box = None
+            width = None
+            height = None
+
+            if idx < len(edited_boxes):
+
+                box = edited_boxes[idx]["box"]
+
+                x1, y1, x2, y2 = box
+
+                width = int(x2 - x1)
+                height = int(y2 - y1)
+
+            # tekst
+            text = ""
+
+            if idx < len(transcript_words):
+                text = transcript_words[idx]
+
+            # entry
+            entry = {
+                "id": f"word_{idx:03d}",
+                "text": text,
+                "box": box,
+                "width": width,
+                "height": height,
+                "page_file": os.path.basename(page_path),
+            }
+
+            f.write(
+                json.dumps(
+                    entry,
+                    ensure_ascii=False,
+                )
+                + "\n"
+            )
+
+    print(
+        f"[OK] zapisano: {jsonl_path}"
+    )
+
+    print(
+        f"boxów={len(edited_boxes)} "
+        f"| słów={len(transcript_words)} "
+        f"| zapisano={total}"
+    )
+
+    return jsonl_path
+
+
+def convert_aligned_to_ttdata(
+    aligned_jsonl_path: str,
+    page_image_path: str,
+    ttdata_dir: str = "ttData",
+) -> str:
+    """
+    Konwertuje aligned_jsonl na strukturę ttData gotową do treningu.
+
+    Tworzy ttData/{name}/ z:
+      - source_image.jpg
+      - word_000.png, word_001.png, ... (wycinki słów)
+      - boxes.jsonl (format kompatybilny z load_all_datasets)
+
+    Pomija wpisy bez boxa lub bez tekstu.
+    Nadpisuje istniejący folder.
+    """
+    entries = load_aligned_jsonl(aligned_jsonl_path)
+
+    stem = Path(aligned_jsonl_path).stem
+    if stem.endswith("_aligned"):
+        stem = stem[: -len("_aligned")]
+
+    out_dir = os.path.join(ttdata_dir, stem)
+    os.makedirs(out_dir, exist_ok=True)
+
+    img = cv2.imdecode(np.fromfile(page_image_path, dtype=np.uint8), cv2.IMREAD_COLOR)
+    if img is None:
+        raise ValueError(f"Nie udało się wczytać obrazu: {page_image_path}")
+
+    dest_image = os.path.join(out_dir, "source_image.jpg")
+    cv2.imwrite(dest_image, img)
+    abs_source = os.path.abspath(dest_image)
+
+    img_h, img_w = img.shape[:2]
+    jsonl_path = os.path.join(out_dir, "boxes.jsonl")
+
+    written = 0
+    with open(jsonl_path, "w", encoding="utf-8") as f:
+        for entry in entries:
+            box = entry.get("box")
+            text = entry.get("text", "").strip()
+
+            if not box or not text:
+                continue
+
+            word_id = entry.get("id", f"word_{written:03d}")
+            crop_filename = f"{word_id}.png"
+            crop_path = os.path.join(out_dir, crop_filename)
+
+            x1, y1, x2, y2 = [int(v) for v in box]
+            x1 = max(0, x1)
+            y1 = max(0, y1)
+            x2 = min(img_w, x2)
+            y2 = min(img_h, y2)
+
+            if x2 > x1 and y2 > y1:
+                cv2.imwrite(crop_path, img[y1:y2, x1:x2])
+            else:
+                continue
+
+            record = {
+                "id": written,
+                "crop_file": crop_filename,
+                "bbox_xyxy": [x1, y1, x2, y2],
+                "text": text,
+                "suggested_text": text,
+                "prediction_score": 0.0,
+                "text_override": True,
+                "prob": 1.0,
+                "source_image": abs_source,
+            }
+            f.write(json.dumps(record, ensure_ascii=False) + "\n")
+            written += 1
+
+    print(f"[ttData] {out_dir}  ({written} wpisów)")
+    return out_dir
+
+
+def load_aligned_jsonl(jsonl_path):
+    """
+    Zwraca listę:
+    [
+        {
+            "id": "word_000",
+            "text": "nic",
+            "box": [x1,y1,x2,y2],
+            ...
+        }
+    ]
+    """
+
+    entries = []
+
+    if not os.path.exists(jsonl_path):
+        return entries
+
+    with open(jsonl_path, "r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+
+            if not line:
+                continue
+
+            data = json.loads(line)
+
+            entries.append(data)
+
+    return entries
+
+def save_aligned_jsonl(jsonl_path, entries):
+    with open(jsonl_path, "w", encoding="utf-8") as f:
+        for item in entries:
+            f.write(
+                json.dumps(
+                    item,
+                    ensure_ascii=False,
+                )
+                + "\n"
+            )
+
+def aligned_to_editor_boxes(entries):
+    boxes = []
+
+    for item in entries:
+
+        box = item.get("box")
+
+        if not box:
+            continue
+
+        x1, y1, x2, y2 = box
+
+        boxes.append(
+            {
+                "box": [x1, y1, x2, y2],
+                "text": item.get("text", ""),
+                "id": item.get("id"),
+            }
+        )
+
+    return boxes
+
+def merge_editor_changes(entries, edited_boxes):
+
+    by_id = {
+        e["id"]: e
+        for e in entries
+    }
+
+    for box_data in edited_boxes:
+
+        word_id = box_data["id"]
+
+        if word_id not in by_id:
+            continue
+
+        item = by_id[word_id]
+
+        item["box"] = box_data["box"]
+
+        if "text" in box_data:
+            item["text"] = box_data["text"]
+
+        if item["box"]:
+
+            x1, y1, x2, y2 = item["box"]
+
+            item["width"] = int(x2 - x1)
+            item["height"] = int(y2 - y1)
+
+    return list(by_id.values())
 #------Zarządzanie modelami------------
 def list_models(models_dir: str, version: str | None = None):
     models = [

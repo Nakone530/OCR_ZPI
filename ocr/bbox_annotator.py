@@ -126,41 +126,43 @@ def setup_debug_ui():
 
 
 def get_debug_params():
-
-    return {
-        "dilate_x":
-            cv2.getTrackbarPos(
-                "dilate_x",
-                CONTROL_WINDOW,
-            ),
-
-        "dilate_y":
-            max(
-                1,
+    try:
+        return {
+            "dilate_x":
                 cv2.getTrackbarPos(
-                    "dilate_y",
+                    "dilate_x",
                     CONTROL_WINDOW,
                 ),
-            ),
 
-        "split_amp":
-            cv2.getTrackbarPos(
-                "split_amp",
-                CONTROL_WINDOW,
-            ) / 100.0,
+            "dilate_y":
+                max(
+                    1,
+                    cv2.getTrackbarPos(
+                        "dilate_y",
+                        CONTROL_WINDOW,
+                    ),
+                ),
 
-        "overlap":
-            cv2.getTrackbarPos(
-                "overlap",
-                CONTROL_WINDOW,
-            ) / 100.0,
+            "split_amp":
+                cv2.getTrackbarPos(
+                    "split_amp",
+                    CONTROL_WINDOW,
+                ) / 100.0,
 
-        "pad_top":
-            cv2.getTrackbarPos(
-                "pad_top",
-                CONTROL_WINDOW,
-            ),
-    }
+            "overlap":
+                cv2.getTrackbarPos(
+                    "overlap",
+                    CONTROL_WINDOW,
+                ) / 100.0,
+
+            "pad_top":
+                cv2.getTrackbarPos(
+                    "pad_top",
+                    CONTROL_WINDOW,
+                ),
+        }
+    except cv2.error:
+        return dict(DEBUG_DEFAULTS)
 
 
 def box_intersection(a, b):

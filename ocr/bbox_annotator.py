@@ -937,12 +937,20 @@ def detect_word_boxes_auto(image):
 
 def draw_boxes_preview(image, boxes, selected_idx, temp_box=None):
     preview = image.copy()
+    # Compute reading order mapping so labels reflect top->bottom, left->right
+    try:
+        sorted_boxes = sort_boxes_reading_order(boxes)
+        order_map = {id(item): idx + 1 for idx, item in enumerate(sorted_boxes)}
+    except Exception:
+        order_map = {}
+
     for i, box_data in enumerate(boxes):
         x1, y1, x2, y2 = box_data["box"]
         color = (0, 255, 255) if i == selected_idx else (0, 200, 0)
         thickness = 2 if i == selected_idx else 1
         cv2.rectangle(preview, (x1, y1), (x2, y2), color, thickness)
-        label = f"{i:03d}"
+        label_num = order_map.get(id(box_data), i + 1)
+        label = f"{label_num:03d}"
         cv2.putText(preview, label, (x1, max(18, y1 - 8)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1)
 
     if temp_box is not None:

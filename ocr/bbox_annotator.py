@@ -6,6 +6,114 @@ import shutil
 import cv2
 import numpy as np
 
+def box_intersection(a, b):
+    ax, ay, aw, ah = a
+    bx, by, bw, bh = b
+
+    x1 = max(ax, bx)
+    y1 = max(ay, by)
+    x2 = min(ax + aw, bx + bw)
+    y2 = min(ay + ah, by + bh)
+
+    if x2 <= x1 or y2 <= y1:
+        return 0
+
+    return (x2 - x1) * (y2 - y1)
+
+
+def box_area(box):
+    _, _, w, h = box
+    return w * h
+
+
+def overlap_ratio_smaller(a, b):
+    inter = box_intersection(a, b)
+
+    if inter == 0:
+        return 0.0
+
+    smaller = min(box_area(a), box_area(b))
+
+    if smaller == 0:
+        return 0.0
+
+    return inter / smaller
+
+
+def merge_two_boxes(a, b):
+    ax, ay, aw, ah = a
+    bx, by, bw, bh = b
+
+    x1 = min(ax, bx)
+    y1 = min(ay, by)
+
+    x2 = max(ax + aw, bx + bw)
+    y2 = max(ay + ah, by + bh)
+
+    return (
+        x1,
+        y1,
+        x2 - x1,
+        y2 - y1,
+    )
+
+
+def merge_overlapping_boxes(
+    boxes,
+    overlap_threshold=0.35,
+):
+    """
+    Łączy boxy które pokrywają się
+    co najmniej overlap_threshold
+    względem mniejszego boxa.
+    """
+
+    boxes = list(boxes)
+
+    changed = True
+
+    while changed:
+        changed = False
+        merged = []
+        used = [False] * len(boxes)
+
+        for i, a in enumerate(boxes):
+
+            if used[i]:
+                continue
+
+            current = a
+
+            for j in range(i + 1, len(boxes)):
+
+                if used[j]:
+                    continue
+
+                b = boxes[j]
+
+                overlap = overlap_ratio_smaller(
+                    current,
+                    b,
+                )
+
+                if overlap >= overlap_threshold:
+                    current = merge_two_boxes(
+                        current,
+                        b,
+                    )
+
+                    used[j] = True
+                    changed = True
+
+            used[i] = True
+            merged.append(current)
+
+        boxes = merged
+
+    return sorted(
+        boxes,
+        key=lambda box: (box[1], box[0]),
+    )
 
 def clamp_box(box, width, height, min_size=4):
     x1, y1, x2, y2 = box
@@ -698,7 +806,12 @@ def detect_word_boxes_auto(image):
     words = []
     for cnt in contours:
         x, y, w, h = cv2.boundingRect(cnt)
+        pad_y_top = max(1, int(0.1 * median_height))
+        pad_y_bottom = max(1, int(0.05 * median_height))
 
+        y = max(0, y - pad_y_top)
+        h = min(gray.shape[0] - y, h + pad_y_top + pad_y_bottom)
+        
         if 5 + 0.2 * median_height <= h <= 3.0 * median_height:
             if w > 5:
                 words.append((x, y, w, h))
@@ -717,7 +830,9 @@ def detect_word_boxes_auto(image):
 
     if not words:
         return []
-
+    
+    words = merge_overlapping_boxes(words)
+    
     prepared = [
         {
             "word": {

@@ -88,60 +88,109 @@ def add_length_to_boxes(boxes):
     return boxes
 
 
-def split_lines_from_roi(roi, x, y, median_height, min_peak_distance=10):
-    print("SPLIT CALLED")
-    projection = np.sum(roi > 0, axis=1).astype(np.float32)
-    
+def split_lines_from_roi(
+    roi,
+    x,
+    y,
+    median_height,
+):
+    h, w = roi.shape[:2]
 
-    if np.max(projection) == 0:
-        return []
+    mask = (roi > 0).astype(np.uint8)
 
-    # normalizacja
-    projection = projection / (np.max(projection) + 1e-6)
+    projection = np.sum(mask, axis=1).astype(np.float32)
 
-    # 1. znajdź piki (linie tekstu)
-    peaks = []
-    for i in range(1, len(projection) - 1):
-        if projection[i] > projection[i - 1] and projection[i] > projection[i + 1]:
-            if projection[i] > 0.4:  # minimalna aktywność linii
-                peaks.append(i)
+    if projection.max() == 0:
+        return [(x, y, w, h)]
 
-    if len(peaks) < 2:
-        return [(x, y, roi.shape[1], roi.shape[0])]
+    projection /= projection.max() + 1e-6
 
-    # 2. znajdź doliny między pikami
-    cuts = []
-    for i in range(len(peaks) - 1):
-        start = peaks[i]
-        end = peaks[i + 1]
+    # środek ROI — unikamy brzegów
+    center_start = int(h * 0.1)
+    center_end = int(h * 0.9)
 
-        valley_region = projection[start:end]
-        if len(valley_region) == 0:
+    band = projection[center_start:center_end]
+
+    if len(band) == 0:
+        return [(x, y, w, h)]
+
+    # kilka najlepszych minimów
+    candidates = np.argsort(band)[:12]
+
+    best_cut = None
+    best_score = -1
+
+    min_text_pixels = mask.sum() / h
+
+    for c in candidates:
+        cut = c + center_start
+
+        # nie tnij za blisko brzegu
+        if (
+            cut < median_height * 0.6
+            or
+            h - cut < median_height * 0.6
+        ):
             continue
 
-        cut_y = start + np.argmin(valley_region)
-        cuts.append(cut_y)
+        top = mask[:cut]
+        bottom = mask[cut:]
 
-    # 3. budowa segmentów
-    segments = []
-    prev = 0
+        top_pixels = top.sum()
+        bottom_pixels = bottom.sum()
 
-    for cut in cuts:
-        if cut - prev > min_peak_distance:
-            segments.append((prev, cut))
-        prev = cut
+        # obie części muszą mieć sensowną ilość tekstu
+        if top_pixels < min_text_pixels * h/4:
+            continue
 
-    # ostatni segment
-    if roi.shape[0] - prev > min_peak_distance:
-        segments.append((prev, roi.shape[0]))
+        if bottom_pixels < min_text_pixels * h/4:
+            continue
 
-    # 5. konwersja do bboxów
+        # pionowy profil każdej części
+        top_proj = np.sum(top, axis=1)
+        bottom_proj = np.sum(bottom, axis=1)
+
+        # aktywne rzędy = realna wysokość tekstu
+        top_rows = np.count_nonzero(
+            top_proj > top_proj.max() * 0.15
+        )
+
+        bottom_rows = np.count_nonzero(
+            bottom_proj > bottom_proj.max() * 0.15
+        )
+
+        # jeśli zostało tylko kilka pikseli z wysokich liter → odrzuć
+        if top_rows < median_height * 0.35:
+            continue
+
+        if bottom_rows < median_height * 0.35:
+            continue
+
+        valley_score = 1.0 - projection[cut]
+
+        balance_score = min(
+            top_pixels,
+            bottom_pixels
+        ) / (
+            max(top_pixels, bottom_pixels) + 1e-6
+        )
+
+        score = (
+            valley_score * 0.6
+            + balance_score * 0.4
+        )
+
+        if score > best_score:
+            best_score = score
+            best_cut = cut
+
+    if best_cut is None:
+        return [(x, y, w, h)]
+
     return [
-        (x, y + s, roi.shape[1], e - s)
-        for s, e in segments
+        (x, y, w, best_cut),
+        (x, y + best_cut, w, h - best_cut),
     ]
-
-
 
 def sort_boxes_reading_order(boxes):
     if not boxes:
@@ -619,7 +668,7 @@ def detect_word_boxes_auto(image):
         cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU,
     )
 
-    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (10, 3))
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (10, 2))
     dilated = cv2.dilate(thresh, kernel, iterations=1)
 
     contours, _ = cv2.findContours(

@@ -426,10 +426,12 @@ def main(args=None, info=None, buffor=None):
             write_json(jsPath, payload, pretty=args.json_pretty)
 
         if args.trans:
+            File, _ = os.path.splitext(os.path.basename(args.page))
+            saveto = os.path.join("tData", File)
             save_aligned_boxes_jsonl(
                 page_path=args.page,
                 trans_path=args.trans,
-                saveto_dir="aligned_jsonl",
+                saveto_dir=saveto,
                 box_dir=output_dir,
             )
         elif args.aligned:

@@ -686,7 +686,7 @@ def save_aligned_boxes_jsonl(
 
     jsonl_path = os.path.join(
         saveto_dir,
-        f"{page_name}_aligned.jsonl",
+        "boxes.jsonl",
     )
 
     with open(

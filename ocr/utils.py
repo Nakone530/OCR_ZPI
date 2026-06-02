@@ -333,8 +333,11 @@ def convert_pdf_to_images(pdf_path: str, mode: str = "RGB") -> list:
         raise ModuleNotFoundError(
             "Obsługa PDF wymaga dodatkowych zależności.\n"
             "- Opcja A (najprostsza): zainstaluj PyMuPDF: pip install pymupdf\n"
-            "- Opcja B: użyj pdf2image + zainstaluj Poppler i dodaj do PATH.\n"
-            "Błąd wygląda na brak Popplera (pdfinfo/pdftoppm) w systemie."
+            "- Opcja B: zainstaluj pdf2image: pip install pdf2image\n"
+            "  Przy korzystaniu z pdf2image może być też wymagany Poppler "
+            "(pdfinfo/pdftoppm) dostępny w systemie i dodany do PATH.\n"
+            "Poprzednia próba użycia pdf2image nie powiodła się, ale przyczyną "
+            "mógł być brak pdf2image, brak Popplera albo inny problem konfiguracji."
         )
     
     doc = fitz.open(pdf_path)

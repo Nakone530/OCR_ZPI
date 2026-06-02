@@ -1,0 +1,20 @@
+{"id": 0, "crop_file": "word_000.jpg", "bbox_xyxy": [111, 27, 233, 117], "text": "P2", "prob": 0.2307264944366454, "source_image": "C:\\Users\\Adi\\Desktop\\Kasprowicz.jpg"}
+{"id": 1, "crop_file": "word_001.jpg", "bbox_xyxy": [255, 75, 297, 129], "text": "się", "prob": 0.8545632445583671, "source_image": "C:\\Users\\Adi\\Desktop\\Kasprowicz.jpg"}
+{"id": 2, "crop_file": "word_002.jpg", "bbox_xyxy": [312, 53, 431, 142], "text": "[Mar", "prob": 0.04008084535598755, "source_image": "C:\\Users\\Adi\\Desktop\\Kasprowicz.jpg"}
+{"id": 3, "crop_file": "word_003.jpg", "bbox_xyxy": [453, 57, 519, 120], "text": "ale", "prob": 1.0, "source_image": "C:\\Users\\Adi\\Desktop\\Kasprowicz.jpg"}
+{"id": 4, "crop_file": "word_004.jpg", "bbox_xyxy": [526, 57, 677, 140], "text": "Yasu", "prob": 0.3505168855190277, "source_image": "C:\\Users\\Adi\\Desktop\\Kasprowicz.jpg"}
+{"id": 5, "crop_file": "word_005.jpg", "bbox_xyxy": [689, 71, 798, 136], "text": "Vw", "prob": 0.07245288321471223, "source_image": "C:\\Users\\Adi\\Desktop\\Kasprowicz.jpg"}
+{"id": 6, "crop_file": "word_006.jpg", "bbox_xyxy": [108, 120, 227, 213], "text": "Piin", "prob": 0.21515743811430232, "source_image": "C:\\Users\\Adi\\Desktop\\Kasprowicz.jpg"}
+{"id": 7, "crop_file": "word_007.jpg", "bbox_xyxy": [246, 148, 287, 193], "text": "z", "prob": 1.0, "source_image": "C:\\Users\\Adi\\Desktop\\Kasprowicz.jpg"}
+{"id": 8, "crop_file": "word_008.jpg", "bbox_xyxy": [310, 143, 403, 219], "text": "hnu", "prob": 0.17709165199032778, "source_image": "C:\\Users\\Adi\\Desktop\\Kasprowicz.jpg"}
+{"id": 9, "crop_file": "word_009.jpg", "bbox_xyxy": [426, 132, 542, 203], "text": "Dssi a", "prob": 0.04186880792494839, "source_image": "C:\\Users\\Adi\\Desktop\\Kasprowicz.jpg"}
+{"id": 10, "crop_file": "word_010.jpg", "bbox_xyxy": [562, 142, 683, 220], "text": "Muwim", "prob": 0.15475464494544955, "source_image": "C:\\Users\\Adi\\Desktop\\Kasprowicz.jpg"}
+{"id": 11, "crop_file": "word_011.jpg", "bbox_xyxy": [707, 137, 824, 208], "text": "Hlany", "prob": 0.07738839652917667, "source_image": "C:\\Users\\Adi\\Desktop\\Kasprowicz.jpg"}
+{"id": 12, "crop_file": "word_012.jpg", "bbox_xyxy": [118, 204, 153, 273], "text": "I", "prob": 1.0, "source_image": "C:\\Users\\Adi\\Desktop\\Kasprowicz.jpg"}
+{"id": 13, "crop_file": "word_013.jpg", "bbox_xyxy": [162, 214, 265, 271], "text": "sial", "prob": 0.29087802101001425, "source_image": "C:\\Users\\Adi\\Desktop\\Kasprowicz.jpg"}
+{"id": 14, "crop_file": "word_014.jpg", "bbox_xyxy": [291, 215, 445, 295], "text": "bhlnu|", "prob": 0.0066087987432704885, "source_image": "C:\\Users\\Adi\\Desktop\\Kasprowicz.jpg"}
+{"id": 15, "crop_file": "word_015.jpg", "bbox_xyxy": [467, 227, 608, 283], "text": "[mLm", "prob": 0.04335958883166313, "source_image": "C:\\Users\\Adi\\Desktop\\Kasprowicz.jpg"}
+{"id": 16, "crop_file": "word_016.jpg", "bbox_xyxy": [634, 199, 735, 274], "text": "hvi", "prob": 0.24025694574806108, "source_image": "C:\\Users\\Adi\\Desktop\\Kasprowicz.jpg"}
+{"id": 17, "crop_file": "word_017.jpg", "bbox_xyxy": [747, 203, 906, 290], "text": "JKzas .", "prob": 0.06909214581289161, "source_image": "C:\\Users\\Adi\\Desktop\\Kasprowicz.jpg"}
+{"id": 18, "crop_file": "word_018.jpg", "bbox_xyxy": [598, 345, 707, 482], "text": "Jan", "prob": 1.0, "source_image": "C:\\Users\\Adi\\Desktop\\Kasprowicz.jpg"}
+{"id": 19, "crop_file": "word_019.jpg", "bbox_xyxy": [724, 352, 948, 462], "text": "u Kahnvin", "prob": 0.09664834663110021, "source_image": "C:\\Users\\Adi\\Desktop\\Kasprowicz.jpg"}

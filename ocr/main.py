@@ -641,20 +641,19 @@ def main(args=None, info=None, buffor=None):
                 "key": name,                            # klucz sortowania
                 "file": r["file"],
                 "text": r["text"],
-                "confidence": r["confidence"],
-                "letter_vectors": r.get("letter_vectors", []),
+                "confidence": r["confidence"]
             })
         rows.sort(key=lambda r: r["key"] if r["key"] else "")
         info(f"\n{'NAME':<12} {'TEXT':<20} {'CONF':<10} {'AUTOCORRECT':<20}")
         info("-" * 45)
 
         for r in rows:
-            conf = r['confidence'] if r['confidence'] is not None else 50.0
-            autocorTXT = DictCorrect(r['text'], conf, letter_vectors=r.get('letter_vectors'))
-            if r['confidence'] is None:
-                info(f"{str(r['key']) if r['key'] else '-':<12} {r['text']:<20} {'-':<10} {autocorTXT:<20}")
+            if r["confidence"] is None:
+                autocorTXT = DictCorrect(r['text'])
+                info(f"{str(r['key']) if r['key'] else '-':<12} {autocorTXT:<20} {'-':<10}")
             else:
-                info(f"{r['key']:<12} {r['text']:<20} {r['confidence']/100:<10.2%} {autocorTXT:<20}")
+                autocorTXT = DictCorrect(r['text'], r['confidence'])
+                info(f"{r['key']:<12} {r['text']:<20} {r['confidence']/100:<10.2%} {autocorTXT:<20} {'-':<10}")
 
         if args.json:
             payload = build_page_result_json(

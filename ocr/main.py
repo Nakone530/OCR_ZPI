@@ -481,10 +481,6 @@ def main(args=None, info=None, buffor=None):
 
                 autocorTXT = DictCorrect(
                     r["text"],
-                    conf,
-                    letter_vectors=r.get(
-                        "letter_vectors"
-                    ),
                 )
 
                 if r["confidence"] is None:

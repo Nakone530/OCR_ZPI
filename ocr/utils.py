@@ -1350,71 +1350,39 @@ def _freq_score(word: str) -> float:
 #--- Autokorekta------
 def DictCorrect(
     text: str,
-    confidence: float = 100.0,
-    threshold: float = 0.55,
-    top_k: int = 15,
-    letter_vectors: list | None = None,
+    threshold: float = 0.8,
 ) -> str:
     """
-    Pipeline autokorekty HTR:
-      embedding → cosine similarity → TOP-5 → reranking → wybór najlepszego.
-
-    Etapy rerankingu (w kolejności priorytetu):
-      1. _score_candidate_with_vectors — używa wektorów prawdopodobieństwa
-         modelu per litera (jeśli letter_vectors dostarczone i długości zgodne)
-      2. _rerank_score — embedding + SequenceMatcher + długość (fallback)
-
-    confidence (0-100): pewność modelu HTR.
-    letter_vectors: lista (litera, np.ndarray) z predict_letter() — opcjonalna.
+    Szuka najbardziej podobnego słowa w słowniku.
+    
+    Jeśli podobieństwo >= threshold:
+        zwraca słowo ze słownika
+    W przeciwnym razie:
+        zwraca oryginalny tekst
     """
+    dictionary = load_dictionary()
     text = text.strip()
+
     if not text:
         return text
 
-    # Jeśli słowo jest już w słowniku — nie ma co korygować
-    words_check, _ = _get_dict_embeddings()
-    if text.lower() in {w.lower() for w in words_check}:
-        return text
+    best_match = None
+    best_score = 0.0
 
-    # 1. Embedding słowa wejściowego (HTR output)
-    query_vec = _word_embedding(text)
+    text_lower = text.lower()
 
-    # 2. Porównanie ze słownikiem przez cosine similarity
-    words, dict_matrix = _get_dict_embeddings()
-    similarities = dict_matrix @ query_vec  # (N,) — szybki iloczyn macierzowy
+    for word in dictionary:
+        score = SequenceMatcher(
+            None,
+            text_lower,
+            word.lower()
+        ).ratio()
 
-    # 3. TOP-K kandydatów według embeddingu
-    k = min(top_k, len(words))
-    top_idx = np.argpartition(similarities, -k)[-k:]
-    top_idx = top_idx[np.argsort(similarities[top_idx])[::-1]]
-    top_candidates = [(words[i], float(similarities[i])) for i in top_idx]
+        if score > best_score:
+            best_score = score
+            best_match = word
 
-    # 4. Reranking: jeśli mamy letter_vectors — używamy wektorów modelu
-    #    W przeciwnym razie fallback do SequenceMatcher + embedding
-    use_vectors = bool(letter_vectors)
+    if best_score >= threshold:
+        return best_match
 
-    def _combined_score(word: str, embed_sim: float) -> float:
-        freq = _freq_score(word)
-        if use_vectors:
-            vec_score = _score_candidate_with_vectors(word, letter_vectors)
-            if vec_score > -999.0:
-                vec_norm = max(0.0, 1.0 + vec_score / 5.0)
-                return 0.46 * vec_norm + 0.27 * embed_sim + 0.18 * _rerank_score(word, text, embed_sim) + 0.09 * freq
-        return _rerank_score(word, text, embed_sim) + 0.09 * freq
-
-    reranked = sorted(
-        top_candidates,
-        key=lambda x: _combined_score(x[0], x[1]),
-        reverse=True,
-    )
-
-    # 5. Wybór najlepszego słowa z uwzględnieniem confidence modelu HTR
-    conf_factor = confidence / 100.0
-    effective_threshold = threshold + (0.90 - threshold) * conf_factor
-
-    best_word, best_embed_sim = reranked[0]
-    best_score = _combined_score(best_word, best_embed_sim)
-
-    if best_score >= effective_threshold:
-        return best_word
     return text

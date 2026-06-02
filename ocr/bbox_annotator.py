@@ -13,7 +13,7 @@ DEBUG_DEFAULTS = {
     "dilate_y": 2,
     "split_amp": 0.35,
     "overlap": 0.45,
-    "pad_top": 2,
+    "num_split": 2,
 }
 
 def interactive_debug(image):
@@ -117,7 +117,7 @@ def setup_debug_ui():
 
     # vertical padding
     cv2.createTrackbar(
-        "pad_top",
+        "num_split",
         CONTROL_WINDOW,
         10,
         50,
@@ -129,9 +129,12 @@ def get_debug_params():
     try:
         return {
             "dilate_x":
-                cv2.getTrackbarPos(
-                    "dilate_x",
-                    CONTROL_WINDOW,
+                max(
+                    1,
+                    cv2.getTrackbarPos(
+                        "dilate_x",
+                        CONTROL_WINDOW,
+                    ),
                 ),
 
             "dilate_y":
@@ -155,9 +158,9 @@ def get_debug_params():
                     CONTROL_WINDOW,
                 ) / 100.0,
 
-            "pad_top":
+            "num_cand":
                 cv2.getTrackbarPos(
-                    "pad_top",
+                    "num_split",
                     CONTROL_WINDOW,
                 ),
         }
@@ -366,6 +369,10 @@ def split_lines_from_roi(
     y,
     median_height,
 ):
+
+    debug_params = get_debug_params()
+    split_amp = debug_params["split_amp"]
+    
     h, w = roi.shape[:2]
 
     mask = (roi > 0).astype(np.uint8)
@@ -387,7 +394,8 @@ def split_lines_from_roi(
         return [(x, y, w, h)]
 
     # kilka najlepszych minimów
-    candidates = np.argsort(band)[:12]
+    num_candidates = 3 + int(split_amp * 0.97)
+    candidates = np.argsort(band)[:num_candidates]
 
     best_cut = None
     best_score = -1
@@ -439,7 +447,11 @@ def split_lines_from_roi(
             continue
 
         valley_score = 1.0 - projection[cut]
+        required_valley = 0.15 + split_amp * 0.60
 
+        if valley_score < required_valley:
+            continue
+        
         balance_score = min(
             top_pixels,
             bottom_pixels
@@ -1382,7 +1394,7 @@ def edit_boxes_interactive(image, boxes):
                 handle = detect_handle(ix, iy, box)
                 state["drag_mode"] = handle
                 state["drag_anchor"] = (ix, iy)
-                state["start_box"] = box.copy()
+                state["start_box"] = box
             else:
                 state["drag_mode"] = "draw"
                 state["drag_anchor"] = (ix, iy)

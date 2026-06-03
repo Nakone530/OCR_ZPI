@@ -64,6 +64,43 @@ def _print_accuracy(predicted_text: str, reference_path: str, info=None) -> None
     info("=" * 60)
 
 
+def _load_char_folder_map(numeracja_path: str) -> dict:
+    mapping = {}
+    try:
+        with open(numeracja_path, encoding="utf-8") as handle:
+            for raw_line in handle:
+                line = raw_line.strip()
+                if not line or "=" not in line:
+                    continue
+                left, right = line.split("=", 1)
+                folder_id = left.split(":", 1)[-1].strip()
+                char = right.strip()
+                if folder_id and char:
+                    mapping[char] = folder_id
+    except OSError:
+        return {}
+    return mapping
+
+
+def word_to_folder_paths(word: str, data_root: str = "data") -> list:
+    numeracja_path = os.path.join(data_root, "numeracja.TXT")
+    if not os.path.exists(numeracja_path):
+        numeracja_path = os.path.join(data_root, "phsf", "numeracja.TXT")
+    base_dir = os.path.join(data_root, "znaki", "png")
+    if not os.path.exists(base_dir):
+        base_dir = os.path.join(data_root, "phsf", "znaki", "png")
+    char_map = _load_char_folder_map(numeracja_path)
+    results = []
+    for char in word:
+        folder_id = char_map.get(char)
+        if not folder_id:
+            results.append((char, None))
+            continue
+        folder_path = os.path.join(base_dir, folder_id)
+        results.append((char, folder_path))
+    return results
+
+
 # -- Funkcje pomocnicze dla wyświetlania rozmieszczenia tekstu ------------------
 
 def display_text_layout(words, info):
@@ -151,6 +188,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
     mode.add_argument("--image", "-i", type=str, metavar="PLIK", help="Rozpoznaj pojedyncza litere")
     mode.add_argument("--word", "-w", type=str, metavar="PLIK", help="Rozpoznaj wyraz (jedna linia)")
+    mode.add_argument("--word-folders", type=str, metavar="SLOWO", help="Zwraca foldery znakow dla slowa")
+    mode.add_argument("--word-folders-image", type=str, metavar="PLIK", help="Rozpoznaj wyraz i zwroc foldery znakow")
     mode.add_argument("--lines", "-l", type=str, metavar="PLIK", help="Rozpoznaj tekst wieloliniowy")
     mode.add_argument("--multi", "-m", type=str, nargs="+", metavar="PLIK", help="Rozpoznaj wiele zdjec pojedynczych liter")
     mode.add_argument("--annotate", type=str, metavar="PLIK", help="Wycinki: popraw bboxy i zapisz wycinki + adnotacje")
@@ -823,6 +862,35 @@ def main(args=None, info=None, buffor=None):
 
         if args.accuracy:
             _print_accuracy(word, args.accuracy, info)
+
+    elif getattr(args, "word_folders", None):
+        word = args.word_folders
+        info(f"\nFoldery znakow dla slowa: {word}")
+        pairs = word_to_folder_paths(word)
+        for char, path in pairs:
+            if path:
+                info(f"{char} -> {path}")
+            else:
+                info(f"{char} -> BRAK")
+
+    elif getattr(args, "word_folders_image", None):
+        _require_file(args.word_folders_image, info)
+        info(f"\nRozpoznawanie wyrazu: {args.word_folders_image}")
+        model = load_model(ocr_path, device, info, 2)
+        word, avg_word_confidence, class_confidence = predict_word(
+            args.word_folders_image,
+            model,
+            device,
+            args,
+        )
+        info(f"Wynik: {word}")
+        info("Foldery znakow:")
+        pairs = word_to_folder_paths(word)
+        for char, path in pairs:
+            if path:
+                info(f"{char} -> {path}")
+            else:
+                info(f"{char} -> BRAK")
 
     # ── Tekst wieloliniowy ──
     elif args.lines:

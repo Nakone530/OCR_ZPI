@@ -7,7 +7,14 @@ Narzędzia pomocnicze:
 """
 
 import os
+try:
+    import pyphen
+    PYPHEN_AVAILABLE = True
+except ModuleNotFoundError:
+    pyphen = None  # type: ignore
+    PYPHEN_AVAILABLE = False
 import re
+import csv
 import math
 from datetime import date
 from pathlib import Path
@@ -32,7 +39,6 @@ import torch
 import torch.nn as nn
 from torchvision import transforms
 import torchvision.transforms.functional as F
-import csv
 from datetime import datetime
 from typing import Any
 from datetime import date
@@ -45,6 +51,15 @@ from .model import MainModel, AuxModel
 from .bbox_annotator import load_boxes_from_annotations, sort_boxes_reading_order, detect_word_boxes_auto, edit_boxes_interactive
 from . import info
 
+
+if PYPHEN_AVAILABLE:
+    try:
+        dic = pyphen.Pyphen(lang="pl_PL")
+    except Exception:
+        dic = None
+else:
+    dic = None
+
 def load_dictionary(json_path: str = ÐICT_PATH) -> list[str]:
     with open(json_path, "r", encoding="utf-8") as f:
         data = json.load(f)
@@ -53,6 +68,94 @@ def load_dictionary(json_path: str = ÐICT_PATH) -> list[str]:
         raise ValueError("JSON musi zawierać listę stringów")
 
     return [str(word) for word in data]
+
+
+def _load_char_folder_map(numeracja_path: str) -> dict:
+    mapping = {}
+    try:
+        with open(numeracja_path, newline="", encoding="utf-8") as f:
+            reader = csv.reader(f)
+
+            for row_num, row in enumerate(reader, start=1):
+                left = row[1]
+                right = row[0]
+                folder_id = left.strip()
+                syl = right.strip()
+                if folder_id and syl:
+                    mapping[syl] = folder_id
+    except OSError:
+        return {}
+    return mapping
+
+
+def word_to_folder_paths(word: str, data_root: str = "data", info: callable = None) -> list:
+    numeracja_path = os.path.join(data_root, "numeracja.csv")
+    if not os.path.exists(numeracja_path):
+        numeracja_path = os.path.join(data_root, "phsf", "syllables", "numeracja.csv")
+    base_dir = os.path.join(data_root, "syllables")
+    if not os.path.exists(base_dir):
+        base_dir = os.path.join(data_root, "phsf", "syllables")
+    char_map = _load_char_folder_map(numeracja_path)
+
+    if os.path.isfile(word) and word.lower().endswith(".txt"):
+        with open(word, encoding="utf-8") as handle:
+            words = [token for line in handle for token in line.split()]
+        out_path = os.path.splitext(word)[0] + "_folders.txt"
+        all_results = []
+        with open(out_path, "w", encoding="utf-8") as out:
+            out.write(f"Foldery znakow z pliku: {word}\n")
+            _log(info, f"\nFoldery znakow z pliku: {word}")
+            for single_word in words:
+                out.write(f"\nSlowo: {single_word}\n")
+                _log(info, f"\nSlowo: {single_word}")
+                pairs = _word_to_folder_syllables(single_word, char_map, base_dir)
+                for char, path in pairs:
+                    all_results.append((char, path))
+                    if path:
+                        out.write(f"{char} -> {path}\n")
+                        _log(info, f"{char} -> {path}")
+                    else:
+                        out.write(f"{char} -> BRAK\n")
+                        _log(info, f"{char} -> BRAK")
+        _log(info, f"Zapisano wyniki do: {out_path}")
+        return all_results
+
+    # pojedynczy wyraz
+    _log(info, f"\nFoldery znakow dla slowa: {word}")
+    results = _word_to_folder_syllables(word, char_map, base_dir)
+    print(results)
+    for char, path in results:
+        if path:
+            _log(info, f"{char} -> {path}")
+        else:
+            _log(info, f"{char} -> BRAK")
+    return results
+
+
+def _word_to_folder_syllables(word: str, char_map: dict, base_dir: str) -> list:
+    results = []
+    if dic is not None:
+        try:
+            syllables = dic.inserted(word).split("-")
+        except Exception:
+            syllables = [word]
+    else:
+        syllables = [word]
+    for syllab in syllables:
+        folder_id = char_map.get(syllab)
+        if not folder_id:
+            results.append((syllab, None))
+            continue
+        folder_path = os.path.join(base_dir, folder_id)
+        results.append((syllab, folder_path))
+    return results
+
+
+def _log(info: callable, msg: str):
+    if info:
+        info(msg)
+
+
 # ── Transformacje ──────────────────────────────────────────────────────────────
 
 def aux_transform():

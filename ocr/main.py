@@ -838,8 +838,25 @@ def main(args=None, info=None, buffor=None):
             _print_accuracy(word, args.accuracy, info)
 
     elif getattr(args, "word_folders", None):
-        word_to_folder_paths(args.word_folders, info=info)
+        if os.path.isfile(args.word_folders):
 
+            with open(args.word_folders, encoding="utf-8") as f:
+                for line in f:
+                    for word in line.split():
+
+                        pairs = word_to_folder_paths(word, info=info)
+                        generate_word_samples(word, pairs)
+
+        else:
+
+            pairs = word_to_folder_paths(args.word_folders, info=info)
+            generate_word_samples(args.word_folders, pairs)
+
+            for syl, path in pairs:
+                if path:
+                    info(f"{syl} -> {path}")
+                else:
+                    info(f"{syl} -> BRAK")
     elif getattr(args, "word_folders_image", None):
         _require_file(args.word_folders_image, info)
         info(f"\nRozpoznawanie wyrazu: {args.word_folders_image}")

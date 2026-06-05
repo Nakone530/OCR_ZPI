@@ -46,7 +46,7 @@ from datetime import date
 from pathlib import Path
 import matplotlib.pyplot as plt
 import itertools
-from .config import IMAGE_SIZE, MEAN, STD, CHARS, AuxCHARS, MODEL_PATH, NUM_CLASSES, char2idx, idx2char, VERSION_RE, ÐICT_PATH
+from .config import IMAGE_SIZE, MEAN, STD, CHARS, AuxCHARS, MODEL_PATH, PHSF_DATA_DIR, NUM_CLASSES, char2idx, idx2char, VERSION_RE, ÐICT_PATH
 from .model import MainModel, AuxModel
 from .bbox_annotator import load_boxes_from_annotations, sort_boxes_reading_order, detect_word_boxes_auto, edit_boxes_interactive
 from . import info
@@ -97,29 +97,6 @@ def word_to_folder_paths(word: str, data_root: str = "data", info: callable = No
         base_dir = os.path.join(data_root, "phsf", "syllables")
     char_map = _load_char_folder_map(numeracja_path)
 
-    if os.path.isfile(word) and word.lower().endswith(".txt"):
-        with open(word, encoding="utf-8") as handle:
-            words = [token for line in handle for token in line.split()]
-        out_path = os.path.splitext(word)[0] + "_folders.txt"
-        all_results = []
-        with open(out_path, "w", encoding="utf-8") as out:
-            out.write(f"Foldery znakow z pliku: {word}\n")
-            _log(info, f"\nFoldery znakow z pliku: {word}")
-            for single_word in words:
-                out.write(f"\nSlowo: {single_word}\n")
-                _log(info, f"\nSlowo: {single_word}")
-                pairs = _word_to_folder_syllables(single_word, char_map, base_dir)
-                for char, path in pairs:
-                    all_results.append((char, path))
-                    if path:
-                        out.write(f"{char} -> {path}\n")
-                        _log(info, f"{char} -> {path}")
-                    else:
-                        out.write(f"{char} -> BRAK\n")
-                        _log(info, f"{char} -> BRAK")
-        _log(info, f"Zapisano wyniki do: {out_path}")
-        return all_results
-
     # pojedynczy wyraz
     _log(info, f"\nFoldery znakow dla slowa: {word}")
     results = _word_to_folder_syllables(word, char_map, base_dir)
@@ -149,6 +126,47 @@ def _word_to_folder_syllables(word: str, char_map: dict, base_dir: str) -> list:
         folder_path = os.path.join(base_dir, folder_id)
         results.append((syllab, folder_path))
     return results
+
+def generate_word_samples(word, pairs, samples_count=1000):
+
+    output_dir= PHSF_DATA_DIR
+    words_dir = os.path.join(output_dir, "words", word)
+    os.makedirs(words_dir, exist_ok=True)
+
+    for sample_idx in range(samples_count):
+
+        images = []
+        for syl, syl_dir in pairs:
+            print(syl_dir)
+            candidates = [
+                os.path.join(syl_dir, f)
+                for f in os.listdir(syl_dir)
+                if f.lower().endswith(".png")
+            ]
+
+            img_path = random.choice(candidates)
+            images.append(Image.open(img_path).convert("RGBA"))
+
+        total_width = sum(img.width for img in images)
+        max_height = max(img.height for img in images)
+
+        result = Image.new(
+            "RGBA",
+            (total_width, max_height),
+            (255, 255, 255, 0)
+        )
+
+        x = 0
+        for img in images:
+            result.paste(img, (x, max_height - img.height), img)
+            x += img.width
+
+        result.save(
+            os.path.join(
+                words_dir,
+                f"{word}_{sample_idx:06d}.png"
+            )
+        )
 
 
 def _log(info: callable, msg: str):

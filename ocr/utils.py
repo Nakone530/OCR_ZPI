@@ -7,7 +7,9 @@ Narzędzia pomocnicze:
 """
 
 import os
+import pyphen
 import re
+import csv
 import math
 from datetime import date
 from pathlib import Path
@@ -32,7 +34,6 @@ import torch
 import torch.nn as nn
 from torchvision import transforms
 import torchvision.transforms.functional as F
-import csv
 from datetime import datetime
 from typing import Any
 from datetime import date
@@ -53,6 +54,46 @@ def load_dictionary(json_path: str = ÐICT_PATH) -> list[str]:
         raise ValueError("JSON musi zawierać listę stringów")
 
     return [str(word) for word in data]
+
+
+def _load_char_folder_map(numeracja_path: str) -> dict:
+    mapping = {}
+    try:
+        with open(numeracja_path, newline="", encoding="utf-8") as f:
+            reader = csv.reader(f)
+
+            for row_num, row in enumerate(reader, start=1):
+                left = row[1]
+                right = row[0]
+                folder_id = left.strip()
+                syl = right.strip()
+                if folder_id and syl:
+                    mapping[syl] = folder_id
+    except OSError:
+        return {}
+    return mapping
+
+
+def word_to_folder_paths(word: str, data_root: str = "data") -> list:
+    numeracja_path = os.path.join(data_root, "numeracja.csv")
+    if not os.path.exists(numeracja_path):
+        numeracja_path = os.path.join(data_root, "phsf", "syllables", "numeracja.csv")
+    base_dir = os.path.join(data_root, "syllables")
+    if not os.path.exists(base_dir):
+        base_dir = os.path.join(data_root, "phsf", "syllables")
+    char_map = _load_char_folder_map(numeracja_path)
+    results = []
+    syllables = dic.inserted(word).split("-")
+    for syllab in syllables:
+        folder_id = char_map.get(syllab)
+        if not folder_id:
+            results.append((syllab, None))
+            continue
+        folder_path = os.path.join(base_dir, folder_id)
+        results.append((syllab, folder_path))
+    return results
+
+
 # ── Transformacje ──────────────────────────────────────────────────────────────
 
 def aux_transform():

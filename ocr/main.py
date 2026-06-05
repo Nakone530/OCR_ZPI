@@ -45,7 +45,6 @@ from ocr.display import (
 from ocr.bbox_annotator import edit_boxes_interactive
 #--State
 
-dic = pyphen.Pyphen(lang="pl_PL")
 
 # ── Pomocniki ─────────────────────────────────────────────────────────────────
 

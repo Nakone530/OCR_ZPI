@@ -46,6 +46,9 @@ from .model import MainModel, AuxModel
 from .bbox_annotator import load_boxes_from_annotations, sort_boxes_reading_order, detect_word_boxes_auto, edit_boxes_interactive
 from . import info
 
+
+dic = pyphen.Pyphen(lang="pl_PL")
+
 def load_dictionary(json_path: str = ÐICT_PATH) -> list[str]:
     with open(json_path, "r", encoding="utf-8") as f:
         data = json.load(f)

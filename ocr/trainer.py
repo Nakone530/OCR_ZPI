@@ -29,10 +29,10 @@ from torchvision import datasets
 from .config import (
     DATA_DIR, MODEL_PATH, CHECKPOINT_PATH,
     MODEL_ARCHIVE_DIR, MODEL_ARCHIVE_KEEP_COUNT, IMAGES_DIR, CHARS, char2idx, idx2char, DATA_ROOT_DIR,
-    PHSF_DATA_DIR,
+    PHSF_DATA_DIR, FOLDER8_DIR,
 )
 from .model import MainModel, CNNClassifier
-from .utils import get_train_transform, get_cnn_train_transform, load_all_datasets, load_phsf_znaki
+from .utils import get_train_transform, get_cnn_train_transform, load_all_datasets, load_phsf_znaki, load_folder8, load_phsf_words
 from .model_archive import ModelArchiver
 from .OCRDataset import OCRDataset
 from . import info
@@ -1219,6 +1219,36 @@ def get_preset_names() -> List[str]:
     """Zwraca listę dostępnych nazw presetów treningowych."""
     return list(TRAINING_PRESETS.keys())
 
+
+def train_folder8(epochs=10, batch_size=32, model_path=None, info=None, args=None,
+                  config=None, save_path=None):
+    """
+    Trening CRNN na danych z folderu 8 (podfolderów 1-174 z labels.txt).
+    Każdy podfolder zawiera obrazy słów; labels.txt mapuje plik -> tekst.
+    """
+    global GLOBAL_MODEL
+    if info is None:
+        info = print
+
+    info("Ładowanie danych z folderu 8...")
+    data = load_folder8(FOLDER8_DIR)
+    info(f"  Załadowano {len(data)} próbek z folderu: {FOLDER8_DIR}")
+
+    if not data:
+        info("BŁĄD: Brak danych w folderze 8. Sprawdź ścieżkę i strukturę katalogów.")
+        return
+
+    train_crnn(
+        epochs=epochs,
+        batch_size=batch_size,
+        model_path=model_path,
+        info=info,
+        args=args,
+        config=config,
+        save_path=save_path,
+        preloaded_data=data,
+    )
+
     
     
 def show_infinite_menu(info=None):
@@ -1519,3 +1549,207 @@ def infinite_train(batch_size=32, model_path=None, checkpoint_interval=5, info=N
         info(traceback.format_exc())
     finally:
         signal.signal(signal.SIGINT, handler)
+
+
+# ── Trening CRNN na danych wyrazów (PHSF words + gen_words) ─────────────────────
+
+def train_crnn_words(epochs=10, batch_size=32, model_path=None, info=None, args=None,
+                     words_only=False, config: Optional['TrainingConfig'] = None,
+                     save_path: Optional[str] = None):
+    """
+    Trenuje CRNN na danych wyrazów z folderów data/phsf/words i data/phsf/gen_words.
+    
+    Obsługuje dwa tryby:
+    1. Tylko words (words_only=True): trenowanie tylko na data/phsf/words
+    2. Pełny trening (words_only=False): trenowanie na words + gen_words łącznie
+    
+    Args:
+        epochs: liczba epok treningowych
+        batch_size: rozmiar batcha
+        model_path: ścieżka do ładowania modelu (jeśli istnieje)
+        info: funkcja do logowania (default: print)
+        args: argumenty z argparse
+        words_only: jeśli True, ładuje tylko data/phsf/words; jeśli False, ładuje oba foldery
+        config: TrainingConfig z parametrami transformacji (denoise_prob, max_padding)
+        save_path: ścieżka do zapisu modelu (default: MODEL_PATH)
+    """
+    global GLOBAL_MODEL, GLOBAL_OPTIMIZER, GLOBAL_CRITERION
+    global GLOBAL_DEVICE, GLOBAL_EPOCH, GLOBAL_BEST_ACC, GLOBAL_CLASS_NAMES, GLOBAL_VAL_ACCURACY
+    
+    if info is None:
+        info = print
+    
+    effective_save_path = save_path or MODEL_PATH
+    
+    # Parametry transformacji z konfiguracji lub wartości domyślne
+    denoise_prob = config.denoise_prob if config is not None else 0.3
+    max_padding = config.max_padding if config is not None else 20
+    
+    # Odczyt dokładności istniejącego modelu i kopia zapasowa
+    prev_accuracy = get_stored_accuracy(effective_save_path)
+    backup_path = effective_save_path + ".backup"
+    _make_backup_as(effective_save_path, backup_path)
+    if prev_accuracy >= 0:
+        info(f"Poprzednia dokładność modelu: {prev_accuracy:.2f}%")
+    else:
+        info("Brak poprzedniego modelu – pierwszy trening.")
+    
+    info("1. Ładowanie datasetu OCR wyrazów...")
+    
+    # Ładowanie danych w zależności od trybu
+    if words_only:
+        info("   Tryb: TYLKO data/phsf/words")
+        data = load_phsf_words(
+            words_dir=os.path.join(DATA_ROOT_DIR, "phsf", "words") if DATA_ROOT_DIR else "./data/phsf/words",
+            gen_words_dir=None  # Nie ładuj gen_words
+        )
+    else:
+        info("   Tryb: PEŁNY trening (words + gen_words)")
+        data = load_phsf_words(
+            words_dir="./data/phsf/words",
+            gen_words_dir="./data/phsf/gen_words",
+        )
+    
+    if not data:
+        info("BŁĄD: Brak danych do treningu. Sprawdź czy foldery words/gen_words zawierają dane.")
+        return
+    
+    info(f"   Załadowano: {len(data)} wyrazów")
+    
+    dataset = OCRDataset(
+        json_data=data,
+        images_dir=None,
+        transform=get_train_transform(args, denoise_prob=denoise_prob, max_padding=max_padding)
+    )
+    
+    info(f"2. Dataset załadowany: {len(dataset)} obrazów łącznie")
+    
+    train_size = int(0.8 * len(dataset))
+    val_size = len(dataset) - train_size
+    info(f"3. Splitting: {train_size} trening, {val_size} walidacja")
+    train_dataset, val_dataset = torch.utils.data.random_split(dataset, [train_size, val_size])
+    
+    info("4. Tworzenie DataLoader...")
+    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True, collate_fn=collate_fn)
+    val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=batch_size, shuffle=False, collate_fn=collate_fn)
+    
+    info("5. Inicjalizacja lub ładowanie modelu...")
+    if GLOBAL_MODEL is None:
+        init_or_load_model(len(CHARS) + 1, model_path, info)
+    
+    info("6. Rozpoczynanie treningu CRNN na wyrazach...")
+    total_steps = len(train_loader)
+    training_start = time.time()
+    target_epoch = GLOBAL_EPOCH + epochs
+    
+    info("\n" + "=" * 70)
+    info("  TRENING CRNN NA WYRAZACH (PHSF)")
+    info("=" * 70)
+    info(f"  Urządzenie: {GLOBAL_DEVICE}")
+    info(f"  Batch size: {batch_size}")
+    info(f"  Epoki do wykonania: {epochs}")
+    info(f"  Zakres epok: {GLOBAL_EPOCH + 1} -> {target_epoch}")
+    if words_only:
+        info("  Tryb: TYLKO words")
+    else:
+        info("  Tryb: PEŁNY (words + gen_words)")
+    info("=" * 70 + "\n")
+    
+    try:
+        for epoch in range(GLOBAL_EPOCH, target_epoch):
+            epoch_start = time.time()
+            GLOBAL_MODEL.train()
+            running_loss = 0.0
+            
+            for step, (images, targets, target_lengths) in enumerate(train_loader, start=1):
+                images = images.to(GLOBAL_DEVICE)
+                targets = targets.to(GLOBAL_DEVICE)
+                target_lengths = target_lengths.to(GLOBAL_DEVICE)
+                
+                GLOBAL_OPTIMIZER.zero_grad(set_to_none=True)
+                
+                outputs = GLOBAL_MODEL(images)  # (T, B, C)
+                log_probs = outputs.log_softmax(2)
+                
+                input_lengths = torch.full(
+                    size=(images.size(0),),
+                    fill_value=outputs.size(0),
+                    dtype=torch.long,
+                    device=GLOBAL_DEVICE,
+                )
+                
+                loss = GLOBAL_CRITERION(
+                    log_probs,
+                    targets,
+                    input_lengths,
+                    target_lengths
+                )
+                
+                loss.backward()
+                GLOBAL_OPTIMIZER.step()
+                
+                running_loss += loss.item()
+                
+                if step % 50 == 0:
+                    info(f"Epoch {epoch+1} Step {step}/{total_steps} Loss: {loss.item():.4f}")
+            
+            # WALIDACJA
+            GLOBAL_MODEL.eval()
+            val_loss = 0.0
+            
+            with torch.inference_mode():
+                for images, targets, target_lengths in val_loader:
+                    images = images.to(GLOBAL_DEVICE)
+                    targets = targets.to(GLOBAL_DEVICE)
+                    target_lengths = target_lengths.to(GLOBAL_DEVICE)
+                    
+                    outputs = GLOBAL_MODEL(images)
+                    log_probs = outputs.log_softmax(2)
+                    
+                    input_lengths = torch.full(
+                        size=(images.size(0),),
+                        fill_value=outputs.size(0),
+                        dtype=torch.long,
+                        device=GLOBAL_DEVICE,
+                    )
+                    
+                    loss = GLOBAL_CRITERION(
+                        log_probs,
+                        targets,
+                        input_lengths,
+                        target_lengths
+                    )
+                    
+                    val_loss += loss.item()
+            
+            epoch_time = time.time() - epoch_start
+            avg_train_loss = running_loss / total_steps
+            avg_val_loss = val_loss / len(val_loader) if len(val_loader) > 0 else 0
+            
+            GLOBAL_VAL_ACCURACY = _compute_val_char_accuracy(GLOBAL_MODEL, val_loader, GLOBAL_DEVICE)
+
+            info(f"Epoch {epoch+1}: avg_train_loss={avg_train_loss:.4f}, avg_val_loss={avg_val_loss:.4f}, val_accuracy={GLOBAL_VAL_ACCURACY:.2f}%, time={epoch_time:.1f}s")
+
+            # Zapis modelu jeśli poprawiła się dokładność
+            if avg_val_loss < GLOBAL_BEST_ACC:
+                GLOBAL_BEST_ACC = avg_val_loss
+                capture_best_model(info, path=effective_save_path)
+                info(f"  Nowy najlepszy model zapisany (val_loss={avg_val_loss:.4f})")
+            
+            GLOBAL_EPOCH += 1
+            gc.collect()
+        
+        total_time = time.time() - training_start
+        info("\n" + "=" * 70)
+        info("  TRENING UKOŃCZONY")
+        info("=" * 70)
+        info(f"  Całkowity czas: {total_time:.1f}s")
+        info(f"  Epoki: {GLOBAL_EPOCH}")
+        info(f"  Najlepszy loss: {GLOBAL_BEST_ACC:.4f}")
+        info(f"  Dokładność znakowa (val): {GLOBAL_VAL_ACCURACY:.2f}%")
+        info("=" * 70)
+    
+    except Exception as e:
+        info(f"\nBłąd podczas treningu: {e}")
+        import traceback
+        info(traceback.format_exc())

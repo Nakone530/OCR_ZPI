@@ -624,6 +624,124 @@ def load_phsf_znaki(phsf_dir: str) -> list:
 
     return items
 
+
+def load_folder8(root_dir: str) -> list:
+    """
+    Ładuje dataset ze struktury folder8 (podfolderów 1-174).
+
+    Każdy podfolder zawiera obrazy słów i plik labels.txt
+    w formacie: 'nazwa_pliku<TAB>słowo' (jedna para na linię).
+    Zwraca listę {"image_path": ..., "text": ...} gotową dla OCRDataset.
+    """
+    items = []
+    if not os.path.isdir(root_dir):
+        return items
+
+    for subfolder in os.listdir(root_dir):
+        subfolder_path = os.path.join(root_dir, subfolder)
+        if not os.path.isdir(subfolder_path):
+            continue
+
+        labels_path = os.path.join(subfolder_path, "labels.txt")
+        if not os.path.exists(labels_path):
+            continue
+
+        with open(labels_path, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.rstrip("\n")
+                if "\t" not in line:
+                    continue
+                fname, text = line.split("\t", 1)
+                fname = fname.strip()
+                text = text.strip()
+                if not fname or not text:
+                    continue
+                img_path = os.path.join(subfolder_path, fname)
+                if os.path.exists(img_path):
+                    items.append({"image_path": img_path, "text": text})
+
+    return items
+
+
+def load_phsf_words(words_dir: str = None, gen_words_dir: str = None) -> list:
+    """
+    Ładuje dataset wyrazów PHSF z folderów words i gen_words.
+
+    Struktura words/: podfolderów nazwanych słowem (np. words/boi/boi_000000.png).
+    Struktura gen_words/: numerowane podfolderów z labels.txt (nazwa<TAB>słowo).
+
+    Args:
+        words_dir: ścieżka do folderu words; None = ./data/phsf/words
+        gen_words_dir: ścieżka do gen_words; None = ./data/phsf/gen_words (pominięte gdy None)
+
+    Returns:
+        Lista {"image_path": str, "text": str} gotowa dla OCRDataset
+    """
+    if words_dir is None:
+        words_dir = "./data/phsf/words"
+
+    items = []
+    skipped_words: set[str] = set()
+
+    # -- words/: subfolder name = słowo, wszystkie PNG w podfolderze należą do tego słowa
+    if os.path.isdir(words_dir):
+        loaded_words = 0
+        skipped_w = 0
+        for word_folder in os.listdir(words_dir):
+            word_path = os.path.join(words_dir, word_folder)
+            if not os.path.isdir(word_path):
+                continue
+            text = word_folder  # nazwa folderu = transkrypcja
+            valid = all(c in char2idx for c in text.lower())
+            if not valid:
+                skipped_words.add(text)
+                skipped_w += 1
+                continue
+            for fname in os.listdir(word_path):
+                if fname.lower().endswith(".png"):
+                    items.append({"image_path": os.path.join(word_path, fname), "text": text})
+                    loaded_words += 1
+        print(f"[load_phsf_words] words: załadowano {loaded_words} obrazów, pominięto {skipped_w} słów")
+
+    # -- gen_words/: numerowane podfolderów z labels.txt (filename<TAB>słowo)
+    if gen_words_dir is not None:
+        if gen_words_dir == "":
+            gen_words_dir = "./data/phsf/gen_words"
+        if os.path.isdir(gen_words_dir):
+            loaded_gen = 0
+            skipped_gen = 0
+            for subfolder in os.listdir(gen_words_dir):
+                subfolder_path = os.path.join(gen_words_dir, subfolder)
+                if not os.path.isdir(subfolder_path):
+                    continue
+                labels_path = os.path.join(subfolder_path, "labels.txt")
+                if not os.path.exists(labels_path):
+                    continue
+                with open(labels_path, "r", encoding="utf-8") as f:
+                    for line in f:
+                        line = line.rstrip("\n")
+                        if "\t" not in line:
+                            continue
+                        fname, text = line.split("\t", 1)
+                        fname, text = fname.strip(), text.strip()
+                        if not fname or not text:
+                            continue
+                        if not all(c in char2idx for c in text.lower()):
+                            skipped_words.add(text)
+                            skipped_gen += 1
+                            continue
+                        img_path = os.path.join(subfolder_path, fname)
+                        if os.path.exists(img_path):
+                            items.append({"image_path": img_path, "text": text})
+                            loaded_gen += 1
+            print(f"[load_phsf_words] gen_words: załadowano {loaded_gen} obrazów, pominięto {skipped_gen} wpisów")
+
+    if skipped_words:
+        print(f"[load_phsf_words] Pominięto słowa z nieobsługiwanymi znakami: {len(skipped_words)} typów")
+    print(f"[load_phsf_words] Łącznie załadowano: {len(items)} wyrazów")
+    return items
+
+
 # ── Zapis do folderu z datą ────────────────────────────────────────────────────
 
 def get_today_folder() -> str:

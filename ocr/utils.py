@@ -53,6 +53,43 @@ def load_dictionary(json_path: str = ÐICT_PATH) -> list[str]:
         raise ValueError("JSON musi zawierać listę stringów")
 
     return [str(word) for word in data]
+
+
+def _load_char_folder_map(numeracja_path: str) -> dict:
+    mapping = {}
+    try:
+        with open(numeracja_path, encoding="utf-8") as handle:
+            for raw_line in handle:
+                line = raw_line.strip()
+                if not line or "=" not in line:
+                    continue
+                left, right = line.split("=", 1)
+                folder_id = left.split(":", 1)[-1].strip()
+                char = right.strip()
+                if folder_id and char:
+                    mapping[char] = folder_id
+    except OSError:
+        return {}
+    return mapping
+
+
+def word_to_folder_paths(word: str, data_root: str = "data") -> list:
+    numeracja_path = os.path.join(data_root, "numeracja.TXT")
+    if not os.path.exists(numeracja_path):
+        numeracja_path = os.path.join(data_root, "phsf", "numeracja.TXT")
+    base_dir = os.path.join(data_root, "znaki", "png")
+    if not os.path.exists(base_dir):
+        base_dir = os.path.join(data_root, "phsf", "znaki", "png")
+    char_map = _load_char_folder_map(numeracja_path)
+    results = []
+    for char in word:
+        folder_id = char_map.get(char)
+        if not folder_id:
+            results.append((char, None))
+            continue
+        folder_path = os.path.join(base_dir, folder_id)
+        results.append((char, folder_path))
+    return results
 # ── Transformacje ──────────────────────────────────────────────────────────────
 
 def aux_transform():

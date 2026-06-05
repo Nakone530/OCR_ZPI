@@ -7,7 +7,12 @@ Narzędzia pomocnicze:
 """
 
 import os
-import pyphen
+try:
+    import pyphen
+    PYPHEN_AVAILABLE = True
+except ModuleNotFoundError:
+    pyphen = None  # type: ignore
+    PYPHEN_AVAILABLE = False
 import re
 import csv
 import math
@@ -47,7 +52,13 @@ from .bbox_annotator import load_boxes_from_annotations, sort_boxes_reading_orde
 from . import info
 
 
-dic = pyphen.Pyphen(lang="pl_PL")
+if PYPHEN_AVAILABLE:
+    try:
+        dic = pyphen.Pyphen(lang="pl_PL")
+    except Exception:
+        dic = None
+else:
+    dic = None
 
 def load_dictionary(json_path: str = ÐICT_PATH) -> list[str]:
     with open(json_path, "r", encoding="utf-8") as f:
@@ -77,7 +88,7 @@ def _load_char_folder_map(numeracja_path: str) -> dict:
     return mapping
 
 
-def word_to_folder_paths(word: str, data_root: str = "data") -> list:
+def word_to_folder_paths(word: str, data_root: str = "data", info: callable = None) -> list:
     numeracja_path = os.path.join(data_root, "numeracja.csv")
     if not os.path.exists(numeracja_path):
         numeracja_path = os.path.join(data_root, "phsf", "syllables", "numeracja.csv")
@@ -85,8 +96,28 @@ def word_to_folder_paths(word: str, data_root: str = "data") -> list:
     if not os.path.exists(base_dir):
         base_dir = os.path.join(data_root, "phsf", "syllables")
     char_map = _load_char_folder_map(numeracja_path)
+
+    # pojedynczy wyraz
+    _log(info, f"\nFoldery znakow dla slowa: {word}")
+    results = _word_to_folder_syllables(word, char_map, base_dir)
+    print(results)
+    for char, path in results:
+        if path:
+            _log(info, f"{char} -> {path}")
+        else:
+            _log(info, f"{char} -> BRAK")
+    return results
+
+
+def _word_to_folder_syllables(word: str, char_map: dict, base_dir: str) -> list:
     results = []
-    syllables = dic.inserted(word).split("-")
+    if dic is not None:
+        try:
+            syllables = dic.inserted(word).split("-")
+        except Exception:
+            syllables = [word]
+    else:
+        syllables = [word]
     for syllab in syllables:
         folder_id = char_map.get(syllab)
         if not folder_id:
@@ -96,7 +127,7 @@ def word_to_folder_paths(word: str, data_root: str = "data") -> list:
         results.append((syllab, folder_path))
     return results
 
-def generate_word_samples(word, pairs, samples_count=100):
+def generate_word_samples(word, pairs, samples_count=1000):
 
     output_dir= PHSF_DATA_DIR
     words_dir = os.path.join(output_dir, "words", word)
@@ -105,9 +136,8 @@ def generate_word_samples(word, pairs, samples_count=100):
     for sample_idx in range(samples_count):
 
         images = []
-
         for syl, syl_dir in pairs:
-
+            print(syl_dir)
             candidates = [
                 os.path.join(syl_dir, f)
                 for f in os.listdir(syl_dir)
@@ -137,6 +167,11 @@ def generate_word_samples(word, pairs, samples_count=100):
                 f"{word}_{sample_idx:06d}.png"
             )
         )
+
+
+def _log(info: callable, msg: str):
+    if info:
+        info(msg)
 
 
 # ── Transformacje ──────────────────────────────────────────────────────────────

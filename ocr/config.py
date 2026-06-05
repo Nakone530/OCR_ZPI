@@ -27,6 +27,7 @@ import re
 DATA_DIR = "./data"
 DATA_ROOT_DIR = "./data/ttData"
 PHSF_DATA_DIR = "./data/phsf"
+FOLDER8_DIR = "./8"
 
 IMAGES_DIR = "./data/ttData"
 

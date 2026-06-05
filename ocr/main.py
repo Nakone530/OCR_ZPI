@@ -22,7 +22,7 @@ from ocr.config import MODEL_PATH, OCR_MODEL_PATH
 from ocr.inference import run_ensemble_generation, compute_accuracy, test_models, test_cache_models, get_active_chars, load_model, predict_image, predict_letter, predict_segments, predict_word, process_folder
 from ocr.output import OCRResult, create_output_handler
 from ocr.utils import save_aligned_jsonl, merge_editor_changes, aligned_to_editor_boxes, load_aligned_jsonl, save_aligned_boxes_jsonl, convert_aligned_to_ttdata, save_image_to_today_folder, DictCorrect, list_models, generate_model_ensembles, load_transcription, save_results_csv
-from ocr.trainer import train_model, train_crnn, train_cnn, infinite_train, multi_train, TRAINING_PRESETS, get_preset_names
+from ocr.trainer import train_model, train_crnn, train_cnn, infinite_train, multi_train, train_folder8, train_crnn_words, TRAINING_PRESETS, get_preset_names
 from ocr.json_output import (
     build_image_result_json,
     build_word_result_json,
@@ -137,6 +137,9 @@ def build_parser() -> argparse.ArgumentParser:
     mode.add_argument("--train", "-t", action="store_true", help="Trenuj model (okreslona liczba epok)")
     mode.add_argument("--train-crnn", action="store_true", dest="train_crnn", help="Trening CRNN na danych ttData (CTC loss)")
     mode.add_argument("--train-cnn", action="store_true", dest="train_cnn", help="Trening CNN na danych phsf (klasyfikacja znakow)")
+    mode.add_argument("--train-folder8", action="store_true", dest="train_folder8", help="Trening CRNN na danych z folderu 8 (podfolderów 1-174 z labels.txt)")
+    mode.add_argument("--train-words", action="store_true", dest="train_words", help="Trening CRNN na wyrazach z phsf/words + phsf/gen_words (CTC loss)")
+    mode.add_argument("--train-words-only", action="store_true", dest="train_words_only", help="Trening CRNN TYLKO na wyrazach z phsf/words (CTC loss)")
     mode.add_argument("--infinite", action="store_true", help="Nieskonczony trening do przerwania (Ctrl+C)")
     mode.add_argument(
         "--multi-train",
@@ -321,6 +324,15 @@ def main(args=None, info=None, buffor=None):
 
     elif args.train_cnn:
         train_cnn(epochs=args.epochs, batch_size=args.batch_size, model_path=args.resume, info=info)
+
+    elif args.train_folder8:
+        train_folder8(epochs=args.epochs, batch_size=args.batch_size, model_path=args.resume, info=info, args=args)
+
+    elif args.train_words:
+        train_crnn_words(epochs=args.epochs, batch_size=args.batch_size, model_path=args.resume, info=info, args=args, words_only=False)
+
+    elif args.train_words_only:
+        train_crnn_words(epochs=args.epochs, batch_size=args.batch_size, model_path=args.resume, info=info, args=args, words_only=True)
 
     elif args.multi_train is not None:
         preset_names = args.multi_train or None  # [] -> None oznacza "wszystkie"

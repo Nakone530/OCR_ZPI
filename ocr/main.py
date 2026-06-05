@@ -17,6 +17,9 @@ import os
 import sys
 import cv2
 import torch
+import pyphen
+import csv
+import random
 
 from ocr.config import MODEL_PATH, OCR_MODEL_PATH
 from ocr.inference import run_ensemble_generation, compute_accuracy, test_models, test_cache_models, get_active_chars, load_model, predict_image, predict_letter, predict_segments, predict_word, process_folder
@@ -44,7 +47,7 @@ from ocr.display import (
 from ocr.bbox_annotator import edit_boxes_interactive
 #--State
 
-
+dic = pyphen.Pyphen(lang="pl_PL")
 
 # ── Pomocniki ─────────────────────────────────────────────────────────────────
 
@@ -67,37 +70,38 @@ def _print_accuracy(predicted_text: str, reference_path: str, info=None) -> None
 def _load_char_folder_map(numeracja_path: str) -> dict:
     mapping = {}
     try:
-        with open(numeracja_path, encoding="utf-8") as handle:
-            for raw_line in handle:
-                line = raw_line.strip()
-                if not line or "=" not in line:
-                    continue
-                left, right = line.split("=", 1)
-                folder_id = left.split(":", 1)[-1].strip()
-                char = right.strip()
-                if folder_id and char:
-                    mapping[char] = folder_id
+        with open(numeracja_path, newline="", encoding="utf-8") as f:
+            reader = csv.reader(f)
+
+            for row_num, row in enumerate(reader, start=1):
+                left = row[1]
+                right = row[0]
+                folder_id = left.strip()
+                syl = right.strip()
+                if folder_id and syl:
+                    mapping[syl] = folder_id
     except OSError:
         return {}
     return mapping
 
 
 def word_to_folder_paths(word: str, data_root: str = "data") -> list:
-    numeracja_path = os.path.join(data_root, "numeracja.TXT")
+    numeracja_path = os.path.join(data_root, "numeracja.csv")
     if not os.path.exists(numeracja_path):
-        numeracja_path = os.path.join(data_root, "phsf", "numeracja.TXT")
-    base_dir = os.path.join(data_root, "znaki", "png")
+        numeracja_path = os.path.join(data_root, "phsf", "syllables", "numeracja.csv")
+    base_dir = os.path.join(data_root, "syllables")
     if not os.path.exists(base_dir):
-        base_dir = os.path.join(data_root, "phsf", "znaki", "png")
+        base_dir = os.path.join(data_root, "phsf", "syllables")
     char_map = _load_char_folder_map(numeracja_path)
     results = []
-    for char in word:
-        folder_id = char_map.get(char)
+    syllables = dic.inserted(word).split("-")
+    for syllab in syllables:
+        folder_id = char_map.get(syllab)
         if not folder_id:
-            results.append((char, None))
+            results.append((syllab, None))
             continue
         folder_path = os.path.join(base_dir, folder_id)
-        results.append((char, folder_path))
+        results.append((syllab, folder_path))
     return results
 
 

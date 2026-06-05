@@ -826,14 +826,7 @@ def main(args=None, info=None, buffor=None):
             _print_accuracy(word, args.accuracy, info)
 
     elif getattr(args, "word_folders", None):
-        word = args.word_folders
-        info(f"\nFoldery znakow dla slowa: {word}")
-        pairs = word_to_folder_paths(word)
-        for char, path in pairs:
-            if path:
-                info(f"{char} -> {path}")
-            else:
-                info(f"{char} -> BRAK")
+        word_to_folder_paths(args.word_folders, info=info)
 
     elif getattr(args, "word_folders_image", None):
         _require_file(args.word_folders_image, info)

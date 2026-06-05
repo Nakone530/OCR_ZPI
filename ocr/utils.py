@@ -7,7 +7,12 @@ Narzędzia pomocnicze:
 """
 
 import os
-import pyphen
+try:
+    import pyphen
+    PYPHEN_AVAILABLE = True
+except ModuleNotFoundError:
+    pyphen = None  # type: ignore
+    PYPHEN_AVAILABLE = False
 import re
 import csv
 import math
@@ -47,7 +52,13 @@ from .bbox_annotator import load_boxes_from_annotations, sort_boxes_reading_orde
 from . import info
 
 
-dic = pyphen.Pyphen(lang="pl_PL")
+if PYPHEN_AVAILABLE:
+    try:
+        dic = pyphen.Pyphen(lang="pl_PL")
+    except Exception:
+        dic = None
+else:
+    dic = None
 
 def load_dictionary(json_path: str = ÐICT_PATH) -> list[str]:
     with open(json_path, "r", encoding="utf-8") as f:
@@ -77,7 +88,7 @@ def _load_char_folder_map(numeracja_path: str) -> dict:
     return mapping
 
 
-def word_to_folder_paths(word: str, data_root: str = "data") -> list:
+def word_to_folder_paths(word: str, data_root: str = "data", info: callable = None) -> list:
     numeracja_path = os.path.join(data_root, "numeracja.csv")
     if not os.path.exists(numeracja_path):
         numeracja_path = os.path.join(data_root, "phsf", "syllables", "numeracja.csv")
@@ -85,8 +96,51 @@ def word_to_folder_paths(word: str, data_root: str = "data") -> list:
     if not os.path.exists(base_dir):
         base_dir = os.path.join(data_root, "phsf", "syllables")
     char_map = _load_char_folder_map(numeracja_path)
+
+    if os.path.isfile(word) and word.lower().endswith(".txt"):
+        with open(word, encoding="utf-8") as handle:
+            words = [token for line in handle for token in line.split()]
+        out_path = os.path.splitext(word)[0] + "_folders.txt"
+        all_results = []
+        with open(out_path, "w", encoding="utf-8") as out:
+            out.write(f"Foldery znakow z pliku: {word}\n")
+            _log(info, f"\nFoldery znakow z pliku: {word}")
+            for single_word in words:
+                out.write(f"\nSlowo: {single_word}\n")
+                _log(info, f"\nSlowo: {single_word}")
+                pairs = _word_to_folder_syllables(single_word, char_map, base_dir)
+                for char, path in pairs:
+                    all_results.append((char, path))
+                    if path:
+                        out.write(f"{char} -> {path}\n")
+                        _log(info, f"{char} -> {path}")
+                    else:
+                        out.write(f"{char} -> BRAK\n")
+                        _log(info, f"{char} -> BRAK")
+        _log(info, f"Zapisano wyniki do: {out_path}")
+        return all_results
+
+    # pojedynczy wyraz
+    _log(info, f"\nFoldery znakow dla slowa: {word}")
+    results = _word_to_folder_syllables(word, char_map, base_dir)
+    print(results)
+    for char, path in results:
+        if path:
+            _log(info, f"{char} -> {path}")
+        else:
+            _log(info, f"{char} -> BRAK")
+    return results
+
+
+def _word_to_folder_syllables(word: str, char_map: dict, base_dir: str) -> list:
     results = []
-    syllables = dic.inserted(word).split("-")
+    if dic is not None:
+        try:
+            syllables = dic.inserted(word).split("-")
+        except Exception:
+            syllables = [word]
+    else:
+        syllables = [word]
     for syllab in syllables:
         folder_id = char_map.get(syllab)
         if not folder_id:
@@ -95,6 +149,11 @@ def word_to_folder_paths(word: str, data_root: str = "data") -> list:
         folder_path = os.path.join(base_dir, folder_id)
         results.append((syllab, folder_path))
     return results
+
+
+def _log(info: callable, msg: str):
+    if info:
+        info(msg)
 
 
 # ── Transformacje ──────────────────────────────────────────────────────────────

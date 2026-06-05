@@ -1600,8 +1600,8 @@ def train_crnn_words(epochs=10, batch_size=32, model_path=None, info=None, args=
     if words_only:
         info("   Tryb: TYLKO data/phsf/words")
         data = load_phsf_words(
-            words_dir=os.path.join(DATA_ROOT_DIR, "phsf", "words") if DATA_ROOT_DIR else "./data/phsf/words",
-            gen_words_dir=None  # Nie ładuj gen_words
+            words_dir=os.path.join(PHSF_DATA_DIR, "words"),
+            gen_words_dir=None,
         )
     else:
         info("   Tryb: PEŁNY trening (words + gen_words)")
@@ -1611,7 +1611,10 @@ def train_crnn_words(epochs=10, batch_size=32, model_path=None, info=None, args=
         )
     
     if not data:
-        info("BŁĄD: Brak danych do treningu. Sprawdź czy foldery words/gen_words zawierają dane.")
+        expected = os.path.join(PHSF_DATA_DIR, "words")
+        if not words_only:
+            expected += f" lub {os.path.join(PHSF_DATA_DIR, 'gen_words')}"
+        info(f"BŁĄD: Brak danych do treningu. Sprawdź czy folder istnieje: {expected}")
         return
     
     info(f"   Załadowano: {len(data)} wyrazów")

@@ -17,6 +17,12 @@ models/*
 
 # dane treningowe/datasetowe
 data/*
+# wyjątki: minimalne dane testowe do uruchomienia treningów
+!data/phsf/
+!data/phsf/words/
+!data/phsf/words/**
+!data/phsf/gen_words/
+!data/phsf/gen_words/**
 
 # tymczasowe dane
 temp/*

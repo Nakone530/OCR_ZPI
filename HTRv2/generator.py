@@ -1,4 +1,5 @@
 import os
+import sys
 import random
 import re
 from PIL import Image, ImageDraw, ImageFont
@@ -8,8 +9,8 @@ import albumentations as A
 
 WIDTH, HEIGHT = 512, 64
 FONTS_DIR = os.path.join(os.path.dirname(__file__), "fonts")
-OUTPUT_DIR = os.path.join(os.path.dirname(__file__), "output")
-os.makedirs(OUTPUT_DIR, exist_ok=True)
+OUTPUT_BASE = os.path.join(os.path.dirname(__file__), "output")
+os.makedirs(OUTPUT_BASE, exist_ok=True)
 
 FONT_PATHS = sorted([
     os.path.join(FONTS_DIR, f) for f in os.listdir(FONTS_DIR) if f.endswith(".ttf")
@@ -108,37 +109,39 @@ def render_text(text, font_path):
     canvas[y_offset:y_offset+img.shape[0], x_offset:x_offset+img.shape[1]] = img
     return canvas
 
-def get_next_number(output_dir):
+def get_next_run(base_dir):
     max_n = 0
-    for f in os.listdir(output_dir):
-        m = re.match(r"sample_(\d+)\.png", f)
-        if m:
-            n = int(m.group(1))
+    for f in os.listdir(base_dir):
+        if os.path.isdir(os.path.join(base_dir, f)) and f.isdigit():
+            n = int(f)
             if n > max_n:
                 max_n = n
     return max_n + 1
 
 def main():
     aug_pipeline = get_augmentation_pipeline()
-    next_num = get_next_number(OUTPUT_DIR)
+    run_num = get_next_run(OUTPUT_BASE)
+    run_dir = os.path.join(OUTPUT_BASE, str(run_num))
+    os.makedirs(run_dir, exist_ok=True)
     texts_per_font = 27
     random.seed(42)
-    for font_idx, font_path in enumerate(FONT_PATHS):
-        font_name = os.path.splitext(os.path.basename(font_path))[0]
-        print(f"Font {font_idx+1}/{len(FONT_PATHS)}: {font_name}")
-        random.shuffle(POLISH_TEXTS)
-        for i in range(texts_per_font):
-            text = POLISH_TEXTS[i % len(POLISH_TEXTS)]
-            img = render_text(text, font_path)
-            aug = aug_pipeline(image=img)
-            img_aug = aug["image"]
-            fname = f"sample_{next_num}.png"
-            Image.fromarray(img_aug).save(os.path.join(OUTPUT_DIR, fname))
-            with open(os.path.join(OUTPUT_DIR, "labels.txt"), "a", encoding="utf-8") as f:
-                f.write(f"{fname}\t{text}\n")
-            next_num += 1
-            if (i + 1) % 10 == 0:
-                print(f"  {i+1}/{texts_per_font}")
+    next_num = 1
+    with open(os.path.join(run_dir, "labels.txt"), "w", encoding="utf-8") as labels_file:
+        for font_idx, font_path in enumerate(FONT_PATHS):
+            font_name = os.path.splitext(os.path.basename(font_path))[0]
+            print(f"Font {font_idx+1}/{len(FONT_PATHS)}: {font_name}")
+            random.shuffle(POLISH_TEXTS)
+            for i in range(texts_per_font):
+                text = POLISH_TEXTS[i % len(POLISH_TEXTS)]
+                img = render_text(text, font_path)
+                aug = aug_pipeline(image=img)
+                img_aug = aug["image"]
+                fname = f"sample_{next_num}.png"
+                Image.fromarray(img_aug).save(os.path.join(run_dir, fname))
+                labels_file.write(f"{fname}\t{text}\n")
+                next_num += 1
+                if (i + 1) % 10 == 0:
+                    print(f"  {i+1}/{texts_per_font}")
 
 if __name__ == "__main__":
     main()

@@ -1,3 +1,0 @@
-epoch: 8400
-ratio: 0.7
-model_version: v7.3

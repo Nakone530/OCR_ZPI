@@ -87,7 +87,29 @@ def _load_char_folder_map(numeracja_path: str) -> dict:
         return {}
     return mapping
 
+def dump_tensor_stats(name, tensor):
+    t = tensor.detach().cpu()
 
+    print(f"\n===== {name} =====")
+    print("shape:", tuple(t.shape))
+    print("dtype:", t.dtype)
+
+    print("min :", float(t.min()))
+    print("max :", float(t.max()))
+    print("mean:", float(t.mean()))
+    print("std :", float(t.std()))
+
+    flat = t.flatten()
+
+    print("first 50:")
+    print(flat[:50])
+
+    print("last 50:")
+    print(flat[-50:])
+
+    print("===================")
+
+    
 def word_to_folder_paths(word: str, data_root: str = "data", info: callable = None) -> list:
     numeracja_path = os.path.join(data_root, "numeracja.csv")
     if not os.path.exists(numeracja_path):
@@ -1245,15 +1267,15 @@ def select_models(models):
 
 
 DEFAULT_MODELS = [
-    "v4", "v4.1", "v4.4",
-    "v6.2", "v6.5",
-    "v7.2", "v7.4", "v7.5",
-    "v8.2",
-    "v10.2", "v10.3", "v10.4", "v10.5",
-    "v11.1", "v11.2", "v11.3", "v11.4", "v11.5",
+##    "v4", "v4.1", "v4.4",
+##    "v6.2", "v6.5",
+##    "v7.2", "v7.4", "v7.5",
+##    "v8.2",
+##    "v10.2", "v10.3", "v10.4", "v10.5",
+    "v30",
 ]
 
-DEFAULT_MODEL = "v11.5"
+DEFAULT_MODEL = "v30"
 
 
 def auto_select_models(models_dir: str, version: str | None = None):

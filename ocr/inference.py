@@ -30,6 +30,7 @@ from PIL import Image
 
 from .config import CHARS, MODEL_PATH, NUM_CLASSES, char2idx, idx2char
 from .utils import (
+    dump_tensor_stats,
     get_inf_transform,
     load_and_optionally_denoise,
     preprocess_letter,
@@ -844,16 +845,33 @@ def predict_letter(
             img_before = pil
             
         tensor = get_inf_transform(args)(pil).unsqueeze(0).to(device)
+        dump_tensor_stats(
+            "INF_IMAGE",
+            tensor[0]
+        )
+        print("\nINF MODEL INPUT")
+        print(tensor[0, 0, :10, :20])
         
         if(debug):
             show_before_after(img_before, tensor)
             
         preprocessed_shape = tensor.shape
-
+        
+        
         outputs = model(tensor)  # (T, B, C)
+        probs = outputs.softmax(2)
+
+        print(probs[:,0,0][:10])  # blank
         log_probs = outputs.log_softmax(2)
         probs = log_probs.exp()
+        print("outputs:", outputs.shape)
 
+        pred = outputs.argmax(2)
+
+        print("unique:", torch.unique(pred))
+        print("first:", pred[:, 0][:50])
+
+        
         preds = log_probs.argmax(2)[:, 0].cpu().numpy()
 
         chars = []

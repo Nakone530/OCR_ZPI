@@ -183,6 +183,9 @@ def generate_word_samples(word, pairs, samples_count=1000):
             result.paste(img, (x, max_height - img.height), img)
             x += img.width
 
+        angle = random.uniform(-3, 3)
+        result = result.rotate(angle, expand=True, fillcolor=(255, 255, 255, 0))
+
         result.save(
             os.path.join(
                 words_dir,

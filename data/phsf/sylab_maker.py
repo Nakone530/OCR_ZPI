@@ -102,7 +102,7 @@ LETTER_BASELINE = {
     "ź": 0,
     "ż": 0,
 }
-letters_dir = "./znaki/png"
+letters_dir = "./znaki"
 output_dir = "./syllables"
 mapping = os.path.join(letters_dir, "numeracja.csv")
 sylaby = "syllables.csv"

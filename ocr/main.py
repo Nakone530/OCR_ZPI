@@ -22,7 +22,7 @@ import random
 from ocr.config import MODEL_PATH, OCR_MODEL_PATH
 from ocr.inference import run_ensemble_generation, compute_accuracy, test_models, test_cache_models, get_active_chars, load_model, predict_image, predict_letter, predict_segments, predict_word, process_folder
 from ocr.output import OCRResult, create_output_handler
-from ocr.utils import save_aligned_jsonl, merge_editor_changes, aligned_to_editor_boxes, load_aligned_jsonl, save_aligned_boxes_jsonl, convert_aligned_to_ttdata, save_image_to_today_folder, DictCorrect, list_models, generate_model_ensembles, load_transcription, save_results_csv
+from ocr.utils import generate_word_samples, word_to_folder_paths, save_aligned_jsonl, merge_editor_changes, aligned_to_editor_boxes, load_aligned_jsonl, save_aligned_boxes_jsonl, convert_aligned_to_ttdata, save_image_to_today_folder, DictCorrect, list_models, generate_model_ensembles, load_transcription, save_results_csv
 from ocr.trainer import evaluate_saved_crnn, train_cnn, multi_train, train_crnn_words, TRAINING_PRESETS, get_preset_names
 from ocr.json_output import (
     build_image_result_json,
@@ -833,6 +833,7 @@ def main(args=None, info=None, buffor=None):
         else:
 
             pairs = word_to_folder_paths(args.word_folders, info=info)
+            print(pairs)
             generate_word_samples(args.word_folders, pairs)
 
             for syl, path in pairs:

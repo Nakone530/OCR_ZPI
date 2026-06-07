@@ -4,6 +4,7 @@ import random
 import csv
 import math
 import re
+import numpy as np
 
 BASELINE_Y = 0
 
@@ -101,7 +102,7 @@ LETTER_BASELINE = {
     "ź": 0,
     "ż": 0,
 }
-letters_dir = "./znaki"
+letters_dir = "./znaki/png"
 output_dir = "./syllables"
 mapping = os.path.join(letters_dir, "numeracja.csv")
 sylaby = "syllables.csv"
@@ -219,6 +220,12 @@ for syllable, freq in syllables:
         syl_dir = os.path.join(output_dir,syllable)
         os.makedirs(syl_dir, exist_ok=True)
             
+        # Dodanie lekkiego szumu (Gaussian noise)
+        img_arr = np.array(result, dtype=np.float32)
+        noise = np.random.normal(loc=0, scale=10, size=img_arr.shape)
+        noisy_arr = np.clip(img_arr + noise, 0, 255).astype(np.uint8)
+        result = Image.fromarray(noisy_arr)
+
         result.save(
             os.path.join(
                 syl_dir,

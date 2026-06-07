@@ -151,15 +151,19 @@ def _word_to_folder_syllables(word: str, char_map: dict, base_dir: str) -> list:
 
 def generate_word_samples(word, pairs, samples_count=1000):
 
+    tails = set("gjpqyąę")
     output_dir= PHSF_DATA_DIR
     words_dir = os.path.join(output_dir, "words", word)
     os.makedirs(words_dir, exist_ok=True)
 
     for sample_idx in range(samples_count):
-
+        has_tails = []
         images = []
         for syl, syl_dir in pairs:
             print(syl_dir)
+            
+            has_tails = any(c.lower() in tails for c in syl)
+            
             candidates = [
                 os.path.join(syl_dir, f)
                 for f in os.listdir(syl_dir)
@@ -167,22 +171,37 @@ def generate_word_samples(word, pairs, samples_count=1000):
             ]
 
             img_path = random.choice(candidates)
-            images.append(Image.open(img_path).convert("RGBA"))
+            images.append((Image.open(img_path).convert("RGBA"), syl))
 
-        total_width = sum(img.width for img in images)
-        max_height = max(img.height for img in images)
+        total_width = sum(img.width for img, syl in images)
+        max_height = max(img.height for img, syl in images)
 
         result = Image.new(
-            "RGBA",
+            "RGB",
             (total_width, max_height),
-            (255, 255, 255, 0)
+            (255, 255, 255)
         )
 
+        
         x = 0
-        for img in images:
-            result.paste(img, (x, max_height - img.height), img)
+        for img, syl in images:
+            y = max_height - img.height
+
+            if has_tails and not any(c.lower() in tails for c in syl):
+                y -= 10
+                
+            result.paste(img, (x, y), img)
             x += img.width
 
+        angle = random.uniform(-3, 3)
+        result = result.rotate(angle, expand=True, fillcolor=(255, 255, 255))
+
+        # Dodanie lekkiego szumu (Gaussian noise)
+        img_arr = np.array(result, dtype=np.float32)
+        noise = np.random.normal(loc=0, scale=10, size=img_arr.shape)
+        noisy_arr = np.clip(img_arr + noise, 0, 255).astype(np.uint8)
+        result = Image.fromarray(noisy_arr)
+        
         result.save(
             os.path.join(
                 words_dir,

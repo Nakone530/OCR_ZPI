@@ -833,6 +833,7 @@ def main(args=None, info=None, buffor=None):
         else:
 
             pairs = word_to_folder_paths(args.word_folders, info=info)
+            print(pairs)
             generate_word_samples(args.word_folders, pairs)
 
             for syl, path in pairs:

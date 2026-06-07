@@ -17,7 +17,9 @@ models/*
 
 # dane treningowe/datasetowe
 data/*
-
+!data/phsf/sylab_maker.py
+!data/phsf/sylab_finder.py
+!data/phsf/syllables.csv
 # tymczasowe dane
 temp/*
 

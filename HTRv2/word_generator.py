@@ -62,6 +62,16 @@ def get_augmentation_pipeline():
         A.ElasticTransform(alpha=1, sigma=50, fill=255, p=0.2),
     ])
 
+def get_photometric_pipeline():
+    return A.Compose([
+        A.RandomGamma(gamma_limit=(70, 130), p=0.4),
+        A.GaussianBlur(blur_limit=(3, 5), p=0.3),
+        A.Sharpen(alpha=(0.1, 0.4), lightness=(0.7, 1.0), p=0.25),
+        A.CLAHE(clip_limit=2.5, tile_grid_size=(4, 4), p=0.25),
+        A.Downscale(scale_range=(0.6, 0.85), p=0.15),
+        A.ImageCompression(quality_range=(60, 90), p=0.25),
+    ])
+
 def render_text(text, font_path):
     img = Image.new("L", (WIDTH * 2, HEIGHT * 2), 255)
     draw = ImageDraw.Draw(img)
@@ -112,7 +122,8 @@ def get_next_number(output_dir):
     return max_n + 1
 
 def main():
-    aug_pipeline = get_augmentation_pipeline()
+    aug_pipeline   = get_augmentation_pipeline()
+    photo_pipeline = get_photometric_pipeline()
     next_num = get_next_number(OUTPUT_DIR)
     words_per_font = 174
     random.seed(42)
@@ -127,7 +138,7 @@ def main():
             word = words[i % len(words)]
             img = render_text(word, font_path)
             aug = aug_pipeline(image=img)
-            img_aug = aug["image"]
+            img_aug = photo_pipeline(image=aug["image"])["image"]
             fname = f"sample_{next_num}.png"
             Image.fromarray(img_aug).save(os.path.join(OUTPUT_DIR, fname))
             with open(os.path.join(OUTPUT_DIR, "labels.txt"), "a", encoding="utf-8") as f:

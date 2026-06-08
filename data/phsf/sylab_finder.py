@@ -22,7 +22,6 @@ with open(args.text_file, encoding="utf-8") as f:
             
             # usuń interpunkcję, zostaw litery i cyfry
             word = re.sub(r"[^\wąćęłńóśźżĄĆĘŁŃÓŚŹŻ]", "", word)
-            word = word.lower()
 
             if not word:
                 continue

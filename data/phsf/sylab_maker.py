@@ -54,6 +54,41 @@ LETTER_SCALE = {
     "7": 1.1,
     "8": 1.1,
     "9": 1.1,
+    "A": 1.1,
+    "B": 1.1,
+    "C": 1.1,
+    "D": 1.1,
+    "E": 1.1,
+    "F": 1.1,
+    "G": 1.1,
+    "H": 1.1,
+    "I": 1.1,
+    "J": 1.1,
+    "K": 1.1,
+    "L": 1.1,
+    "M": 1.1,
+    "N": 1.1,
+    "O": 1.1,
+    "P": 1.1,
+    "Q": 1.1,
+    "R": 1.1,
+    "S": 1.1,
+    "T": 1.1,
+    "U": 1.1,
+    "V": 1.1,
+    "W": 1.1,
+    "X": 1.1,
+    "Y": 1.1,
+    "Z": 1.1,
+    "Ą": 1.1,
+    "Ć": 1.1,
+    "Ę": 1.1,
+    "Ł": 1.1,
+    "Ń": 1.1,
+    "Ó": 1.1,
+    "Ś": 1.1,
+    "Ź": 1.1,
+    "Ż": 1.1,
 }
 LETTER_BASELINE = {
     "0": 0,
@@ -101,7 +136,43 @@ LETTER_BASELINE = {
     "ś": 0,
     "ź": 0,
     "ż": 0,
+    "A": 0,
+    "B": 0,
+    "C": 0,
+    "D": 0,
+    "E": 0,
+    "F": 0,
+    "G": 0,
+    "H": 0,
+    "I": 0,
+    "J": 0,
+    "K": 0,
+    "L": 0,
+    "M": 0,
+    "N": 0,
+    "O": 0,
+    "P": 0,
+    "Q": 0,
+    "R": 0,
+    "S": 0,
+    "T": 0,
+    "U": 0,
+    "V": 0,
+    "W": 0,
+    "X": 0,
+    "Y": 0,
+    "Z": 0,
+    "Ą": 0,
+    "Ć": 0,
+    "Ę": 0,
+    "Ł": 0,
+    "Ń": 0,
+    "Ó": 0,
+    "Ś": 0,
+    "Ź": 0,
+    "Ż": 0,
 }
+
 letters_dir = "./znaki"
 output_dir = "./syllables"
 mapping = os.path.join(letters_dir, "numeracja.csv")
@@ -112,16 +183,22 @@ folder_to_char = {}
 def crop_horizontal_whitespace(img):
     pixels = img.load()
     w, h = img.size
-
+    
     left = 0
     while left < w:
-        if any(pixels[left, y][:3] != (255, 255, 255) for y in range(h)):
+        if any(
+            sum(pixels[left, y][:3]) / 3 < 240
+            for y in range(h)
+        ):
             break
         left += 1
 
     right = w - 1
     while right >= 0:
-        if any(pixels[right, y][:3] != (255, 255, 255) for y in range(h)):
+        if any(
+            sum(pixels[left, y][:3]) / 3 < 240
+            for y in range(h)
+        ):
             break
         right -= 1
 
@@ -167,22 +244,23 @@ for folder_name in os.listdir(letters_dir):
 samples_per_syllable = 100
 
 syllables = []
-
+values = [0, 1, 2, 3, 5]
+weights = [50, 15, 15, 10, 10]
 with open(sylaby, encoding="utf-8") as f:
     reader = csv.reader(f, delimiter=";")
 
     for syllable, freq in reader:
         syllables.append((syllable, int(freq)))
 
-margin = 2  # własny odstęp w pikselach
-for syllable, freq in syllables:
 
+for syllable, freq in syllables:
+    
     total_samples = math.floor(samples_per_syllable * math.sqrt(freq))
 
     print(f"{syllable}: {total_samples} próbek")
 
     for sample_idx in range(total_samples):
-
+        margin = random.choices(values, weights=weights, k=1)[0]
         images = []
 
         for char in syllable:

@@ -201,11 +201,22 @@ def generate_word_samples(word, pairs, samples_count=1000):
         noise = np.random.normal(loc=0, scale=10, size=img_arr.shape)
         noisy_arr = np.clip(img_arr + noise, 0, 255).astype(np.uint8)
         result = Image.fromarray(noisy_arr)
+
+        words_dir = Path(words_dir)
+        
+        max_id = 0
+
+        for file in words_dir.glob("*.png"):
+            m = re.match(r".*_(\d+)\.png$", file.name)
+            if m:
+                max_id = max(max_id, int(m.group(1)))
+
+        next_id = max_id + 1
         
         result.save(
             os.path.join(
                 words_dir,
-                f"{word}_{sample_idx:06d}.png"
+                f"{word}_{next_id:06d}.png"
             )
         )
 
@@ -1291,10 +1302,11 @@ DEFAULT_MODELS = [
 ##    "v7.2", "v7.4", "v7.5",
 ##    "v8.2",
 ##    "v10.2", "v10.3", "v10.4", "v10.5",
-    "v30",
+##    "v33", "v31", "v34",
+      "v33",
 ]
 
-DEFAULT_MODEL = "v30"
+DEFAULT_MODEL = "v33"
 
 
 def auto_select_models(models_dir: str, version: str | None = None):

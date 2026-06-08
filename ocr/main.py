@@ -469,18 +469,8 @@ def main(args=None, info=None, buffor=None):
             info("-" * 60)
 
             for r in table_rows:
-                conf = (
-                    r["confidence"]
-                    if r["confidence"] is not None
-                    else 50.0
-                )
-
                 autocorTXT = DictCorrect(
                     r["text"],
-                    conf,
-                    letter_vectors=r.get(
-                        "letter_vectors"
-                    ),
                 )
 
                 if r["confidence"] is None:
@@ -645,8 +635,7 @@ def main(args=None, info=None, buffor=None):
         info("-" * 45)
 
         for r in rows:
-            conf = r['confidence'] if r['confidence'] is not None else 50.0
-            autocorTXT = DictCorrect(r['text'], conf, letter_vectors=r.get('letter_vectors'))
+            autocorTXT = DictCorrect(r['text'])
             if r['confidence'] is None:
                 info(f"{str(r['key']) if r['key'] else '-':<12} {r['text']:<20} {'-':<10} {autocorTXT:<20}")
             else:
@@ -752,7 +741,7 @@ def main(args=None, info=None, buffor=None):
                 info(f"{r['key']:<12} {r['text']:<20} {r['confidence']:.2f}%")
         info("----Po poprawie----")
         for r in rows:
-            autocorTXT = DictCorrect(r['text'], r['confidence'] if r['confidence'] is not None else 100.0)
+            autocorTXT = DictCorrect(r['text'])
             info(f"{str(r['key']) if r['key'] else '-':<12} {autocorTXT:<20} {'-':<10}")
 
 

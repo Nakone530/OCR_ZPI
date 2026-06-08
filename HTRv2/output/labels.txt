@@ -1,0 +1,270 @@
+sample_1.png	Walidacja modelu na rzeczywistych danych jest niezbedna.
+sample_2.png	Trenowanie modeli wymaga odpowiedniej mocy obliczeniowej.
+sample_3.png	Automatyczne rozpoznawanie pisma recznego to wyzwanie.
+sample_4.png	Zmiana czcionki i rozmiaru poprawia roznorodnosc danych.
+sample_5.png	Bledy w transkrypcji moga wynikac z nakladania sie liter.
+sample_6.png	Augmentacja danych pomaga w generalizacji modelu.
+sample_7.png	Sieci neuronowe osiagaja coraz lepsze wyniki.
+sample_8.png	Preprocessing obrazu poprawia skutecznosc rozpoznawania.
+sample_9.png	Jakosc danych treningowych ma kluczowe znaczenie.
+sample_10.png	Zastosowania HTR obejmuja digitalizacje dokumentow.
+sample_11.png	Wspolczesne modele HTR ucza sie na ogromnych zbiorach.
+sample_12.png	Syntetyczne obrazy moga zawierac rozne style pisma.
+sample_13.png	Augmentacja w czasie rzeczywistym oszczedza miejsce na dysku.
+sample_14.png	Transfer learning przyspiesza trenowanie modeli HTR.
+sample_15.png	Rekurencyjne sieci neuronowe sa czesto uzywane w HTR.
+sample_16.png	Szum i znieksztalcenia obrazu symuluja realne warunki.
+sample_17.png	To jest przykladowy tekst do syntetycznego uczenia.
+sample_18.png	Modele oparte na transformatorach rewolucjonizuja HTR.
+sample_19.png	Dane syntetyczne uzupelniaja rzeczywiste zbiory danych.
+sample_20.png	Handwriting Text Recognition wymaga duzo danych.
+sample_21.png	Mechanizm uwagi poprawia dokladnosc transkrypcji.
+sample_22.png	Krzywizny i pochylenia tekstu sa czeste w dokumentach.
+sample_23.png	Kazda epoka trenowania modelu poprawia dokladnosc.
+sample_24.png	Modele sekwencyjne przetwarzaja tekst znak po znaku.
+sample_25.png	Polskie znaki diakrytyczne to ważny element testow.
+sample_26.png	Systemy OCR sa wykorzystywane w wielu dziedzinach.
+sample_27.png	Segmentacja linii tekstu to pierwszy krok w HTR.
+sample_28.png	Rekurencyjne sieci neuronowe sa czesto uzywane w HTR.
+sample_29.png	Modele sekwencyjne przetwarzaja tekst znak po znaku.
+sample_30.png	Szum i znieksztalcenia obrazu symuluja realne warunki.
+sample_31.png	Syntetyczne obrazy moga zawierac rozne style pisma.
+sample_32.png	To jest przykladowy tekst do syntetycznego uczenia.
+sample_33.png	Mechanizm uwagi poprawia dokladnosc transkrypcji.
+sample_34.png	Modele oparte na transformatorach rewolucjonizuja HTR.
+sample_35.png	Preprocessing obrazu poprawia skutecznosc rozpoznawania.
+sample_36.png	Segmentacja linii tekstu to pierwszy krok w HTR.
+sample_37.png	Handwriting Text Recognition wymaga duzo danych.
+sample_38.png	Zastosowania HTR obejmuja digitalizacje dokumentow.
+sample_39.png	Augmentacja w czasie rzeczywistym oszczedza miejsce na dysku.
+sample_40.png	Witaj w swiecie generowania danych HTR.
+sample_41.png	Trenowanie modeli wymaga odpowiedniej mocy obliczeniowej.
+sample_42.png	Optymalizacja hiperparametrow moze znacząco poprawic wyniki.
+sample_43.png	Automatyczne rozpoznawanie pisma recznego to wyzwanie.
+sample_44.png	Zmiana czcionki i rozmiaru poprawia roznorodnosc danych.
+sample_45.png	Krzywizny i pochylenia tekstu sa czeste w dokumentach.
+sample_46.png	Sieci neuronowe osiagaja coraz lepsze wyniki.
+sample_47.png	Bledy w transkrypcji moga wynikac z nakladania sie liter.
+sample_48.png	Generowanie syntetycznych danych to skuteczna metoda.
+sample_49.png	Wspolczesne modele HTR ucza sie na ogromnych zbiorach.
+sample_50.png	Transfer learning przyspiesza trenowanie modeli HTR.
+sample_51.png	Kazda epoka trenowania modelu poprawia dokladnosc.
+sample_52.png	Augmentacja danych pomaga w generalizacji modelu.
+sample_53.png	Polskie znaki diakrytyczne to ważny element testow.
+sample_54.png	Walidacja modelu na rzeczywistych danych jest niezbedna.
+sample_55.png	Trenowanie modeli wymaga odpowiedniej mocy obliczeniowej.
+sample_56.png	Optymalizacja hiperparametrow moze znacząco poprawic wyniki.
+sample_57.png	Augmentacja danych pomaga w generalizacji modelu.
+sample_58.png	Wspolczesne modele HTR ucza sie na ogromnych zbiorach.
+sample_59.png	Rekurencyjne sieci neuronowe sa czesto uzywane w HTR.
+sample_60.png	Automatyczne rozpoznawanie pisma recznego to wyzwanie.
+sample_61.png	Segmentacja linii tekstu to pierwszy krok w HTR.
+sample_62.png	Zmiana czcionki i rozmiaru poprawia roznorodnosc danych.
+sample_63.png	Systemy OCR sa wykorzystywane w wielu dziedzinach.
+sample_64.png	Dane syntetyczne uzupelniaja rzeczywiste zbiory danych.
+sample_65.png	Polskie znaki diakrytyczne to ważny element testow.
+sample_66.png	Mechanizm uwagi poprawia dokladnosc transkrypcji.
+sample_67.png	Zastosowania HTR obejmuja digitalizacje dokumentow.
+sample_68.png	Krzywizny i pochylenia tekstu sa czeste w dokumentach.
+sample_69.png	To jest przykladowy tekst do syntetycznego uczenia.
+sample_70.png	Witaj w swiecie generowania danych HTR.
+sample_71.png	Syntetyczne obrazy moga zawierac rozne style pisma.
+sample_72.png	Jakosc danych treningowych ma kluczowe znaczenie.
+sample_73.png	Kazda epoka trenowania modelu poprawia dokladnosc.
+sample_74.png	Handwriting Text Recognition wymaga duzo danych.
+sample_75.png	Preprocessing obrazu poprawia skutecznosc rozpoznawania.
+sample_76.png	Modele sekwencyjne przetwarzaja tekst znak po znaku.
+sample_77.png	Szum i znieksztalcenia obrazu symuluja realne warunki.
+sample_78.png	Transfer learning przyspiesza trenowanie modeli HTR.
+sample_79.png	Modele oparte na transformatorach rewolucjonizuja HTR.
+sample_80.png	Sieci neuronowe osiagaja coraz lepsze wyniki.
+sample_81.png	Augmentacja w czasie rzeczywistym oszczedza miejsce na dysku.
+sample_82.png	Generowanie syntetycznych danych to skuteczna metoda.
+sample_83.png	Augmentacja w czasie rzeczywistym oszczedza miejsce na dysku.
+sample_84.png	Trenowanie modeli wymaga odpowiedniej mocy obliczeniowej.
+sample_85.png	Augmentacja danych pomaga w generalizacji modelu.
+sample_86.png	Krzywizny i pochylenia tekstu sa czeste w dokumentach.
+sample_87.png	Mechanizm uwagi poprawia dokladnosc transkrypcji.
+sample_88.png	Syntetyczne obrazy moga zawierac rozne style pisma.
+sample_89.png	Segmentacja linii tekstu to pierwszy krok w HTR.
+sample_90.png	Kazda epoka trenowania modelu poprawia dokladnosc.
+sample_91.png	Witaj w swiecie generowania danych HTR.
+sample_92.png	Walidacja modelu na rzeczywistych danych jest niezbedna.
+sample_93.png	Dane syntetyczne uzupelniaja rzeczywiste zbiory danych.
+sample_94.png	Wspolczesne modele HTR ucza sie na ogromnych zbiorach.
+sample_95.png	Transfer learning przyspiesza trenowanie modeli HTR.
+sample_96.png	Rekurencyjne sieci neuronowe sa czesto uzywane w HTR.
+sample_97.png	Bledy w transkrypcji moga wynikac z nakladania sie liter.
+sample_98.png	Sieci neuronowe osiagaja coraz lepsze wyniki.
+sample_99.png	Handwriting Text Recognition wymaga duzo danych.
+sample_100.png	Modele oparte na transformatorach rewolucjonizuja HTR.
+sample_101.png	Optymalizacja hiperparametrow moze znacząco poprawic wyniki.
+sample_102.png	Polskie znaki diakrytyczne to ważny element testow.
+sample_103.png	Modele sekwencyjne przetwarzaja tekst znak po znaku.
+sample_104.png	Zmiana czcionki i rozmiaru poprawia roznorodnosc danych.
+sample_105.png	Jakosc danych treningowych ma kluczowe znaczenie.
+sample_106.png	Szum i znieksztalcenia obrazu symuluja realne warunki.
+sample_107.png	Preprocessing obrazu poprawia skutecznosc rozpoznawania.
+sample_108.png	Systemy OCR sa wykorzystywane w wielu dziedzinach.
+sample_109.png	Preprocessing obrazu poprawia skutecznosc rozpoznawania.
+sample_110.png	Optymalizacja hiperparametrow moze znacząco poprawic wyniki.
+sample_111.png	Witaj w swiecie generowania danych HTR.
+sample_112.png	Mechanizm uwagi poprawia dokladnosc transkrypcji.
+sample_113.png	Zmiana czcionki i rozmiaru poprawia roznorodnosc danych.
+sample_114.png	Systemy OCR sa wykorzystywane w wielu dziedzinach.
+sample_115.png	Augmentacja danych pomaga w generalizacji modelu.
+sample_116.png	Rekurencyjne sieci neuronowe sa czesto uzywane w HTR.
+sample_117.png	Syntetyczne obrazy moga zawierac rozne style pisma.
+sample_118.png	Polskie znaki diakrytyczne to ważny element testow.
+sample_119.png	Walidacja modelu na rzeczywistych danych jest niezbedna.
+sample_120.png	Zastosowania HTR obejmuja digitalizacje dokumentow.
+sample_121.png	Augmentacja w czasie rzeczywistym oszczedza miejsce na dysku.
+sample_122.png	Generowanie syntetycznych danych to skuteczna metoda.
+sample_123.png	Modele sekwencyjne przetwarzaja tekst znak po znaku.
+sample_124.png	Trenowanie modeli wymaga odpowiedniej mocy obliczeniowej.
+sample_125.png	Bledy w transkrypcji moga wynikac z nakladania sie liter.
+sample_126.png	Sieci neuronowe osiagaja coraz lepsze wyniki.
+sample_127.png	Krzywizny i pochylenia tekstu sa czeste w dokumentach.
+sample_128.png	Segmentacja linii tekstu to pierwszy krok w HTR.
+sample_129.png	Dane syntetyczne uzupelniaja rzeczywiste zbiory danych.
+sample_130.png	Wspolczesne modele HTR ucza sie na ogromnych zbiorach.
+sample_131.png	Szum i znieksztalcenia obrazu symuluja realne warunki.
+sample_132.png	Transfer learning przyspiesza trenowanie modeli HTR.
+sample_133.png	Modele oparte na transformatorach rewolucjonizuja HTR.
+sample_134.png	Automatyczne rozpoznawanie pisma recznego to wyzwanie.
+sample_135.png	Kazda epoka trenowania modelu poprawia dokladnosc.
+sample_136.png	Segmentacja linii tekstu to pierwszy krok w HTR.
+sample_137.png	Krzywizny i pochylenia tekstu sa czeste w dokumentach.
+sample_138.png	Bledy w transkrypcji moga wynikac z nakladania sie liter.
+sample_139.png	Modele sekwencyjne przetwarzaja tekst znak po znaku.
+sample_140.png	Szum i znieksztalcenia obrazu symuluja realne warunki.
+sample_141.png	Trenowanie modeli wymaga odpowiedniej mocy obliczeniowej.
+sample_142.png	Augmentacja danych pomaga w generalizacji modelu.
+sample_143.png	Optymalizacja hiperparametrow moze znacząco poprawic wyniki.
+sample_144.png	Witaj w swiecie generowania danych HTR.
+sample_145.png	Automatyczne rozpoznawanie pisma recznego to wyzwanie.
+sample_146.png	Zmiana czcionki i rozmiaru poprawia roznorodnosc danych.
+sample_147.png	Augmentacja w czasie rzeczywistym oszczedza miejsce na dysku.
+sample_148.png	Zastosowania HTR obejmuja digitalizacje dokumentow.
+sample_149.png	Handwriting Text Recognition wymaga duzo danych.
+sample_150.png	Rekurencyjne sieci neuronowe sa czesto uzywane w HTR.
+sample_151.png	Systemy OCR sa wykorzystywane w wielu dziedzinach.
+sample_152.png	Generowanie syntetycznych danych to skuteczna metoda.
+sample_153.png	Polskie znaki diakrytyczne to ważny element testow.
+sample_154.png	Modele oparte na transformatorach rewolucjonizuja HTR.
+sample_155.png	Walidacja modelu na rzeczywistych danych jest niezbedna.
+sample_156.png	Dane syntetyczne uzupelniaja rzeczywiste zbiory danych.
+sample_157.png	Syntetyczne obrazy moga zawierac rozne style pisma.
+sample_158.png	Jakosc danych treningowych ma kluczowe znaczenie.
+sample_159.png	Kazda epoka trenowania modelu poprawia dokladnosc.
+sample_160.png	Mechanizm uwagi poprawia dokladnosc transkrypcji.
+sample_161.png	Transfer learning przyspiesza trenowanie modeli HTR.
+sample_162.png	Wspolczesne modele HTR ucza sie na ogromnych zbiorach.
+sample_163.png	Dane syntetyczne uzupelniaja rzeczywiste zbiory danych.
+sample_164.png	Jakosc danych treningowych ma kluczowe znaczenie.
+sample_165.png	Szum i znieksztalcenia obrazu symuluja realne warunki.
+sample_166.png	Augmentacja danych pomaga w generalizacji modelu.
+sample_167.png	Rekurencyjne sieci neuronowe sa czesto uzywane w HTR.
+sample_168.png	To jest przykladowy tekst do syntetycznego uczenia.
+sample_169.png	Handwriting Text Recognition wymaga duzo danych.
+sample_170.png	Bledy w transkrypcji moga wynikac z nakladania sie liter.
+sample_171.png	Witaj w swiecie generowania danych HTR.
+sample_172.png	Modele oparte na transformatorach rewolucjonizuja HTR.
+sample_173.png	Transfer learning przyspiesza trenowanie modeli HTR.
+sample_174.png	Zastosowania HTR obejmuja digitalizacje dokumentow.
+sample_175.png	Syntetyczne obrazy moga zawierac rozne style pisma.
+sample_176.png	Preprocessing obrazu poprawia skutecznosc rozpoznawania.
+sample_177.png	Kazda epoka trenowania modelu poprawia dokladnosc.
+sample_178.png	Krzywizny i pochylenia tekstu sa czeste w dokumentach.
+sample_179.png	Optymalizacja hiperparametrow moze znacząco poprawic wyniki.
+sample_180.png	Automatyczne rozpoznawanie pisma recznego to wyzwanie.
+sample_181.png	Augmentacja w czasie rzeczywistym oszczedza miejsce na dysku.
+sample_182.png	Modele sekwencyjne przetwarzaja tekst znak po znaku.
+sample_183.png	Wspolczesne modele HTR ucza sie na ogromnych zbiorach.
+sample_184.png	Systemy OCR sa wykorzystywane w wielu dziedzinach.
+sample_185.png	Zmiana czcionki i rozmiaru poprawia roznorodnosc danych.
+sample_186.png	Walidacja modelu na rzeczywistych danych jest niezbedna.
+sample_187.png	Segmentacja linii tekstu to pierwszy krok w HTR.
+sample_188.png	Generowanie syntetycznych danych to skuteczna metoda.
+sample_189.png	Sieci neuronowe osiagaja coraz lepsze wyniki.
+sample_190.png	Modele sekwencyjne przetwarzaja tekst znak po znaku.
+sample_191.png	Bledy w transkrypcji moga wynikac z nakladania sie liter.
+sample_192.png	Szum i znieksztalcenia obrazu symuluja realne warunki.
+sample_193.png	Polskie znaki diakrytyczne to ważny element testow.
+sample_194.png	Transfer learning przyspiesza trenowanie modeli HTR.
+sample_195.png	Systemy OCR sa wykorzystywane w wielu dziedzinach.
+sample_196.png	Rekurencyjne sieci neuronowe sa czesto uzywane w HTR.
+sample_197.png	Preprocessing obrazu poprawia skutecznosc rozpoznawania.
+sample_198.png	Witaj w swiecie generowania danych HTR.
+sample_199.png	Sieci neuronowe osiagaja coraz lepsze wyniki.
+sample_200.png	Dane syntetyczne uzupelniaja rzeczywiste zbiory danych.
+sample_201.png	To jest przykladowy tekst do syntetycznego uczenia.
+sample_202.png	Jakosc danych treningowych ma kluczowe znaczenie.
+sample_203.png	Trenowanie modeli wymaga odpowiedniej mocy obliczeniowej.
+sample_204.png	Krzywizny i pochylenia tekstu sa czeste w dokumentach.
+sample_205.png	Augmentacja danych pomaga w generalizacji modelu.
+sample_206.png	Augmentacja w czasie rzeczywistym oszczedza miejsce na dysku.
+sample_207.png	Optymalizacja hiperparametrow moze znacząco poprawic wyniki.
+sample_208.png	Kazda epoka trenowania modelu poprawia dokladnosc.
+sample_209.png	Zastosowania HTR obejmuja digitalizacje dokumentow.
+sample_210.png	Wspolczesne modele HTR ucza sie na ogromnych zbiorach.
+sample_211.png	Syntetyczne obrazy moga zawierac rozne style pisma.
+sample_212.png	Modele oparte na transformatorach rewolucjonizuja HTR.
+sample_213.png	Generowanie syntetycznych danych to skuteczna metoda.
+sample_214.png	Mechanizm uwagi poprawia dokladnosc transkrypcji.
+sample_215.png	Zmiana czcionki i rozmiaru poprawia roznorodnosc danych.
+sample_216.png	Walidacja modelu na rzeczywistych danych jest niezbedna.
+sample_217.png	Modele oparte na transformatorach rewolucjonizuja HTR.
+sample_218.png	Modele sekwencyjne przetwarzaja tekst znak po znaku.
+sample_219.png	Trenowanie modeli wymaga odpowiedniej mocy obliczeniowej.
+sample_220.png	Kazda epoka trenowania modelu poprawia dokladnosc.
+sample_221.png	Systemy OCR sa wykorzystywane w wielu dziedzinach.
+sample_222.png	Walidacja modelu na rzeczywistych danych jest niezbedna.
+sample_223.png	Zmiana czcionki i rozmiaru poprawia roznorodnosc danych.
+sample_224.png	To jest przykladowy tekst do syntetycznego uczenia.
+sample_225.png	Sieci neuronowe osiagaja coraz lepsze wyniki.
+sample_226.png	Segmentacja linii tekstu to pierwszy krok w HTR.
+sample_227.png	Polskie znaki diakrytyczne to ważny element testow.
+sample_228.png	Zastosowania HTR obejmuja digitalizacje dokumentow.
+sample_229.png	Krzywizny i pochylenia tekstu sa czeste w dokumentach.
+sample_230.png	Mechanizm uwagi poprawia dokladnosc transkrypcji.
+sample_231.png	Jakosc danych treningowych ma kluczowe znaczenie.
+sample_232.png	Generowanie syntetycznych danych to skuteczna metoda.
+sample_233.png	Wspolczesne modele HTR ucza sie na ogromnych zbiorach.
+sample_234.png	Transfer learning przyspiesza trenowanie modeli HTR.
+sample_235.png	Optymalizacja hiperparametrow moze znacząco poprawic wyniki.
+sample_236.png	Rekurencyjne sieci neuronowe sa czesto uzywane w HTR.
+sample_237.png	Augmentacja danych pomaga w generalizacji modelu.
+sample_238.png	Syntetyczne obrazy moga zawierac rozne style pisma.
+sample_239.png	Witaj w swiecie generowania danych HTR.
+sample_240.png	Handwriting Text Recognition wymaga duzo danych.
+sample_241.png	Augmentacja w czasie rzeczywistym oszczedza miejsce na dysku.
+sample_242.png	Automatyczne rozpoznawanie pisma recznego to wyzwanie.
+sample_243.png	Dane syntetyczne uzupelniaja rzeczywiste zbiory danych.
+sample_244.png	Sieci neuronowe osiagaja coraz lepsze wyniki.
+sample_245.png	Mechanizm uwagi poprawia dokladnosc transkrypcji.
+sample_246.png	Witaj w swiecie generowania danych HTR.
+sample_247.png	Wspolczesne modele HTR ucza sie na ogromnych zbiorach.
+sample_248.png	Augmentacja w czasie rzeczywistym oszczedza miejsce na dysku.
+sample_249.png	Walidacja modelu na rzeczywistych danych jest niezbedna.
+sample_250.png	Modele oparte na transformatorach rewolucjonizuja HTR.
+sample_251.png	Segmentacja linii tekstu to pierwszy krok w HTR.
+sample_252.png	Zastosowania HTR obejmuja digitalizacje dokumentow.
+sample_253.png	Automatyczne rozpoznawanie pisma recznego to wyzwanie.
+sample_254.png	Preprocessing obrazu poprawia skutecznosc rozpoznawania.
+sample_255.png	Bledy w transkrypcji moga wynikac z nakladania sie liter.
+sample_256.png	Generowanie syntetycznych danych to skuteczna metoda.
+sample_257.png	Trenowanie modeli wymaga odpowiedniej mocy obliczeniowej.
+sample_258.png	Optymalizacja hiperparametrow moze znacząco poprawic wyniki.
+sample_259.png	Systemy OCR sa wykorzystywane w wielu dziedzinach.
+sample_260.png	Jakosc danych treningowych ma kluczowe znaczenie.
+sample_261.png	Transfer learning przyspiesza trenowanie modeli HTR.
+sample_262.png	Rekurencyjne sieci neuronowe sa czesto uzywane w HTR.
+sample_263.png	Zmiana czcionki i rozmiaru poprawia roznorodnosc danych.
+sample_264.png	To jest przykladowy tekst do syntetycznego uczenia.
+sample_265.png	Dane syntetyczne uzupelniaja rzeczywiste zbiory danych.
+sample_266.png	Polskie znaki diakrytyczne to ważny element testow.
+sample_267.png	Handwriting Text Recognition wymaga duzo danych.
+sample_268.png	Krzywizny i pochylenia tekstu sa czeste w dokumentach.
+sample_269.png	Modele sekwencyjne przetwarzaja tekst znak po znaku.
+sample_270.png	Kazda epoka trenowania modelu poprawia dokladnosc.

@@ -17,12 +17,13 @@ import os
 import sys
 import cv2
 import torch
+import random
 
 from ocr.config import MODEL_PATH, OCR_MODEL_PATH
 from ocr.inference import run_ensemble_generation, compute_accuracy, test_models, test_cache_models, get_active_chars, load_model, predict_image, predict_letter, predict_segments, predict_word, process_folder
 from ocr.output import OCRResult, create_output_handler
 from ocr.utils import save_aligned_jsonl, merge_editor_changes, aligned_to_editor_boxes, load_aligned_jsonl, save_aligned_boxes_jsonl, convert_aligned_to_ttdata, save_image_to_today_folder, DictCorrect, list_models, generate_model_ensembles, load_transcription, save_results_csv
-from ocr.trainer import train_model, train_crnn, train_cnn, infinite_train, multi_train, TRAINING_PRESETS, get_preset_names
+from ocr.trainer import train_model, train_crnn, train_cnn, infinite_train, multi_train, train_folder8, train_crnn_words, TRAINING_PRESETS, get_preset_names
 from ocr.json_output import (
     build_image_result_json,
     build_word_result_json,
@@ -45,7 +46,6 @@ from ocr.bbox_annotator import edit_boxes_interactive
 #--State
 
 
-
 # ── Pomocniki ─────────────────────────────────────────────────────────────────
 
 def _print_accuracy(predicted_text: str, reference_path: str, info=None) -> None:
@@ -62,7 +62,6 @@ def _print_accuracy(predicted_text: str, reference_path: str, info=None) -> None
     info(f"  Predykcja:  {predicted_text.strip()[:80]}")
     info(f"  Referencja: {reference.strip()[:80]}")
     info("=" * 60)
-
 
 # -- Funkcje pomocnicze dla wyświetlania rozmieszczenia tekstu ------------------
 
@@ -137,6 +136,9 @@ def build_parser() -> argparse.ArgumentParser:
     mode.add_argument("--train", "-t", action="store_true", help="Trenuj model (okreslona liczba epok)")
     mode.add_argument("--train-crnn", action="store_true", dest="train_crnn", help="Trening CRNN na danych ttData (CTC loss)")
     mode.add_argument("--train-cnn", action="store_true", dest="train_cnn", help="Trening CNN na danych phsf (klasyfikacja znakow)")
+    mode.add_argument("--train-folder8", action="store_true", dest="train_folder8", help="Trening CRNN na danych z folderu 8 (podfolderów 1-174 z labels.txt)")
+    mode.add_argument("--train-words", action="store_true", dest="train_words", help="Trening CRNN na wyrazach z phsf/words + phsf/gen_words (CTC loss)")
+    mode.add_argument("--train-words-only", action="store_true", dest="train_words_only", help="Trening CRNN TYLKO na wyrazach z phsf/words (CTC loss)")
     mode.add_argument("--infinite", action="store_true", help="Nieskonczony trening do przerwania (Ctrl+C)")
     mode.add_argument(
         "--multi-train",
@@ -151,6 +153,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
     mode.add_argument("--image", "-i", type=str, metavar="PLIK", help="Rozpoznaj pojedyncza litere")
     mode.add_argument("--word", "-w", type=str, metavar="PLIK", help="Rozpoznaj wyraz (jedna linia)")
+    mode.add_argument("--word-folders", type=str, metavar="SLOWO", help="Zwraca foldery znakow dla slowa")
+    mode.add_argument("--word-folders-image", type=str, metavar="PLIK", help="Rozpoznaj wyraz i zwroc foldery znakow")
     mode.add_argument("--lines", "-l", type=str, metavar="PLIK", help="Rozpoznaj tekst wieloliniowy")
     mode.add_argument("--multi", "-m", type=str, nargs="+", metavar="PLIK", help="Rozpoznaj wiele zdjec pojedynczych liter")
     mode.add_argument("--annotate", type=str, metavar="PLIK", help="Wycinki: popraw bboxy i zapisz wycinki + adnotacje")
@@ -321,6 +325,15 @@ def main(args=None, info=None, buffor=None):
 
     elif args.train_cnn:
         train_cnn(epochs=args.epochs, batch_size=args.batch_size, model_path=args.resume, info=info)
+
+    elif args.train_folder8:
+        train_folder8(epochs=args.epochs, batch_size=args.batch_size, model_path=args.resume, info=info, args=args)
+
+    elif args.train_words:
+        train_crnn_words(epochs=args.epochs, batch_size=args.batch_size, model_path=args.resume, info=info, args=args, words_only=False)
+
+    elif args.train_words_only:
+        train_crnn_words(epochs=args.epochs, batch_size=args.batch_size, model_path=args.resume, info=info, args=args, words_only=True)
 
     elif args.multi_train is not None:
         preset_names = args.multi_train or None  # [] -> None oznacza "wszystkie"
@@ -823,6 +836,45 @@ def main(args=None, info=None, buffor=None):
 
         if args.accuracy:
             _print_accuracy(word, args.accuracy, info)
+
+    elif getattr(args, "word_folders", None):
+        if os.path.isfile(args.word_folders):
+
+            with open(args.word_folders, encoding="utf-8") as f:
+                for line in f:
+                    for word in line.split():
+
+                        pairs = word_to_folder_paths(word, info=info)
+                        generate_word_samples(word, pairs)
+
+        else:
+
+            pairs = word_to_folder_paths(args.word_folders, info=info)
+            generate_word_samples(args.word_folders, pairs)
+
+            for syl, path in pairs:
+                if path:
+                    info(f"{syl} -> {path}")
+                else:
+                    info(f"{syl} -> BRAK")
+    elif getattr(args, "word_folders_image", None):
+        _require_file(args.word_folders_image, info)
+        info(f"\nRozpoznawanie wyrazu: {args.word_folders_image}")
+        model = load_model(ocr_path, device, info, 2)
+        word, avg_word_confidence, class_confidence = predict_word(
+            args.word_folders_image,
+            model,
+            device,
+            args,
+        )
+        info(f"Wynik: {word}")
+        info("Foldery znakow:")
+        pairs = word_to_folder_paths(word)
+        for char, path in pairs:
+            if path:
+                info(f"{char} -> {path}")
+            else:
+                info(f"{char} -> BRAK")
 
     # ── Tekst wieloliniowy ──
     elif args.lines:

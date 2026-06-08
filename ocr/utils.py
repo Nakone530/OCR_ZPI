@@ -1514,3 +1514,41 @@ def DictCorrect(
         return best_match
 
     return text
+
+
+def save_predictions_to_boxes_jsonl(folder_path, results, info=None):
+    """Aktualizuje boxes.jsonl z predykcjami OCR."""
+    if info is None:
+        info = print
+    
+    jsonl_path = os.path.join(folder_path, "boxes.jsonl")
+    if not os.path.exists(jsonl_path):
+        info(f"Nie znaleziono {jsonl_path}")
+        return
+    
+    entries = []
+    with open(jsonl_path, "r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            entries.append(json.loads(line))
+    
+    pred_idx = 0
+    for entry in entries:
+        if pred_idx < len(results):
+            r = results[pred_idx]
+            pred_idx += 1
+            
+            if "error" not in r:
+                entry["prediction"] = r.get("text", "")
+                entry["confidence"] = r.get("confidence", 0.0)
+            else:
+                entry["prediction"] = f"ERROR: {r['error']}"
+                entry["confidence"] = 0.0
+    
+    with open(jsonl_path, "w", encoding="utf-8") as f:
+        for entry in entries:
+            f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    
+    info(f"Zapisano predykcje do: {jsonl_path}")

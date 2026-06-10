@@ -20,7 +20,7 @@ import torch
 import random
 
 from ocr.config import MODEL_PATH, OCR_MODEL_PATH
-from ocr.inference import run_ensemble_generation, compute_accuracy, test_models, test_cache_models, get_active_chars, load_model, predict_image, predict_letter, predict_segments, predict_word, process_folder
+from ocr.inference import process_image, run_ensemble_generation, compute_accuracy, test_models, test_cache_models, get_active_chars, load_model, predict_image, predict_letter, predict_segments, predict_word, process_folder
 from ocr.output import OCRResult, create_output_handler
 from ocr.utils import generate_word_samples, word_to_folder_paths, save_aligned_jsonl, merge_editor_changes, aligned_to_editor_boxes, load_aligned_jsonl, save_aligned_boxes_jsonl, convert_aligned_to_ttdata, save_image_to_today_folder, DictCorrect, list_models, generate_model_ensembles, load_transcription, save_results_csv, save_predictions_to_boxes_jsonl
 from ocr.trainer import evaluate_saved_crnn, train_cnn, multi_train, train_crnn_words, TRAINING_PRESETS, get_preset_names
@@ -47,6 +47,30 @@ from ocr.bbox_annotator import edit_boxes_interactive
 
 
 # ── Pomocniki ─────────────────────────────────────────────────────────────────
+
+                
+from difflib import SequenceMatcher
+
+
+def levenshtein_distance(s1, s2):
+    if len(s1) < len(s2):
+            s1, s2 = s2, s1
+
+    previous = list(range(len(s2) + 1))
+
+    for i, c1 in enumerate(s1, start=1):
+        current = [i]
+
+        for j, c2 in enumerate(s2, start=1):
+            insertions = previous[j] + 1
+            deletions = current[j - 1] + 1
+            substitutions = previous[j - 1] + (c1 != c2)
+
+            current.append(min(insertions, deletions, substitutions))
+
+        previous = current
+
+    return previous[-1]
 
 def _print_accuracy(predicted_text: str, reference_path: str, info=None) -> None:
     if info is None:
@@ -148,7 +172,7 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     mode.add_argument("--image", "-i", type=str, metavar="PLIK", help="Rozpoznaj pojedyncza litere")
-    mode.add_argument("--word", "-w", type=str, metavar="PLIK", help="Rozpoznaj wyraz (jedna linia)")
+    mode.add_argument("--word", "-w", type=str, metavar="PLIK", help="Rozpoznaj wyraz")
     mode.add_argument("--word-folders", type=str, metavar="SLOWO", help="Zwraca foldery znakow dla slowa")
     mode.add_argument("--word-folders-image", type=str, metavar="PLIK", help="Rozpoznaj wyraz i zwroc foldery znakow")
     mode.add_argument("--lines", "-l", type=str, metavar="PLIK", help="Rozpoznaj tekst wieloliniowy")
@@ -159,6 +183,12 @@ def build_parser() -> argparse.ArgumentParser:
     mode.add_argument("--crnn", type=str, metavar="PLIK", help="Rozpoznawanie CRNN (tekst z obrazu)")
     mode.add_argument("--ensemble", "-n", type=str, metavar="PLIK", help="Sprawdź kombinacle modeli")
     mode.add_argument("--test", type=str, metavar="PLIK", help="Sprawdź jakość wskazanego modelu")
+    mode.add_argument(
+        "--bmark",
+        type=str,
+        metavar="JSONL",
+        help="Benchmark OCR na pliku JSONL"
+    )
     parser.add_argument("--trans", "-s", type=str, metavar="PLIK", help="Plik zawierający transkrypcje, do użycia z -n")
     # Cache
     parser.add_argument("--cache_path", type=str)
@@ -916,8 +946,104 @@ def main(args=None, info=None, buffor=None):
         else:
             for result in results:
                 info(f"  {result['file']}  ->  '{result['char']}' ({result['confidence']:.1f}%)")
-                
 
+
+    elif args.bmark:
+        total_words = 0
+        correct_words = 0
+
+        total_similarity = 0.0
+        total_cer = 0.0
+        total_char_accuracy = 0.0
+    
+        with open(args.bmark, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+
+                if not line:
+                    continue
+
+                record = json.loads(line)
+
+                gt_text = record["text"].strip()
+                crop_path = record["crop_path"]
+
+                result = process_image(
+                    crop_path,
+                    args,
+                    model_path,
+                    device,
+                    info,
+                )
+
+                pred_text = result["text"]
+
+                gt = gt_text.lower()
+                pred = pred_text.lower()
+
+                similarity = SequenceMatcher(
+                    None,
+                    gt,
+                    pred
+                ).ratio()
+
+                distance = levenshtein_distance(gt, pred)
+
+                cer = (
+                    distance / len(gt)
+                    if len(gt) > 0
+                    else 0.0
+                )
+
+                char_accuracy = max(0.0, 1.0 - cer)
+
+                is_correct = gt == pred
+
+                total_words += 1
+                total_similarity += similarity
+                total_cer += cer
+                total_char_accuracy += char_accuracy
+
+                if is_correct:
+                    correct_words += 1
+
+                print(
+                    f"[{total_words}] "
+                    f"GT='{gt_text}' "
+                    f"PRED='{pred_text}' "
+                    f"SIM={similarity:.4f} "
+                    f"CER={cer:.4f} "
+                    f"CHAR_ACC={char_accuracy:.4f} "
+                    f"CORRECT={is_correct}"
+                )
+
+        avg_similarity = (
+            total_similarity / total_words
+            if total_words else 0.0
+        )
+
+        avg_cer = (
+            total_cer / total_words
+            if total_words else 0.0
+        )
+
+        avg_char_accuracy = (
+            total_char_accuracy / total_words
+            if total_words else 0.0
+        )
+
+        word_accuracy = (
+            correct_words / total_words * 100
+            if total_words else 0.0
+        )
+
+        print("\n=== PODSUMOWANIE ===")
+        print(f"Liczba słów: {total_words}")
+        print(f"Średni Similarity Score: {avg_similarity:.4f}")
+        print(f"Średni CER: {avg_cer:.4f}")
+        print(f"Średni Character Accuracy: {avg_char_accuracy:.4f}")
+        print(f"Poprawne słowa: {correct_words}/{total_words}")
+        print(f"Word Accuracy: {word_accuracy:.2f}%")
     else:
         parser.print_help()
 

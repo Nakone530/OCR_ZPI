@@ -545,7 +545,80 @@ def process_folder(folder_path, args, models_dir, device, info):
 
     return results
 
+def process_image(image_path, args, models_dir, device, info):
+    if not os.path.isfile(image_path):
+        raise ValueError(f"To nie jest plik: {image_path}")
 
+    models_dir = os.path.dirname(models_dir)
+    version = getattr(args, "model_version", None)
+    default_model, selected_models = auto_select_models(models_dir, version)
+
+    if not selected_models:
+        fallback_model = load_model(MODEL_PATH, device, info)
+        default_model = "model_ocr"
+        loaded_models = {default_model: fallback_model}
+    else:
+        info(
+            f"Automatyczny wybór: {len(selected_models)} model(i), "
+            f"default: {default_model}"
+        )
+        loaded_models = load_models(
+            models_dir,
+            selected_models,
+            device,
+            info
+        )
+
+    try:
+        info(f"\nRozpoznawanie: {image_path}")
+
+        per_model = predict_letter_multi(
+            image_path,
+            loaded_models,
+            device,
+            args,
+            info
+        )
+
+        final_text = aggregate(per_model, default_model)
+
+        # confidence modelu który wygrał głosowanie
+        text_conf = {
+            name: res["confidence"]
+            for name, res in per_model.items()
+            if res["text"] == final_text
+        }
+
+        best_conf = (
+            float(np.mean(list(text_conf.values())))
+            if text_conf else 0.0
+        )
+
+        # letter_vectors z modelu który wyprodukował wybrany tekst
+        winning_model = next(
+            (n for n in text_conf if n == default_model),
+            next(iter(text_conf), default_model)
+        )
+
+        letter_vectors = per_model.get(
+            winning_model, {}
+        ).get("letter_vectors", [])
+
+        return {
+            "file": image_path,
+            "text": final_text,
+            "confidence": best_conf,
+            "bbox": None,
+            "per_model": per_model,
+            "letter_vectors": letter_vectors,
+        }
+
+    except Exception as e:
+        return {
+            "file": image_path,
+            "error": str(e)
+        }
+    
 def _load_bbox_data(folder_path):
     """Ładuje dane bounding box z pliku boxes.jsonl."""
     jsonl_path = os.path.join(folder_path, "boxes.jsonl")

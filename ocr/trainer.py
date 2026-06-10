@@ -488,8 +488,8 @@ def save_model(path, info=None):
     saved_path = Path(saved_path)
     saved_path.mkdir(parents=True, exist_ok=True)
 
-    version = get_next_version(saved_path)
-    save_path = saved_path / f"{version}"
+    version = get_runtime_major_version(saved_path)
+    save_path = saved_path / f"{version + 1}"
     save_path.mkdir(parents=True, exist_ok=True)
     save_path = save_path / "model.pth"
     
@@ -511,8 +511,9 @@ def save_best_model(path, info=None):
     path = Path(path)
     path.mkdir(parents=True, exist_ok=True)
 
-    version = get_next_version(path)
-    save_path = path / f"{version}"
+    version = get_runtime_major_version(path)
+    minver = get_runtime_minor_version
+    save_path = path / f"{version+1}.{minver}"
     save_path.mkdir(parents=True, exist_ok=True)
     save_path = save_path / "model.pth"
 

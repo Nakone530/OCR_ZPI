@@ -963,14 +963,32 @@ def load_model(model_path: str = MODEL_PATH, device: torch.device = None, info=N
 
 def load_transcription(path, return_dict=False):
     """
-    word_000 nic
-    word_001 dwa
+    Obsługuje dwa formaty:
+
+    1.
+    word_000 ala
+    word_001 ma
+    word_002 kota
+
+    2.
+    ala ma kota
     """
 
-    pairs = []
-
     with open(path, "r", encoding="utf-8") as f:
-        for line in f:
+        lines = f.readlines()
+
+    # znajdź pierwszą niepustą linię
+    first_line = next((line.strip() for line in lines if line.strip()), "")
+
+    is_word_format = False
+    if first_line:
+        first_word = first_line.split(maxsplit=1)[0]
+        is_word_format = re.fullmatch(r"word_\d+", first_word) is not None
+
+    if is_word_format:
+        pairs = []
+
+        for line in lines:
             line = line.strip()
 
             if not line:
@@ -987,10 +1005,21 @@ def load_transcription(path, return_dict=False):
 
             pairs.append((key, text))
 
-    if return_dict:
-        return dict(pairs)
+        if return_dict:
+            return dict(pairs)
 
-    return [text for _, text in pairs]
+        return [text for _, text in pairs]
+
+    # zwykły tekst rozdzielony spacjami / nowymi liniami
+    words = " ".join(line.strip() for line in lines if line.strip()).split()
+
+    if return_dict:
+        return {
+            f"word_{i:03d}": word
+            for i, word in enumerate(words)
+        }
+
+    return words
 
 def save_aligned_boxes_jsonl(
     page_path,
@@ -1110,7 +1139,7 @@ def convert_aligned_to_ttdata(
     out_dir = os.path.join(ttdata_dir, File)
     out_dir = os.path.join("data", out_dir)
     os.makedirs(out_dir, exist_ok=True)
-
+    
     img = cv2.imdecode(np.fromfile(page_image_path, dtype=np.uint8), cv2.IMREAD_COLOR)
     if img is None:
         raise ValueError(f"Nie udało się wczytać obrazu: {page_image_path}")
@@ -1121,8 +1150,12 @@ def convert_aligned_to_ttdata(
 
     img_h, img_w = img.shape[:2]
     
+    clear_path = os.path.join(out_dir, "crops.jsonl")
+    print(clear_path)
+    print(os.path.isdir(clear_path))
+    print(os.path.isfile(clear_path))
     jsonl_path = os.path.join(out_dir, "boxes.jsonl")
-
+    open(clear_path, "w", encoding="utf-8").close()
     written = 0
     with open(jsonl_path, "w", encoding="utf-8") as f:
         for entry in entries:
@@ -1160,6 +1193,20 @@ def convert_aligned_to_ttdata(
             }
             f.write(json.dumps(record, ensure_ascii=False) + "\n")
             written += 1
+
+            jsonl_path = os.path.join(out_dir, "crops.jsonl")
+            with open(jsonl_path, "a", encoding="utf-8") as c:
+                
+                if not text:
+                    continue
+
+                c_record = {
+                    "word_id": word_id,
+                    "text": text,
+                    "crop_path": crop_path,
+                }
+
+                c.write(json.dumps(c_record, ensure_ascii=False) + "\n")
 
     print(f"[ttData] {out_dir}  ({written} wpisów)")
     return out_dir

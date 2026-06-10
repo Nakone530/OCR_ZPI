@@ -1382,7 +1382,7 @@ def edit_boxes_interactive(image, boxes):
                 handle = detect_handle(ix, iy, box)
                 state["drag_mode"] = handle
                 state["drag_anchor"] = (ix, iy)
-                state["start_box"] = box.copy()
+                state["start_box"] = box
             else:
                 state["drag_mode"] = "draw"
                 state["drag_anchor"] = (ix, iy)

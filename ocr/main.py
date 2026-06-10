@@ -254,6 +254,10 @@ def build_args(state):
         args.append("--train")
         args += ["--epochs", str(state["epochs"])]
         args += ["--batch-size", str(state["batch_size"])]
+    if state["mode"] == "train-words":
+        args.append("--train-words")
+        args += ["--epochs", str(state["epochs"])]
+        args += ["--batch-size", str(state["batch_size"])]
     elif state["mode"] == "image":
         args += ["--image", state["input_path"]]
 

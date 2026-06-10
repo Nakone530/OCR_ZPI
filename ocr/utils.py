@@ -149,7 +149,7 @@ def _word_to_folder_syllables(word: str, char_map: dict, base_dir: str) -> list:
         results.append((syllab, folder_path))
     return results
 
-def generate_word_samples(word, pairs, samples_count=1000):
+def generate_word_samples(word, pairs, samples_count=100):
 
     tails = set("gjpqyąę")
     output_dir= PHSF_DATA_DIR
@@ -1302,8 +1302,8 @@ DEFAULT_MODELS = [
 ##    "v7.2", "v7.4", "v7.5",
 ##    "v8.2",
 ##    "v10.2", "v10.3", "v10.4", "v10.5",
-##    "v33", "v31", "v34",
-      "v33",
+    "v33", "v31", "v34",
+##      "v36",
 ]
 
 DEFAULT_MODEL = "v33"

@@ -241,7 +241,7 @@ for folder_name in os.listdir(letters_dir):
 
 
 # ile wariantów każdej sylaby wygenerować
-samples_per_syllable = 100
+samples_per_syllable = 10
 
 syllables = []
 values = [0, 1, 2, 3, 5]
@@ -255,7 +255,7 @@ with open(sylaby, encoding="utf-8") as f:
 
 for syllable, freq in syllables:
     
-    total_samples = math.floor(samples_per_syllable * math.sqrt(freq))
+    total_samples = math.floor(samples_per_syllable * (freq / (1 + (math.pow(freq, 2) / 1000000))))
 
     print(f"{syllable}: {total_samples} próbek")
 

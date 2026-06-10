@@ -35,8 +35,9 @@ def normalize_dictionary_lowercase(dictionary_set: set) -> set:
     return {word.lower() for word in dictionary_set if isinstance(word, str)}
 
 
+
 def update_dictionary(folder_path: str, dictionary_path: str):
-    folder = Path(folder_path)
+    path = Path(folder_path)
 
     # load dictionary
     if Path(dictionary_path).exists():
@@ -47,12 +48,24 @@ def update_dictionary(folder_path: str, dictionary_path: str):
 
     dictionary_set = set(dictionary)
 
-    # find jsonl files recursively
-    jsonl_files = list(folder.rglob("*.jsonl"))
-    print(f"Znaleziono {len(jsonl_files)} plików .jsonl")
+    if path.is_file() and path.suffix.lower() == ".txt":
+        print(f"Wczytywanie słów z pliku: {path}")
 
-    for file_path in jsonl_files:
-        update_dictionary_from_jsonl(file_path, dictionary_set)
+        with open(path, "r", encoding="utf-8") as f:
+            text = f.read().strip()
+
+        if text:
+            dictionary_set.update(text.split(" "))
+
+    elif path.is_dir():
+        jsonl_files = list(path.rglob("*.jsonl"))
+        print(f"Znaleziono {len(jsonl_files)} plików .jsonl")
+
+        for file_path in jsonl_files:
+            update_dictionary_from_jsonl(file_path, dictionary_set)
+
+    else:
+        raise ValueError(f"Nieobsługiwana ścieżka: {path}")
 
     # NORMALIZACJA NA KOŃCU
     dictionary_set = normalize_dictionary_lowercase(dictionary_set)
@@ -65,7 +78,6 @@ def update_dictionary(folder_path: str, dictionary_path: str):
         json.dump(sorted_dictionary, f, ensure_ascii=False, indent=1)
 
     print(f"Zaktualizowano słownik: {len(sorted_dictionary)} słów")
-
 
 def main():
     parser = argparse.ArgumentParser()

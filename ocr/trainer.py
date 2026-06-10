@@ -25,9 +25,10 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torchvision import datasets
+from pathlib import Path
 
 from .config import (
-    DATA_DIR, MODEL_PATH, CHECKPOINT_PATH,
+    DATA_DIR, MODEL_DIR, MODEL_PATH, CHECKPOINT_PATH,
     MODEL_ARCHIVE_DIR, MODEL_ARCHIVE_KEEP_COUNT, IMAGES_DIR, CHARS, char2idx, idx2char, DATA_ROOT_DIR,
     PHSF_DATA_DIR, FOLDER8_DIR,
 )
@@ -472,7 +473,7 @@ def save_model(path, info=None):
 
     if path == MODEL_PATH:
         _make_backup(path)
-
+    
     payload = {
         "epoch": GLOBAL_EPOCH,
         "model_state_dict": _state_dict_to_cpu(GLOBAL_MODEL.state_dict()),
@@ -483,35 +484,54 @@ def save_model(path, info=None):
     }
 
     saved_path = _robust_torch_save(payload, path)
+    
+    saved_path = Path(saved_path)
+    saved_path.mkdir(parents=True, exist_ok=True)
 
-    info(f"Model zapisany do: {saved_path}")
+    version = get_next_version(saved_path)
+    save_path = saved_path / f"{version}"
+    save_path.mkdir(parents=True, exist_ok=True)
+    save_path = save_path / "model.pth"
+    
+    info(f"Model zapisany do: {save_path}")
 
     # Archiwizuj poprzedni model jeśli jest to główny model
-    if path == MODEL_PATH:
-        _archive_previous_model(saved_path)
+    if saved_path == MODEL_PATH:
+        _archive_previous_model(save_path)
 
-    return saved_path
+    return save_path
 
 
 def save_best_model(path, info=None):
-    """Zapisuje najlepszy model (jeśli został zachowany) do pliku."""
     global BEST_MODEL_STATE, GLOBAL_BEST_ACC
 
     if info is None:
         info = print
 
-    os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
+    path = Path(path)
+    path.mkdir(parents=True, exist_ok=True)
+
+    version = get_next_version(path)
+    save_path = path / f"{version}"
+    save_path.mkdir(parents=True, exist_ok=True)
+    save_path = save_path / "model.pth"
 
     if BEST_MODEL_STATE is None:
         info("Brak zapisanego najlepszego modelu - zapisuję aktualny stan.")
-        return save_model(path, info)
+        return save_model(save_path, info)
 
-    _make_backup(path)
-    torch.save(BEST_MODEL_STATE, path)
-    acc = BEST_MODEL_STATE.get('val_char_accuracy', None)
+    torch.save(BEST_MODEL_STATE, save_path)
+
+    acc = BEST_MODEL_STATE.get("val_char_accuracy", None)
     acc_str = f", acc: {acc:.2f}%" if acc is not None else ""
-    info(f"Najlepszy model (loss: {BEST_MODEL_STATE.get('best_loss', 0):.4f}{acc_str}) zapisany do: {path}")
-    return path
+
+    info(
+        f"Najlepszy model "
+        f"(loss: {BEST_MODEL_STATE.get('best_loss', 0):.4f}{acc_str}) "
+        f"zapisany do: {save_path}"
+    )
+
+    return save_path
 
 
 def capture_best_model(info=None, path=None):
@@ -865,7 +885,7 @@ def get_preset_names() -> List[str]:
 
 # ── Trening CRNN na danych wyrazów (PHSF words + gen_words) ─────────────────────
 
-def train_crnn_words(epochs=10, batch_size=32, model_path=None, info=None, args=None,
+def train_crnn_words(epochs=10, batch_size=64, model_path=None, info=None, args=None,
                      words_only=False, config: Optional['TrainingConfig'] = None,
                      save_path: Optional[str] = None):
     """
@@ -892,7 +912,7 @@ def train_crnn_words(epochs=10, batch_size=32, model_path=None, info=None, args=
     if info is None:
         info = print
     
-    effective_save_path = save_path or MODEL_PATH
+    effective_save_path = save_path or MODEL_DIR
     BEST_MODEL_STATE = None
     
     # Parametry transformacji z konfiguracji lub wartości domyślne
@@ -902,7 +922,6 @@ def train_crnn_words(epochs=10, batch_size=32, model_path=None, info=None, args=
     # Odczyt dokładności istniejącego modelu i kopia zapasowa
     prev_accuracy = get_stored_accuracy(effective_save_path)
     backup_path = effective_save_path + ".backup"
-    _make_backup_as(effective_save_path, backup_path)
     if prev_accuracy >= 0:
         info(f"Poprzednia dokładność modelu: {prev_accuracy:.2f}%")
     else:
@@ -1074,7 +1093,7 @@ def train_crnn_words(epochs=10, batch_size=32, model_path=None, info=None, args=
 def evaluate_saved_crnn(
     model_path,
     args,
-    batch_size=50,
+    batch_size=64,
     samples_to_show=20,
 ):
 

@@ -1672,8 +1672,15 @@ def process_letter(image_path, base_dir="inference", enable_box_edit=True, non_i
     img_h, img_w = img_cv2.shape[:2]
 
     previous_dir = get_latest_output_dir(base_dir, letter_name)
-    boxes = load_boxes_from_annotations(previous_dir, img_w, img_h)
-
+    boxes = []
+    unscales_boxes = load_boxes_from_annotations(previous_dir, img_w, img_h)
+    for boxy in unscales_boxes :
+        b = boxy["box"]
+        print(b)
+        bo = scale_box(b, scale)
+        boxes.append({
+            "box": bo
+        })
     if boxes:
         print(f"Wczytano {len(boxes)} poprzednich boxów z: {previous_dir}")
     else:

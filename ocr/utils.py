@@ -1349,11 +1349,11 @@ DEFAULT_MODELS = [
 ##    "v7.2", "v7.4", "v7.5",
 ##    "v8.2",
 ##    "v10.2", "v10.3", "v10.4", "v10.5",
-    "v33", "v31", "v34",
-##      "v36",
+##    "v33", "v31", "v34",
+      "v40", "v41","v33", "v31",
 ]
 
-DEFAULT_MODEL = "v33"
+DEFAULT_MODEL = "v40"
 
 
 def auto_select_models(models_dir: str, version: str | None = None):

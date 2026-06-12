@@ -846,38 +846,53 @@ def main(args=None, info=None, buffor=None):
 
     # ── Wiele zdjęć ──
     elif args.multi:
-        model = load_model(model_path, device, info)
         info(f"\nRozpoznawanie {len(args.multi)} pliku(-ow):")
 
         results = []
+
         for img_path in args.multi:
             if not os.path.exists(img_path):
                 info(f"  Pominieto (nie znaleziono): {img_path}")
                 continue
 
             save_image_to_today_folder(img_path, info)
-            result = predict_image(img_path, model, device, args)
+
+            result = process_image(
+                img_path,
+                args,
+                model_path,
+                device,
+                info,
+            )
+
             results.append(
                 {
                     "file": img_path,
                     "char": result["text"],
                     "confidence": result["confidence"],
-                    "probs": result["probs"],
+                    "probs": result.get("probs"),
                 }
             )
 
-            if not args.json:
-                print_multi_result(img_path, result["text"], result["confidence"], info)
 
         if args.json:
-            payload = build_multi_result_json(results=results, device=str(device))
+            payload = build_multi_result_json(
+                results=results,
+                device=str(device),
+            )
+
             info(dump_json(payload, pretty=args.json_pretty))
+
             out_path = args.json_path or "results.json"
             write_json(out_path, payload, pretty=args.json_pretty)
+
         else:
             for result in results:
-                info(f"  {result['file']}  ->  '{result['char']}' ({result['confidence']:.1f}%)")
-
+                info(
+                    f"  {result['file']}  ->  "
+                    f"'{result['char']}' "
+                    f"({result['confidence']:.1f}%)"
+                )
 
     elif args.bmark:
         total_words = 0

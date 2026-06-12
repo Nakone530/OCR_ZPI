@@ -279,24 +279,20 @@ def merge_overlapping_boxes(
         key=lambda box: (box[1], box[0]),
     )
 
-def clamp_box(box, width, height, min_size=4):
+def clamp_box(box, width, height):
     x1, y1, x2, y2 = box
-    x1 = max(0, min(x1, width - 1))
-    y1 = max(0, min(y1, height - 1))
-    x2 = max(1, min(x2, width))
-    y2 = max(1, min(y2, height))
 
-    if x2 - x1 < min_size:
-        if x1 + min_size <= width:
-            x2 = x1 + min_size
-        else:
-            x1 = max(0, x2 - min_size)
 
-    if y2 - y1 < min_size:
-        if y1 + min_size <= height:
-            y2 = y1 + min_size
-        else:
-            y1 = max(0, y2 - min_size)
+    if x2 < x1:
+        x1, x2 = x2, x1
+    if y2 < y1:
+        y1, y2 = y2, y1
+
+    # clamp do granic obrazu
+    x1 = max(0, min(x1, width))
+    y1 = max(0, min(y1, height))
+    x2 = max(0, min(x2, width))
+    y2 = max(0, min(y2, height))
 
     return [x1, y1, x2, y2]
 
@@ -1627,13 +1623,13 @@ def edit_boxes_interactive(image, boxes):
         boxes[selected_idx]["box"] = clamp_box([x1, y1, x2, y2], width, height)
 
 def scale_to_original(box, scale):
-    x, y, w, h = box
+    x1, y1, x2, y2 = box
 
     return (
-        int(round(x / scale)),
-        int(round(y / scale)),
-        int(round(w / scale)),
-        int(round(h / scale)),
+        int(round(x1 / scale)),
+        int(round(y1 / scale)),
+        int(round(x2 / scale)),
+        int(round(y2 / scale)),
     )
 
 def restore_original_scale(image, scale):

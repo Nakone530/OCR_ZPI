@@ -274,6 +274,26 @@ def get_runtime_minor_version(folder, major):
 
     return _GLOBAL_MINOR_VERSION
 
+def get_next_version_dir(base_dir):
+    """
+    Szuka katalogów v1, v2, v3...
+    i zwraca ścieżkę do kolejnego.
+    """
+    base_dir = Path(base_dir)
+    base_dir.mkdir(parents=True, exist_ok=True)
+
+    max_version = 0
+
+    for item in base_dir.iterdir():
+        if not item.is_dir():
+            continue
+
+        match = re.fullmatch(r"v(\d+)", item.name)
+        if match:
+            max_version = max(max_version, int(match.group(1)))
+
+    return base_dir / f"v{max_version + 1}"
+
 checkpoint_path = "checkpoint.pth"
 current_state = {}
 
@@ -483,23 +503,21 @@ def save_model(path, info=None):
         "val_char_accuracy": GLOBAL_VAL_ACCURACY,
     }
 
-    saved_path = _robust_torch_save(payload, path)
-    
-    saved_path = Path(saved_path)
-    saved_path.mkdir(parents=True, exist_ok=True)
-
-    version = get_runtime_major_version(saved_path)
-    save_path = saved_path / f"{version + 1}"
-    save_path.mkdir(parents=True, exist_ok=True)
-    save_path = save_path / "model.pth"
-    
-    info(f"Model zapisany do: {save_path}")
+    base_dir = Path(path).parent
+    version_dir = get_next_version_dir(base_dir)
+    version_dir.mkdir(parents=True, exist_ok=True)
 
     # Archiwizuj poprzedni model jeśli jest to główny model
-    if saved_path == MODEL_PATH:
+
+
+    save_path = version_dir / "model.pth"
+    if save_path == MODEL_PATH:
         _archive_previous_model(save_path)
 
-    return save_path
+    saved_path = _robust_torch_save(payload, save_path)
+    info(f"Model zapisany do: {saved_path}")
+
+    return saved_path
 
 
 def save_best_model(path, info=None):
@@ -509,18 +527,17 @@ def save_best_model(path, info=None):
         info = print
 
     path = Path(path)
-    path.mkdir(parents=True, exist_ok=True)
 
-    version = get_runtime_major_version(path)
-    minver = get_runtime_minor_version
+    version = get_runtime_major_version(path.parent)
+    minver = get_runtime_minor_version(path.parent, version)
     save_path = path / f"{version+1}.{minver}"
-    save_path.mkdir(parents=True, exist_ok=True)
     save_path = save_path / "model.pth"
 
     if BEST_MODEL_STATE is None:
         info("Brak zapisanego najlepszego modelu - zapisuję aktualny stan.")
         return save_model(save_path, info)
 
+    save_path.parent.mkdir(parents=True, exist_ok=True)
     torch.save(BEST_MODEL_STATE, save_path)
 
     acc = BEST_MODEL_STATE.get("val_char_accuracy", None)

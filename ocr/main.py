@@ -20,7 +20,7 @@ import torch
 import random
 
 from ocr.config import MODEL_PATH, OCR_MODEL_PATH
-from ocr.inference import process_image, run_ensemble_generation, compute_accuracy, test_models, test_cache_models, get_active_chars, load_model, predict_image, predict_letter, predict_segments, predict_word, process_folder
+from ocr.inference import process_image, run_ensemble_generation, compute_accuracy, test_models, test_cache_models, get_active_chars, load_model, predict_letter, process_folder
 from ocr.output import OCRResult, create_output_handler
 from ocr.utils import generate_word_samples, word_to_folder_paths, save_aligned_jsonl, merge_editor_changes, aligned_to_editor_boxes, load_aligned_jsonl, save_aligned_boxes_jsonl, convert_aligned_to_ttdata, save_image_to_today_folder, DictCorrect, list_models, generate_model_ensembles, load_transcription, save_results_csv, save_predictions_to_boxes_jsonl
 from ocr.trainer import evaluate_saved_crnn, train_cnn, multi_train, train_crnn_words, TRAINING_PRESETS, get_preset_names
@@ -171,11 +171,9 @@ def build_parser() -> argparse.ArgumentParser:
             "Bez argumentow = wszystkie presety."
         ),
     )
-    mode.add_argument("--image", "-i", type=str, metavar="PLIK", help="Rozpoznaj pojedyncza litere")
-    mode.add_argument("--word", "-w", type=str, metavar="PLIK", help="Rozpoznaj wyraz")
+    mode.add_argument("--image", "-i", type=str, metavar="PLIK", help="Rozpoznaj pojedynczy obraz")
     mode.add_argument("--word-folders", type=str, metavar="SLOWO", help="Zwraca foldery znakow dla slowa")
     mode.add_argument("--word-folders-image", type=str, metavar="PLIK", help="Rozpoznaj wyraz i zwroc foldery znakow")
-    mode.add_argument("--lines", "-l", type=str, metavar="PLIK", help="Rozpoznaj tekst wieloliniowy")
     mode.add_argument("--multi", "-m", type=str, nargs="+", metavar="PLIK", help="Rozpoznaj wiele zdjec pojedynczych liter")
     mode.add_argument("--annotate", type=str, metavar="PLIK", help="Wycinki: popraw bboxy i zapisz wycinki + adnotacje")
     mode.add_argument("--folder", type=str, metavar="PLIK", help="Rozpoznaj zdjęcia w folderze")
@@ -253,27 +251,6 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--json-pretty", action="store_true", help="Sformatuj JSON")
     parser.add_argument("--json-path", type=str, default=None, metavar="PLIK", help="Zapisz wynik JSON do pliku")
 
-        # Parametry segmentacji watershed
-    parser.add_argument("--ws-fg-ratio", type=float, default=0.45,
-                        help="Próg foreground dla watershed (ułamek max distance, domyślnie: 0.45)")
-    parser.add_argument("--ws-split-aspect", type=float, default=1.15,
-                        help="Kiedy komponent uznać za sklejony: warunek szerokość > ratio * wysokość (domyślnie: 1.15)")
-    parser.add_argument("--ws-min-comp-area", type=int, default=30,
-                        help="Minimalne pole komponentu, aby był kandydatem na literę (domyślnie: 30)")
-    parser.add_argument("--ws-split-min-area", type=int, default=250,
-                        help="Minimalne pole komponentu, od którego próbujemy podział watershed (domyślnie: 250)")
-    parser.add_argument("--ws-min-box-w", type=int, default=3,
-                        help="Minimalna szerokość boxa litery po segmentacji (domyślnie: 3)")
-    parser.add_argument("--ws-min-box-h", type=int, default=5,
-                        help="Minimalna wysokość boxa litery po segmentacji (domyślnie: 5)")
-    parser.add_argument("--ws-min-box-area", type=int, default=20,
-                        help="Minimalne pole boxa litery po segmentacji (domyślnie: 20)")
-    parser.add_argument("--ws-merge-gap", type=int, default=4,
-                        help="Maksymalna przerwa pozioma między fragmentami do scalenia (domyślnie: 4)")
-    parser.add_argument("--ws-merge-height-ratio", type=float, default=1.8,
-                        help="Maksymalny stosunek wysokości fragmentów do scalenia (domyślnie: 1.8)")
-    parser.add_argument("--ws-merge-vert-dist", type=int, default=4,
-                        help="Maksymalna odległość pionowa do scalenia fragmentów (domyślnie: 4)")
     parser.add_argument("--aligned",type=str,)
     return parser
 
@@ -788,64 +765,44 @@ def main(args=None, info=None, buffor=None):
         _require_file(args.image, info)
         info(f"\nRozpoznawanie: {args.image}")
 
-        model = load_model(ocr_path, device, info, 2)
+        model = load_model(model_path, device, info, 2)
 
-        predicted_char, confidence, probs = predict_image(args.image, model, device, args)
+
+        result = process_image(
+                    args.image,
+                    args,
+                    model_path,
+                    device,
+                    info,
+                )
+        predicted_char = result["text"]
+        confidence = result["confidence"]
         active_labels = get_active_chars()
 
 
         output_handler = create_output_handler(args, source_image=args.image)
-        result = OCRResult(predicted_char, confidence, probs, mode="single")
+        result = OCRResult(predicted_char, confidence, mode="single")
         output_handler.output(result, info)
 
         if args.debug:
             visualize_prediction(args.image, predicted_char, confidence, args, info)
 
         if args.json:
-            payload = build_image_result_json(
+            payload = build_word_result_json(
                 image_path=args.image,
-                saved_copy_path=saved_copy_path,
-                predicted_char=predicted_char,
-                confidence=confidence,
-                probs=probs,
+                saved_copy_path=None,
+                word=predicted_char,
                 device=str(device),
             )
             info(dump_json(payload, pretty=args.json_pretty))
             out_path = args.json_path
             if out_path is None:
-                out_path = os.path.splitext(saved_copy_path)[0] + ".json"
+                out_path = os.path.splitext(args.image)[0] + ".json"
             write_json(out_path, payload, pretty=args.json_pretty)
         else:
             print_single_result(predicted_char, confidence, info)
-            print_top5(probs, info)
 
-
-    # ── Wyraz ──
-    elif args.word:
-        _require_file(args.word, info)
-        info(f"\nRozpoznawanie wyrazu: {args.word}")
-        saved_copy_path = save_image_to_today_folder(args.word, info)
-
-        model = load_model(ocr_path, device, info, 2)
-        word, avg_word_confidence, class_confidence = predict_word(args.word, model, device, args)
-        if args.json:
-            payload = build_word_result_json(
-                image_path=args.word,
-                saved_copy_path=saved_copy_path,
-                word=word,
-                device=str(device),
-            )
-            info(dump_json(payload, pretty=args.json_pretty))
-            out_path = args.json_path
-            if out_path is None:
-                out_path = os.path.splitext(saved_copy_path)[0] + ".json"
-            write_json(out_path, payload, pretty=args.json_pretty)
-        else:
-            print_word_result(word, avg_word_confidence, class_confidence, info)
-
-        if args.accuracy:
-            _print_accuracy(word, args.accuracy, info)
-
+    
     elif getattr(args, "word_folders", None):
         if os.path.isfile(args.word_folders):
 
@@ -885,32 +842,6 @@ def main(args=None, info=None, buffor=None):
                 info(f"{char} -> {path}")
             else:
                 info(f"{char} -> BRAK")
-
-    # ── Tekst wieloliniowy ──
-    elif args.lines:
-        _require_file(args.lines, info)
-        info(f"\nRozpoznawanie tekstu: {args.lines}")
-
-        saved_copy_path = save_image_to_today_folder(args.lines, info)
-        model = load_model(ocr_path, device, info, 2)
-        text, words_with_confidence, class_confidence = predict_segments(args.lines, model, device, args)
-
-        if args.json:
-            payload = build_lines_result_json(
-                image_path=args.lines,
-                saved_copy_path=saved_copy_path,
-                text=text,
-                device=str(device),
-            )
-            info(dump_json(payload, pretty=args.json_pretty))
-            out_path = args.json_path or (os.path.splitext(saved_copy_path)[0] + ".json")
-            write_json(out_path, payload, pretty=args.json_pretty)
-        else:
-            print_text_result(text, words_with_confidence, class_confidence, info)
-
-        if args.accuracy:
-            _print_accuracy(text, args.accuracy, info)
-
 
 
     # ── Wiele zdjęć ──

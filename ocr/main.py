@@ -17,12 +17,13 @@ import os
 import sys
 import cv2
 import torch
+import random
 
 from ocr.config import MODEL_PATH, OCR_MODEL_PATH
-from ocr.inference import run_ensemble_generation, compute_accuracy, test_models, test_cache_models, get_active_chars, load_model, predict_image, predict_letter, predict_segments, predict_word, process_folder
+from ocr.inference import process_image, run_ensemble_generation, compute_accuracy, test_models, test_cache_models, get_active_chars, load_model, predict_letter, process_folder
 from ocr.output import OCRResult, create_output_handler
-from ocr.utils import save_aligned_jsonl, merge_editor_changes, aligned_to_editor_boxes, load_aligned_jsonl, save_aligned_boxes_jsonl, convert_aligned_to_ttdata, save_image_to_today_folder, DictCorrect, list_models, generate_model_ensembles, load_transcription, save_results_csv
-from ocr.trainer import train_model, train_crnn, train_cnn, infinite_train, multi_train, TRAINING_PRESETS, get_preset_names
+from ocr.utils import generate_word_samples, word_to_folder_paths, save_aligned_jsonl, merge_editor_changes, aligned_to_editor_boxes, load_aligned_jsonl, save_aligned_boxes_jsonl, convert_aligned_to_ttdata, save_image_to_today_folder, DictCorrect, list_models, generate_model_ensembles, load_transcription, save_results_csv, save_predictions_to_boxes_jsonl
+from ocr.trainer import evaluate_saved_crnn, train_cnn, multi_train, train_crnn_words, TRAINING_PRESETS, get_preset_names
 from ocr.json_output import (
     build_image_result_json,
     build_word_result_json,
@@ -45,8 +46,31 @@ from ocr.bbox_annotator import edit_boxes_interactive
 #--State
 
 
-
 # ── Pomocniki ─────────────────────────────────────────────────────────────────
+
+                
+from difflib import SequenceMatcher
+
+
+def levenshtein_distance(s1, s2):
+    if len(s1) < len(s2):
+            s1, s2 = s2, s1
+
+    previous = list(range(len(s2) + 1))
+
+    for i, c1 in enumerate(s1, start=1):
+        current = [i]
+
+        for j, c2 in enumerate(s2, start=1):
+            insertions = previous[j] + 1
+            deletions = current[j - 1] + 1
+            substitutions = previous[j - 1] + (c1 != c2)
+
+            current.append(min(insertions, deletions, substitutions))
+
+        previous = current
+
+    return previous[-1]
 
 def _print_accuracy(predicted_text: str, reference_path: str, info=None) -> None:
     if info is None:
@@ -62,7 +86,6 @@ def _print_accuracy(predicted_text: str, reference_path: str, info=None) -> None
     info(f"  Predykcja:  {predicted_text.strip()[:80]}")
     info(f"  Referencja: {reference.strip()[:80]}")
     info("=" * 60)
-
 
 # -- Funkcje pomocnicze dla wyświetlania rozmieszczenia tekstu ------------------
 
@@ -134,10 +157,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     mode = parser.add_mutually_exclusive_group()
-    mode.add_argument("--train", "-t", action="store_true", help="Trenuj model (okreslona liczba epok)")
-    mode.add_argument("--train-crnn", action="store_true", dest="train_crnn", help="Trening CRNN na danych ttData (CTC loss)")
     mode.add_argument("--train-cnn", action="store_true", dest="train_cnn", help="Trening CNN na danych phsf (klasyfikacja znakow)")
-    mode.add_argument("--infinite", action="store_true", help="Nieskonczony trening do przerwania (Ctrl+C)")
+    mode.add_argument("--train-words", action="store_true", dest="train_words", help="Trening CRNN na wyrazach z phsf/words + phsf/gen_words (CTC loss)")
+    mode.add_argument("--train", "-t", action="store_true", dest="train", help="Trening CRNN TYLKO na wyrazach z phsf/words (CTC loss)")
     mode.add_argument(
         "--multi-train",
         nargs="*",
@@ -149,15 +171,22 @@ def build_parser() -> argparse.ArgumentParser:
             "Bez argumentow = wszystkie presety."
         ),
     )
-    mode.add_argument("--image", "-i", type=str, metavar="PLIK", help="Rozpoznaj pojedyncza litere")
-    mode.add_argument("--word", "-w", type=str, metavar="PLIK", help="Rozpoznaj wyraz (jedna linia)")
-    mode.add_argument("--lines", "-l", type=str, metavar="PLIK", help="Rozpoznaj tekst wieloliniowy")
+    mode.add_argument("--image", "-i", type=str, metavar="PLIK", help="Rozpoznaj pojedynczy obraz")
+    mode.add_argument("--word-folders", type=str, metavar="SLOWO", help="Zwraca foldery znakow dla slowa")
+    mode.add_argument("--word-folders-image", type=str, metavar="PLIK", help="Rozpoznaj wyraz i zwroc foldery znakow")
     mode.add_argument("--multi", "-m", type=str, nargs="+", metavar="PLIK", help="Rozpoznaj wiele zdjec pojedynczych liter")
     mode.add_argument("--annotate", type=str, metavar="PLIK", help="Wycinki: popraw bboxy i zapisz wycinki + adnotacje")
     mode.add_argument("--folder", type=str, metavar="PLIK", help="Rozpoznaj zdjęcia w folderze")
     mode.add_argument("--page", type=str, metavar="PLIK", help="Separacja zdjęcia na wyrazy oraz ich rozpoznanie")
     mode.add_argument("--crnn", type=str, metavar="PLIK", help="Rozpoznawanie CRNN (tekst z obrazu)")
     mode.add_argument("--ensemble", "-n", type=str, metavar="PLIK", help="Sprawdź kombinacle modeli")
+    mode.add_argument("--test", type=str, metavar="PLIK", help="Sprawdź jakość wskazanego modelu")
+    mode.add_argument(
+        "--bmark",
+        type=str,
+        metavar="JSONL",
+        help="Benchmark OCR na pliku JSONL"
+    )
     parser.add_argument("--trans", "-s", type=str, metavar="PLIK", help="Plik zawierający transkrypcje, do użycia z -n")
     # Cache
     parser.add_argument("--cache_path", type=str)
@@ -222,27 +251,6 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--json-pretty", action="store_true", help="Sformatuj JSON")
     parser.add_argument("--json-path", type=str, default=None, metavar="PLIK", help="Zapisz wynik JSON do pliku")
 
-        # Parametry segmentacji watershed
-    parser.add_argument("--ws-fg-ratio", type=float, default=0.45,
-                        help="Próg foreground dla watershed (ułamek max distance, domyślnie: 0.45)")
-    parser.add_argument("--ws-split-aspect", type=float, default=1.15,
-                        help="Kiedy komponent uznać za sklejony: warunek szerokość > ratio * wysokość (domyślnie: 1.15)")
-    parser.add_argument("--ws-min-comp-area", type=int, default=30,
-                        help="Minimalne pole komponentu, aby był kandydatem na literę (domyślnie: 30)")
-    parser.add_argument("--ws-split-min-area", type=int, default=250,
-                        help="Minimalne pole komponentu, od którego próbujemy podział watershed (domyślnie: 250)")
-    parser.add_argument("--ws-min-box-w", type=int, default=3,
-                        help="Minimalna szerokość boxa litery po segmentacji (domyślnie: 3)")
-    parser.add_argument("--ws-min-box-h", type=int, default=5,
-                        help="Minimalna wysokość boxa litery po segmentacji (domyślnie: 5)")
-    parser.add_argument("--ws-min-box-area", type=int, default=20,
-                        help="Minimalne pole boxa litery po segmentacji (domyślnie: 20)")
-    parser.add_argument("--ws-merge-gap", type=int, default=4,
-                        help="Maksymalna przerwa pozioma między fragmentami do scalenia (domyślnie: 4)")
-    parser.add_argument("--ws-merge-height-ratio", type=float, default=1.8,
-                        help="Maksymalny stosunek wysokości fragmentów do scalenia (domyślnie: 1.8)")
-    parser.add_argument("--ws-merge-vert-dist", type=int, default=4,
-                        help="Maksymalna odległość pionowa do scalenia fragmentów (domyślnie: 4)")
     parser.add_argument("--aligned",type=str,)
     return parser
 
@@ -251,6 +259,10 @@ def build_args(state):
     args = []
     if state["mode"] == "train":
         args.append("--train")
+        args += ["--epochs", str(state["epochs"])]
+        args += ["--batch-size", str(state["batch_size"])]
+    if state["mode"] == "train-words":
+        args.append("--train-words")
         args += ["--epochs", str(state["epochs"])]
         args += ["--batch-size", str(state["batch_size"])]
     elif state["mode"] == "image":
@@ -313,14 +325,14 @@ def main(args=None, info=None, buffor=None):
     parser = build_parser()
     
     # ── Trening ──
-    if args.train:
-        train_model(epochs=args.epochs, batch_size=args.batch_size, model_path=args.resume, info=info, args=args)
-
-    elif args.train_crnn:
-        train_crnn(epochs=args.epochs, batch_size=args.batch_size, model_path=args.resume, info=info, args=args)
-
-    elif args.train_cnn:
+    if args.train_cnn:
         train_cnn(epochs=args.epochs, batch_size=args.batch_size, model_path=args.resume, info=info)
+
+    elif args.train_words:
+        train_crnn_words(epochs=args.epochs, batch_size=args.batch_size, model_path=args.resume, info=info, args=args, words_only=False)
+
+    elif args.train:
+        train_crnn_words(epochs=args.epochs, batch_size=args.batch_size, model_path=args.resume, info=info, args=args, words_only=True)
 
     elif args.multi_train is not None:
         preset_names = args.multi_train or None  # [] -> None oznacza "wszystkie"
@@ -331,16 +343,11 @@ def main(args=None, info=None, buffor=None):
             info=info,
         )
 
-    elif args.infinite:
-        info("\nUruchamianie nieskonczonego treningu...")
-        info("Nacisnij Ctrl+C aby wstrzymac i wyswietlic menu opcji.\n")
-        infinite_train(
-            batch_size=args.batch_size,
-            model_path=args.resume,
-            checkpoint_interval=args.checkpoint_interval,
-            info=info,
-        )
+    elif args.test:
+        accuracy = evaluate_saved_crnn(args.test, args)
+        print(accuracy)
 
+        
     elif args.annotate:
         _require_file(args.annotate, info)
         info(f"\nUruchamianie adnotacji : {args.annotate}")
@@ -427,6 +434,8 @@ def main(args=None, info=None, buffor=None):
                 info,
             )
 
+            save_predictions_to_boxes_jsonl(output_dir, results, info)
+
             table_rows = []
             layout_words = []
 
@@ -473,18 +482,8 @@ def main(args=None, info=None, buffor=None):
             info("-" * 60)
 
             for r in table_rows:
-                conf = (
-                    r["confidence"]
-                    if r["confidence"] is not None
-                    else 50.0
-                )
-
                 autocorTXT = DictCorrect(
                     r["text"],
-                    conf,
-                    letter_vectors=r.get(
-                        "letter_vectors"
-                    ),
                 )
 
                 if r["confidence"] is None:
@@ -623,6 +622,7 @@ def main(args=None, info=None, buffor=None):
             
     elif args.folder:
         results = process_folder(args.folder, args, model_path, device, info)
+        save_predictions_to_boxes_jsonl(args.folder, results, info)
         rows = []
         for r in results:
             if "error" in r:
@@ -649,8 +649,7 @@ def main(args=None, info=None, buffor=None):
         info("-" * 45)
 
         for r in rows:
-            conf = r['confidence'] if r['confidence'] is not None else 50.0
-            autocorTXT = DictCorrect(r['text'], conf, letter_vectors=r.get('letter_vectors'))
+            autocorTXT = DictCorrect(r['text'])
             if r['confidence'] is None:
                 info(f"{str(r['key']) if r['key'] else '-':<12} {r['text']:<20} {'-':<10} {autocorTXT:<20}")
             else:
@@ -756,7 +755,7 @@ def main(args=None, info=None, buffor=None):
                 info(f"{r['key']:<12} {r['text']:<20} {r['confidence']:.2f}%")
         info("----Po poprawie----")
         for r in rows:
-            autocorTXT = DictCorrect(r['text'], r['confidence'] if r['confidence'] is not None else 100.0)
+            autocorTXT = DictCorrect(r['text'])
             info(f"{str(r['key']) if r['key'] else '-':<12} {autocorTXT:<20} {'-':<10}")
 
 
@@ -766,125 +765,231 @@ def main(args=None, info=None, buffor=None):
         _require_file(args.image, info)
         info(f"\nRozpoznawanie: {args.image}")
 
-        model = load_model(ocr_path, device, info, 2)
+        model = load_model(model_path, device, info, 2)
 
-        predicted_char, confidence, probs = predict_image(args.image, model, device, args)
+
+        result = process_image(
+                    args.image,
+                    args,
+                    model_path,
+                    device,
+                    info,
+                )
+        predicted_char = result["text"]
+        confidence = result["confidence"]
         active_labels = get_active_chars()
 
 
         output_handler = create_output_handler(args, source_image=args.image)
-        result = OCRResult(predicted_char, confidence, probs, mode="single")
+        result = OCRResult(predicted_char, confidence, mode="single")
         output_handler.output(result, info)
 
         if args.debug:
             visualize_prediction(args.image, predicted_char, confidence, args, info)
 
         if args.json:
-            payload = build_image_result_json(
+            payload = build_word_result_json(
                 image_path=args.image,
-                saved_copy_path=saved_copy_path,
-                predicted_char=predicted_char,
-                confidence=confidence,
-                probs=probs,
+                saved_copy_path=None,
+                word=predicted_char,
                 device=str(device),
             )
             info(dump_json(payload, pretty=args.json_pretty))
             out_path = args.json_path
             if out_path is None:
-                out_path = os.path.splitext(saved_copy_path)[0] + ".json"
+                out_path = os.path.splitext(args.image)[0] + ".json"
             write_json(out_path, payload, pretty=args.json_pretty)
         else:
             print_single_result(predicted_char, confidence, info)
-            print_top5(probs, info)
 
+    
+    elif getattr(args, "word_folders", None):
+        if os.path.isfile(args.word_folders):
 
-    # ── Wyraz ──
-    elif args.word:
-        _require_file(args.word, info)
-        info(f"\nRozpoznawanie wyrazu: {args.word}")
-        saved_copy_path = save_image_to_today_folder(args.word, info)
+            with open(args.word_folders, encoding="utf-8") as f:
+                for line in f:
+                    for word in line.split():
 
-        model = load_model(ocr_path, device, info, 2)
-        word, avg_word_confidence, class_confidence = predict_word(args.word, model, device, args)
-        if args.json:
-            payload = build_word_result_json(
-                image_path=args.word,
-                saved_copy_path=saved_copy_path,
-                word=word,
-                device=str(device),
-            )
-            info(dump_json(payload, pretty=args.json_pretty))
-            out_path = args.json_path
-            if out_path is None:
-                out_path = os.path.splitext(saved_copy_path)[0] + ".json"
-            write_json(out_path, payload, pretty=args.json_pretty)
+                        pairs = word_to_folder_paths(word, info=info)
+                        generate_word_samples(word, pairs)
+
         else:
-            print_word_result(word, avg_word_confidence, class_confidence, info)
 
-        if args.accuracy:
-            _print_accuracy(word, args.accuracy, info)
+            pairs = word_to_folder_paths(args.word_folders, info=info)
+            print(pairs)
+            generate_word_samples(args.word_folders, pairs)
 
-    # ── Tekst wieloliniowy ──
-    elif args.lines:
-        _require_file(args.lines, info)
-        info(f"\nRozpoznawanie tekstu: {args.lines}")
-
-        saved_copy_path = save_image_to_today_folder(args.lines, info)
+            for syl, path in pairs:
+                if path:
+                    info(f"{syl} -> {path}")
+                else:
+                    info(f"{syl} -> BRAK")
+    elif getattr(args, "word_folders_image", None):
+        _require_file(args.word_folders_image, info)
+        info(f"\nRozpoznawanie wyrazu: {args.word_folders_image}")
         model = load_model(ocr_path, device, info, 2)
-        text, words_with_confidence, class_confidence = predict_segments(args.lines, model, device, args)
-
-        if args.json:
-            payload = build_lines_result_json(
-                image_path=args.lines,
-                saved_copy_path=saved_copy_path,
-                text=text,
-                device=str(device),
-            )
-            info(dump_json(payload, pretty=args.json_pretty))
-            out_path = args.json_path or (os.path.splitext(saved_copy_path)[0] + ".json")
-            write_json(out_path, payload, pretty=args.json_pretty)
-        else:
-            print_text_result(text, words_with_confidence, class_confidence, info)
-
-        if args.accuracy:
-            _print_accuracy(text, args.accuracy, info)
-
+        word, avg_word_confidence, class_confidence = predict_word(
+            args.word_folders_image,
+            model,
+            device,
+            args,
+        )
+        info(f"Wynik: {word}")
+        info("Foldery znakow:")
+        pairs = word_to_folder_paths(word)
+        for char, path in pairs:
+            if path:
+                info(f"{char} -> {path}")
+            else:
+                info(f"{char} -> BRAK")
 
 
     # ── Wiele zdjęć ──
     elif args.multi:
-        model = load_model(model_path, device, info)
         info(f"\nRozpoznawanie {len(args.multi)} pliku(-ow):")
 
         results = []
+
         for img_path in args.multi:
             if not os.path.exists(img_path):
                 info(f"  Pominieto (nie znaleziono): {img_path}")
                 continue
 
             save_image_to_today_folder(img_path, info)
-            result = predict_image(img_path, model, device, args)
+
+            result = process_image(
+                img_path,
+                args,
+                model_path,
+                device,
+                info,
+            )
+
             results.append(
                 {
                     "file": img_path,
                     "char": result["text"],
                     "confidence": result["confidence"],
-                    "probs": result["probs"],
+                    "probs": result.get("probs"),
                 }
             )
 
-            if not args.json:
-                print_multi_result(img_path, result["text"], result["confidence"], info)
 
         if args.json:
-            payload = build_multi_result_json(results=results, device=str(device))
+            payload = build_multi_result_json(
+                results=results,
+                device=str(device),
+            )
+
             info(dump_json(payload, pretty=args.json_pretty))
+
             out_path = args.json_path or "results.json"
             write_json(out_path, payload, pretty=args.json_pretty)
+
         else:
             for result in results:
-                info(f"  {result['file']}  ->  '{result['char']}' ({result['confidence']:.1f}%)")
+                info(
+                    f"  {result['file']}  ->  "
+                    f"'{result['char']}' "
+                    f"({result['confidence']:.1f}%)"
+                )
 
+    elif args.bmark:
+        total_words = 0
+        correct_words = 0
+
+        total_similarity = 0.0
+        total_cer = 0.0
+        total_char_accuracy = 0.0
+    
+        with open(args.bmark, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+
+                if not line:
+                    continue
+
+                record = json.loads(line)
+
+                gt_text = record["text"].strip()
+                crop_path = record["crop_path"]
+
+                result = process_image(
+                    crop_path,
+                    args,
+                    model_path,
+                    device,
+                    info,
+                )
+
+                pred_text = result["text"]
+
+                gt = gt_text.lower()
+                pred = pred_text.lower()
+
+                similarity = SequenceMatcher(
+                    None,
+                    gt,
+                    pred
+                ).ratio()
+
+                distance = levenshtein_distance(gt, pred)
+
+                cer = (
+                    distance / len(gt)
+                    if len(gt) > 0
+                    else 0.0
+                )
+
+                char_accuracy = max(0.0, 1.0 - cer)
+
+                is_correct = gt == pred
+
+                total_words += 1
+                total_similarity += similarity
+                total_cer += cer
+                total_char_accuracy += char_accuracy
+
+                if is_correct:
+                    correct_words += 1
+
+                print(
+                    f"[{total_words}] "
+                    f"GT='{gt_text}' "
+                    f"PRED='{pred_text}' "
+                    f"SIM={similarity:.4f} "
+                    f"CER={cer:.4f} "
+                    f"CHAR_ACC={char_accuracy:.4f} "
+                    f"CORRECT={is_correct}"
+                )
+
+        avg_similarity = (
+            total_similarity / total_words
+            if total_words else 0.0
+        )
+
+        avg_cer = (
+            total_cer / total_words
+            if total_words else 0.0
+        )
+
+        avg_char_accuracy = (
+            total_char_accuracy / total_words
+            if total_words else 0.0
+        )
+
+        word_accuracy = (
+            correct_words / total_words * 100
+            if total_words else 0.0
+        )
+
+        print("\n=== PODSUMOWANIE ===")
+        print(f"Liczba słów: {total_words}")
+        print(f"Średni Similarity Score: {avg_similarity:.4f}")
+        print(f"Średni CER: {avg_cer:.4f}")
+        print(f"Średni Character Accuracy: {avg_char_accuracy:.4f}")
+        print(f"Poprawne słowa: {correct_words}/{total_words}")
+        print(f"Word Accuracy: {word_accuracy:.2f}%")
     else:
         parser.print_help()
 

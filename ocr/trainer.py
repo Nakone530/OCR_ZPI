@@ -25,14 +25,15 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torchvision import datasets
+from pathlib import Path
 
 from .config import (
-    DATA_DIR, MODEL_PATH, CHECKPOINT_PATH,
+    DATA_DIR, MODEL_DIR, MODEL_PATH, CHECKPOINT_PATH,
     MODEL_ARCHIVE_DIR, MODEL_ARCHIVE_KEEP_COUNT, IMAGES_DIR, CHARS, char2idx, idx2char, DATA_ROOT_DIR,
-    PHSF_DATA_DIR,
+    PHSF_DATA_DIR, FOLDER8_DIR,
 )
 from .model import MainModel, CNNClassifier
-from .utils import get_train_transform, get_cnn_train_transform, load_all_datasets, load_phsf_znaki
+from .utils import dump_tensor_stats, get_inf_transform, get_train_transform, get_cnn_train_transform, load_all_datasets, load_phsf_znaki, load_folder8, load_phsf_words
 from .model_archive import ModelArchiver
 from .OCRDataset import OCRDataset
 from . import info
@@ -273,6 +274,26 @@ def get_runtime_minor_version(folder, major):
 
     return _GLOBAL_MINOR_VERSION
 
+def get_next_version_dir(base_dir):
+    """
+    Szuka katalogów v1, v2, v3...
+    i zwraca ścieżkę do kolejnego.
+    """
+    base_dir = Path(base_dir)
+    base_dir.mkdir(parents=True, exist_ok=True)
+
+    max_version = 0
+
+    for item in base_dir.iterdir():
+        if not item.is_dir():
+            continue
+
+        match = re.fullmatch(r"v(\d+)", item.name)
+        if match:
+            max_version = max(max_version, int(match.group(1)))
+
+    return base_dir / f"v{max_version + 1}"
+
 checkpoint_path = "checkpoint.pth"
 current_state = {}
 
@@ -351,18 +372,6 @@ def handler(signum, frame, info=None):
             info("Nieprawidłowy wybór!")
     sys.exit(0)
 
-
-def infinite_handler(signum, frame, info=None):
-    """Handler dla nieskończonego treningu - ustawia flagę pauzy."""
-    if info is None:
-        info = print
-    
-    global TRAINING_PAUSED
-    TRAINING_PAUSED = True
-    info("\n\n" + "="*60)
-    info("  PRZERWANIE TRENINGU (Ctrl+C)")
-    info("  Trening zostanie wstrzymany po aktualnym kroku...")
-    info("="*60 + "\n")
 
 
 # Rejestracja obsługi sygnału SIGINT (Ctrl+C)
@@ -484,7 +493,7 @@ def save_model(path, info=None):
 
     if path == MODEL_PATH:
         _make_backup(path)
-
+    
     payload = {
         "epoch": GLOBAL_EPOCH,
         "model_state_dict": _state_dict_to_cpu(GLOBAL_MODEL.state_dict()),
@@ -494,36 +503,53 @@ def save_model(path, info=None):
         "val_char_accuracy": GLOBAL_VAL_ACCURACY,
     }
 
-    saved_path = _robust_torch_save(payload, path)
-
-    info(f"Model zapisany do: {saved_path}")
+    base_dir = Path(path).parent
+    version_dir = get_next_version_dir(base_dir)
+    version_dir.mkdir(parents=True, exist_ok=True)
 
     # Archiwizuj poprzedni model jeśli jest to główny model
-    if path == MODEL_PATH:
-        _archive_previous_model(saved_path)
+
+
+    save_path = version_dir / "model.pth"
+    if save_path == MODEL_PATH:
+        _archive_previous_model(save_path)
+
+    saved_path = _robust_torch_save(payload, save_path)
+    info(f"Model zapisany do: {saved_path}")
 
     return saved_path
 
 
 def save_best_model(path, info=None):
-    """Zapisuje najlepszy model (jeśli został zachowany) do pliku."""
     global BEST_MODEL_STATE, GLOBAL_BEST_ACC
 
     if info is None:
         info = print
 
-    os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
+    path = Path(path)
+
+    version = get_runtime_major_version(path.parent)
+    minver = get_runtime_minor_version(path.parent, version)
+    save_path = path / f"{version+1}.{minver}"
+    save_path = save_path / "model.pth"
 
     if BEST_MODEL_STATE is None:
         info("Brak zapisanego najlepszego modelu - zapisuję aktualny stan.")
-        return save_model(path, info)
+        return save_model(save_path, info)
 
-    _make_backup(path)
-    torch.save(BEST_MODEL_STATE, path)
-    acc = BEST_MODEL_STATE.get('val_char_accuracy', None)
+    save_path.parent.mkdir(parents=True, exist_ok=True)
+    torch.save(BEST_MODEL_STATE, save_path)
+
+    acc = BEST_MODEL_STATE.get("val_char_accuracy", None)
     acc_str = f", acc: {acc:.2f}%" if acc is not None else ""
-    info(f"Najlepszy model (loss: {BEST_MODEL_STATE.get('best_loss', 0):.4f}{acc_str}) zapisany do: {path}")
-    return path
+
+    info(
+        f"Najlepszy model "
+        f"(loss: {BEST_MODEL_STATE.get('best_loss', 0):.4f}{acc_str}) "
+        f"zapisany do: {save_path}"
+    )
+
+    return save_path
 
 
 def capture_best_model(info=None, path=None):
@@ -555,7 +581,7 @@ def init_or_load_model(num_classes, model_path=None, info=None):
         info = print
 
     GLOBAL_DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
+    
     GLOBAL_MODEL = MainModel(num_classes=num_classes).to(GLOBAL_DEVICE)
     GLOBAL_CRITERION = nn.CTCLoss(zero_infinity=True)
     GLOBAL_OPTIMIZER = torch.optim.Adam(GLOBAL_MODEL.parameters(), lr=0.0001)
@@ -568,213 +594,15 @@ def init_or_load_model(num_classes, model_path=None, info=None):
             GLOBAL_MODEL.load_state_dict(checkpoint["model_state_dict"])
             GLOBAL_OPTIMIZER.load_state_dict(checkpoint["optimizer_state_dict"])
             GLOBAL_EPOCH = checkpoint.get("epoch", 0)
-            GLOBAL_BEST_ACC = checkpoint.get("best_acc", 0.0)
+            GLOBAL_BEST_ACC = checkpoint.get(
+                "best_loss",
+                checkpoint.get("best_acc", float("inf"))
+            )
             GLOBAL_CLASS_NAMES = checkpoint.get("class_names", GLOBAL_CLASS_NAMES)
             GLOBAL_VAL_ACCURACY = checkpoint.get("val_char_accuracy", 0.0)
         else:
             GLOBAL_MODEL.load_state_dict(checkpoint)
 
-
-def train_model(epochs=10, batch_size=32, model_path=None, info=None, args=None,
-                config: Optional['TrainingConfig'] = None, save_path: Optional[str] = None,
-                preloaded_data: Optional[list] = None):
-    """
-    Trenuje model OCR.
-
-    Args:
-        config: TrainingConfig z parametrami transformacji (denoise_prob, max_padding).
-                Gdy None – używane są wartości domyślne.
-        save_path: ścieżka zapisu wytrenowanego modelu.
-                   Gdy None – używana jest stała MODEL_PATH.
-    """
-    global GLOBAL_MODEL, GLOBAL_OPTIMIZER, GLOBAL_CRITERION
-    global GLOBAL_DEVICE, GLOBAL_EPOCH, GLOBAL_BEST_ACC, GLOBAL_CLASS_NAMES, GLOBAL_VAL_ACCURACY
-
-    if info is None:
-        info = print
-
-    effective_save_path = save_path or MODEL_PATH
-
-    # Parametry transformacji z konfiguracji lub wartości domyślne
-    denoise_prob = config.denoise_prob if config is not None else 0.3
-    max_padding = config.max_padding if config is not None else 20
-    checkpoint_ratios = [0.5, 0.6, 0.7, 0.8, 0.9]
-    checkpoint_saved = {r: False for r in checkpoint_ratios}
-    # Odczyt dokładności istniejącego modelu i kopia zapasowa
-    prev_accuracy = get_stored_accuracy(effective_save_path)
-    backup_path = effective_save_path + ".backup"
-    _make_backup_as(effective_save_path, backup_path)
-    if prev_accuracy >= 0:
-        info(f"Poprzednia dokładność modelu: {prev_accuracy:.2f}%")
-    else:
-        info("Brak poprzedniego modelu – pierwszy trening.")
-
-    if preloaded_data is not None:
-        info(f"3. Używam przekazanego datasetu ({len(preloaded_data)} próbek).")
-        data = preloaded_data
-    else:
-        info("3. Ładowanie datasetu OCR...")
-        data = load_phsf_znaki(PHSF_DATA_DIR)
-        info(f"   ttData: {len(data)} próbek")
-
-##        if os.path.isdir(PHSF_DATA_DIR):
-##            phsf_data = load_phsf_znaki(PHSF_DATA_DIR)
-##            info(f"   PHSF znaki: {len(phsf_data)} próbek")
-##            data = data + phsf_data
-##        else:
-##            info(f"   PHSF pominięty (brak katalogu: {PHSF_DATA_DIR})")
-
-    dataset = OCRDataset(
-        json_data=data,
-        images_dir=None,
-        transform=get_train_transform(args, denoise_prob=denoise_prob, max_padding=max_padding)
-    )
-
-    info(f"4. Dataset załadowany: {len(dataset)} obrazów łącznie")
-
-    train_size = int(0.8 * len(dataset))
-    val_size = len(dataset) - train_size
-    info(f"5. Splitting: {train_size} trening, {val_size} walidacja")
-    train_dataset, val_dataset = torch.utils.data.random_split(dataset, [train_size, val_size])
-
-    info("6. Tworzenie DataLoader...")
-    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True, collate_fn=collate_fn)
-    val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=batch_size, shuffle=False, collate_fn=collate_fn)
-
-    info("7. Inicjalizacja lub ładowanie modelu...")
-    # init albo load
-    if GLOBAL_MODEL is None:
-        init_or_load_model(len(CHARS) + 1, model_path, info)
-    
-    info("8. Rozpoczynanie treningu...")
-    total_steps = len(train_loader)
-    training_start = time.time()
-    target_epoch = GLOBAL_EPOCH + epochs
-
-    info("\n" + "=" * 60)
-    info("  TRENING OCR")
-    info("=" * 60)
-    info(f"  Urządzenie: {GLOBAL_DEVICE}")
-    info(f"  Batch size: {batch_size}")
-    info(f"  Epoki do wykonania: {epochs}")
-    info(f"  Zakres epok: {GLOBAL_EPOCH + 1} -> {target_epoch}")
-    info("=" * 60 + "\n")
-
-    for epoch in range(GLOBAL_EPOCH, target_epoch):
-        epoch_start = time.time()
-        GLOBAL_MODEL.train()
-        running_loss = 0.0
-
-        for step, (images, targets, target_lengths) in enumerate(train_loader, start=1):
-            images = images.to(GLOBAL_DEVICE)
-            targets = targets.to(GLOBAL_DEVICE)
-            target_lengths = target_lengths.to(GLOBAL_DEVICE)
-
-            GLOBAL_OPTIMIZER.zero_grad(set_to_none=True)
-
-            outputs = GLOBAL_MODEL(images)  # (T, B, C)
-            log_probs = outputs.log_softmax(2)
-
-            input_lengths = torch.full(
-                size=(images.size(0),),
-                fill_value=outputs.size(0),
-                dtype=torch.long,
-                device=GLOBAL_DEVICE,
-            )
-
-            loss = GLOBAL_CRITERION(
-                log_probs,
-                targets,
-                input_lengths,
-                target_lengths
-            )
-
-            loss.backward()
-            GLOBAL_OPTIMIZER.step()
-
-            running_loss += loss.item()
-
-            if step % 50 == 0:
-                info(f"Epoch {epoch+1} Step {step} Loss: {loss.item():.4f}")
-
-        # WALIDACJA
-        GLOBAL_MODEL.eval()
-        val_loss = 0.0
-
-        with torch.inference_mode():
-            for images, targets, target_lengths in val_loader:
-                images = images.to(GLOBAL_DEVICE)
-                targets = targets.to(GLOBAL_DEVICE)
-                target_lengths = target_lengths.to(GLOBAL_DEVICE)
-
-                outputs = GLOBAL_MODEL(images)
-                log_probs = outputs.log_softmax(2)
-
-                input_lengths = torch.full(
-                    size=(images.size(0),),
-                    fill_value=outputs.size(0),
-                    dtype=torch.long,
-                    device=GLOBAL_DEVICE,
-                )
-
-                loss = GLOBAL_CRITERION(
-                    log_probs,
-                    targets,
-                    input_lengths,
-                    target_lengths
-                )
-
-                val_loss += loss.item()
-
-        val_loss /= len(val_loader)
-
-        epoch_time = time.time() - epoch_start
-        info(f"Epoch {epoch+1} | train_loss={running_loss:.4f} | val_loss={val_loss:.4f} | time={epoch_time:.1f}s")
-        progress = (epoch + 1) / target_epoch
-
-        for ratio in checkpoint_ratios:
-            if not checkpoint_saved[ratio] and progress >= ratio:
-                info(f"[CHECKPOINT] Saving model at {int(ratio*100)}% (epoch {epoch+1})")
-                save_checkpoint_model(GLOBAL_MODEL, epoch + 1, ratio)
-                checkpoint_saved[ratio] = True
-        if torch.isnan(loss):
-            print("NaN detected!")
-            print("targets:", target_lengths)
-            print("input:", input_lengths)
-            print("outputs shape:", outputs.shape)
-            continue
-        GLOBAL_EPOCH = epoch + 1
-
-    total_training_time = time.time() - training_start
-
-    # Oblicz dokładność nowego modelu i porównaj z poprzednim
-    info("\nObliczanie dokładności znakowej na zbiorze walidacyjnym...")
-    new_accuracy = _compute_val_char_accuracy(GLOBAL_MODEL, val_loader, GLOBAL_DEVICE)
-    GLOBAL_VAL_ACCURACY = new_accuracy
-    info(f"Nowa dokładność: {new_accuracy:.2f}%")
-
-    if prev_accuracy < 0:
-        info("Pierwszy model – zapisuję jako punkt odniesienia.")
-        capture_best_model(info, path=effective_save_path)
-    elif new_accuracy >= prev_accuracy:
-        info(f"Poprawa: {prev_accuracy:.2f}% -> {new_accuracy:.2f}% – zapisuję nowy model.")
-        capture_best_model(info, path=effective_save_path)
-    else:
-        info(f"Brak poprawy: {prev_accuracy:.2f}% -> {new_accuracy:.2f}% – przywracam poprzedni model.")
-        if os.path.exists(backup_path):
-            shutil.copy2(backup_path, effective_save_path)
-
-    # Usuń plik backup
-    if os.path.exists(backup_path):
-        os.remove(backup_path)
-
-    info("\n" + "=" * 60)
-    info("  PODSUMOWANIE TRENINGU")
-    info("=" * 60)
-    info(f"  Zakończona epoka: {GLOBAL_EPOCH}")
-    info(f"  Dokładność znakowa (val): {GLOBAL_VAL_ACCURACY:.2f}%")
-    info(f"  Całkowity czas treningu: {total_training_time:.1f}s")
-    info("=" * 60)
 
 def save_checkpoint_model(model, epoch, ratio):
     f_models = folder = "models"
@@ -787,168 +615,21 @@ def save_checkpoint_model(model, epoch, ratio):
     os.makedirs(subfolder, exist_ok=True)
     mPath = os.path.join(subfolder, f"model.pth")
     
-    torch.save(model.state_dict(), mPath)
+    payload = {
+        "epoch": epoch,
+        "ratio": ratio,
+        "model_state_dict": _state_dict_to_cpu(model.state_dict()),
+        "best_loss": GLOBAL_BEST_ACC,
+        "val_char_accuracy": GLOBAL_VAL_ACCURACY,
+    }
+
+    torch.save(payload, mPath)
     dPath = os.path.join(subfolder, f"model_v{major}.{int(ratio*10) - 4}_epoch{epoch}.txt")
     with open(dPath, "w", encoding="utf-8") as f:
         f.write(f"epoch: {epoch}\n")
         f.write(f"ratio: {ratio}\n")
         f.write(f"model_version: v{major}.{int(ratio*10) - 4}\n")
         
-def train_crnn(epochs=10, batch_size=32, model_path=None, info=None, args=None,
-               config=None, save_path=None, preloaded_data=None):
-    """
-    Trening modelu CRNN (CNN + LSTM + CTC).
-    Dane: ttData – obrazy słów/sekwencji z etykietami tekstowymi.
-    Strata: CTCLoss.
-    """
-    global GLOBAL_MODEL, GLOBAL_OPTIMIZER, GLOBAL_CRITERION
-    global GLOBAL_DEVICE, GLOBAL_EPOCH, GLOBAL_BEST_ACC, GLOBAL_CLASS_NAMES, GLOBAL_VAL_ACCURACY
-
-    if info is None:
-        info = print
-
-    effective_save_path = save_path or MODEL_PATH
-    denoise_prob = config.denoise_prob if config is not None else 0.3
-    max_padding = config.max_padding if config is not None else 20
-    checkpoint_ratios = [0.5, 0.6, 0.7, 0.8, 0.9]
-    checkpoint_saved = {r: False for r in checkpoint_ratios}
-
-    prev_accuracy = get_stored_accuracy(effective_save_path)
-    backup_path = effective_save_path + ".backup"
-    _make_backup_as(effective_save_path, backup_path)
-    if prev_accuracy >= 0:
-        info(f"Poprzednia dokładność modelu: {prev_accuracy:.2f}%")
-    else:
-        info("Brak poprzedniego modelu – pierwszy trening.")
-
-    if preloaded_data is not None:
-        info(f"3. Używam przekazanego datasetu ({len(preloaded_data)} próbek).")
-        data = preloaded_data
-    else:
-        info("3. Ładowanie datasetu CRNN (ttData)...")
-        data = load_all_datasets(DATA_ROOT_DIR)
-        info(f"   ttData: {len(data)} próbek")
-
-    dataset = OCRDataset(
-        json_data=data,
-        images_dir=None,
-        transform=get_train_transform(args, denoise_prob=denoise_prob, max_padding=max_padding),
-    )
-    info(f"4. Dataset załadowany: {len(dataset)} obrazów łącznie")
-
-    train_size = int(0.8 * len(dataset))
-    val_size = len(dataset) - train_size
-    info(f"5. Splitting: {train_size} trening, {val_size} walidacja")
-    train_dataset, val_dataset = torch.utils.data.random_split(dataset, [train_size, val_size])
-
-    info("6. Tworzenie DataLoader...")
-    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True, collate_fn=collate_fn)
-    val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=batch_size, shuffle=False, collate_fn=collate_fn)
-
-    info("7. Inicjalizacja lub ładowanie modelu CRNN...")
-    if GLOBAL_MODEL is None:
-        init_or_load_model(len(CHARS) + 1, model_path, info)
-
-    info("8. Rozpoczynanie treningu CRNN...")
-    total_steps = len(train_loader)
-    training_start = time.time()
-    target_epoch = GLOBAL_EPOCH + epochs
-
-    info("\n" + "=" * 60)
-    info("  TRENING CRNN (ttData)")
-    info("=" * 60)
-    info(f"  Urządzenie: {GLOBAL_DEVICE}")
-    info(f"  Batch size: {batch_size}")
-    info(f"  Epoki do wykonania: {epochs}")
-    info(f"  Zakres epok: {GLOBAL_EPOCH + 1} -> {target_epoch}")
-    info("=" * 60 + "\n")
-
-    for epoch in range(GLOBAL_EPOCH, target_epoch):
-        epoch_start = time.time()
-        GLOBAL_MODEL.train()
-        running_loss = 0.0
-
-        for step, (images, targets, target_lengths) in enumerate(train_loader, start=1):
-            images = images.to(GLOBAL_DEVICE)
-            targets = targets.to(GLOBAL_DEVICE)
-            target_lengths = target_lengths.to(GLOBAL_DEVICE)
-
-            GLOBAL_OPTIMIZER.zero_grad(set_to_none=True)
-            outputs = GLOBAL_MODEL(images)
-            log_probs = outputs.log_softmax(2)
-            input_lengths = torch.full(
-                size=(images.size(0),),
-                fill_value=outputs.size(0),
-                dtype=torch.long,
-                device=GLOBAL_DEVICE,
-            )
-            loss = GLOBAL_CRITERION(log_probs, targets, input_lengths, target_lengths)
-            loss.backward()
-            GLOBAL_OPTIMIZER.step()
-            running_loss += loss.item()
-
-            if step % 50 == 0:
-                info(f"Epoch {epoch+1} Step {step} Loss: {loss.item():.4f}")
-
-        GLOBAL_MODEL.eval()
-        val_loss = 0.0
-        with torch.inference_mode():
-            for images, targets, target_lengths in val_loader:
-                images = images.to(GLOBAL_DEVICE)
-                targets = targets.to(GLOBAL_DEVICE)
-                target_lengths = target_lengths.to(GLOBAL_DEVICE)
-                outputs = GLOBAL_MODEL(images)
-                log_probs = outputs.log_softmax(2)
-                input_lengths = torch.full(
-                    size=(images.size(0),),
-                    fill_value=outputs.size(0),
-                    dtype=torch.long,
-                    device=GLOBAL_DEVICE,
-                )
-                loss = GLOBAL_CRITERION(log_probs, targets, input_lengths, target_lengths)
-                val_loss += loss.item()
-
-        val_loss /= len(val_loader)
-        epoch_time = time.time() - epoch_start
-        info(f"Epoch {epoch+1} | train_loss={running_loss:.4f} | val_loss={val_loss:.4f} | time={epoch_time:.1f}s")
-
-        progress = (epoch + 1) / target_epoch
-        for ratio in checkpoint_ratios:
-            if not checkpoint_saved[ratio] and progress >= ratio:
-                info(f"[CHECKPOINT] Saving model at {int(ratio*100)}% (epoch {epoch+1})")
-                save_checkpoint_model(GLOBAL_MODEL, epoch + 1, ratio)
-                checkpoint_saved[ratio] = True
-
-        GLOBAL_EPOCH = epoch + 1
-
-    total_training_time = time.time() - training_start
-
-    info("\nObliczanie dokładności znakowej na zbiorze walidacyjnym...")
-    new_accuracy = _compute_val_char_accuracy(GLOBAL_MODEL, val_loader, GLOBAL_DEVICE)
-    GLOBAL_VAL_ACCURACY = new_accuracy
-    info(f"Nowa dokładność: {new_accuracy:.2f}%")
-
-    if prev_accuracy < 0:
-        info("Pierwszy model – zapisuję jako punkt odniesienia.")
-        capture_best_model(info, path=effective_save_path)
-    elif new_accuracy >= prev_accuracy:
-        info(f"Poprawa: {prev_accuracy:.2f}% -> {new_accuracy:.2f}% – zapisuję nowy model.")
-        capture_best_model(info, path=effective_save_path)
-    else:
-        info(f"Brak poprawy: {prev_accuracy:.2f}% -> {new_accuracy:.2f}% – przywracam poprzedni model.")
-        if os.path.exists(backup_path):
-            shutil.copy2(backup_path, effective_save_path)
-
-    if os.path.exists(backup_path):
-        os.remove(backup_path)
-
-    info("\n" + "=" * 60)
-    info("  PODSUMOWANIE TRENINGU CRNN")
-    info("=" * 60)
-    info(f"  Zakończona epoka: {GLOBAL_EPOCH}")
-    info(f"  Dokładność znakowa (val): {GLOBAL_VAL_ACCURACY:.2f}%")
-    info(f"  Całkowity czas treningu: {total_training_time:.1f}s")
-    info("=" * 60)
 
 
 def train_cnn(epochs=10, batch_size=32, model_path=None, info=None,
@@ -1219,189 +900,128 @@ def get_preset_names() -> List[str]:
     """Zwraca listę dostępnych nazw presetów treningowych."""
     return list(TRAINING_PRESETS.keys())
 
-    
-    
-def show_infinite_menu(info=None):
-    """Wyświetla interaktywne menu po przerwaniu nieskończonego treningu."""
-    global TRAINING_PAUSED, TRAINING_STOP, GLOBAL_EPOCH, GLOBAL_BEST_ACC
-    
-    if info is None:
-        info = print
-    
-    while True:
-        info("\n" + "="*60)
-        info("  MENU NIESKOŃCZONEGO TRENINGU")
-        info("="*60)
-        info(f"  Aktualny stan:")
-        info(f"    - Epoka: {GLOBAL_EPOCH}")
-        info(f"    - Najlepsza dokładność: {GLOBAL_BEST_ACC:.2f}%")
-        info("-"*60)
-        info("  1. Kontynuuj trening")
-        info("  2. Zapisz najlepszy model i kontynuuj")
-        info("  3. Zapisz najlepszy model i zakończ")
-        info("  4. Zapisz checkpoint i zakończ")
-        info("  5. Zakończ bez zapisywania")
-        info("="*60)
-        
-        try:
-            choice = input("\nWybierz opcję (1-5): ").strip()
-        except EOFError:
-            choice = "5"
-        
-        if choice == "1":
-            info("\nWznawianie treningu...")
-            TRAINING_PAUSED = False
-            return True  # kontynuuj
 
-        elif choice == "2":
-            info("\nZapisywanie najlepszego modelu...")
+# ── Trening CRNN na danych wyrazów (PHSF words + gen_words) ─────────────────────
 
-            save_best_model(MODEL_PATH, info)
-            info("Wznawianie treningu...")
-            TRAINING_PAUSED = False
-            return True  # kontynuuj
-
-        elif choice == "3":
-            info("\nZapisywanie najlepszego modelu...")
-
-            save_best_model(MODEL_PATH, info)
-            info("Zakańczanie treningu...")
-            TRAINING_STOP = True
-            TRAINING_PAUSED = False
-            return False  # zakończ
-
-        elif choice == "4":
-            info("\nZapisywanie checkpointu...")
-
-            save_model(CHECKPOINT_PATH, info)
-            info("Zakańczanie treningu...")
-            TRAINING_STOP = True
-            TRAINING_PAUSED = False
-            return False  # zakończ
-
-        elif choice == "5":
-            info("\nZakańczanie bez zapisywania...")
-            TRAINING_STOP = True
-            TRAINING_PAUSED = False
-            return False  # zakończ
-
-        else:
-            info("\nNieprawidłowy wybór! Wybierz 1-5.")
-
-
-def infinite_train(batch_size=32, model_path=None, checkpoint_interval=5, info=None):
+def train_crnn_words(epochs=10, batch_size=64, model_path=None, info=None, args=None,
+                     words_only=False, config: Optional['TrainingConfig'] = None,
+                     save_path: Optional[str] = None):
     """
-    Nieskończony trening modelu OCR.
+    Trenuje CRNN na danych wyrazów z folderów data/phsf/words i data/phsf/gen_words.
     
-    Trening trwa do momentu przerwania przez użytkownika (Ctrl+C).
-    Po przerwaniu wyświetlane jest menu z opcjami:
-    - kontynuacji treningu
-    - zapisania najlepszego modelu i kontynuacji
-    - zapisania najlepszego modelu i zakończenia
-    - zapisania checkpointu i zakończenia
-    - zakończenia bez zapisywania
+    Obsługuje dwa tryby:
+    1. Tylko words (words_only=True): trenowanie tylko na data/phsf/words
+    2. Pełny trening (words_only=False): trenowanie na words + gen_words łącznie
     
     Args:
-        batch_size: Rozmiar batcha (domyślnie 32)
-        model_path: Ścieżka do modelu do wczytania (opcjonalne)
-        checkpoint_interval: Co ile epok zapisywać checkpoint (domyślnie 5)
-        info: Funkcja do logowania (domyślnie print)
+        epochs: liczba epok treningowych
+        batch_size: rozmiar batcha
+        model_path: ścieżka do ładowania modelu (jeśli istnieje)
+        info: funkcja do logowania (default: print)
+        args: argumenty z argparse
+        words_only: jeśli True, ładuje tylko data/phsf/words; jeśli False, ładuje oba foldery
+        config: TrainingConfig z parametrami transformacji (denoise_prob, max_padding)
+        save_path: ścieżka do zapisu modelu (default: MODEL_PATH)
     """
     global GLOBAL_MODEL, GLOBAL_OPTIMIZER, GLOBAL_CRITERION
-    global GLOBAL_DEVICE, GLOBAL_EPOCH, GLOBAL_BEST_ACC, GLOBAL_CLASS_NAMES
-    global TRAINING_PAUSED, TRAINING_STOP
+    global GLOBAL_DEVICE, GLOBAL_EPOCH, GLOBAL_BEST_ACC, GLOBAL_CLASS_NAMES, GLOBAL_VAL_ACCURACY
+    global BEST_MODEL_STATE
     
     if info is None:
         info = print
     
-    # Reset flag
-    TRAINING_PAUSED = False
-    TRAINING_STOP = False
-    GLOBAL_BEST_ACC = float('inf')
-
-    signal.signal(signal.SIGINT, infinite_handler)
-
-    try:
-        info("1. Ładowanie datasetu...")
-        
-        info("2. Ładowanie transformacji obrazów...")
-        train_transform = get_train_transform()
-        
-        info("3. Ładowanie datasetu OCR...")
-        data = load_all_datasets(DATA_ROOT_DIR)
-        info(f"   ttData: {len(data)} próbek")
-
-        if os.path.isdir(PHSF_DATA_DIR):
-            phsf_data = load_phsf_znaki(PHSF_DATA_DIR)
-            info(f"   PHSF znaki: {len(phsf_data)} próbek")
-            data = data + phsf_data
-        else:
-            info(f"   PHSF pominięty (brak katalogu: {PHSF_DATA_DIR})")
-
-        dataset = OCRDataset(
-            json_data=data,
-            images_dir=None,
-            transform=get_train_transform()
+    effective_save_path = save_path or MODEL_DIR
+    BEST_MODEL_STATE = None
+    
+    # Parametry transformacji z konfiguracji lub wartości domyślne
+    denoise_prob = config.denoise_prob if config is not None else 0.3
+    max_padding = config.max_padding if config is not None else 20
+    
+    # Odczyt dokładności istniejącego modelu i kopia zapasowa
+    prev_accuracy = get_stored_accuracy(effective_save_path)
+    backup_path = effective_save_path + ".backup"
+    if prev_accuracy >= 0:
+        info(f"Poprzednia dokładność modelu: {prev_accuracy:.2f}%")
+    else:
+        info("Brak poprzedniego modelu – pierwszy trening.")
+    
+    info("1. Ładowanie datasetu OCR wyrazów...")
+    
+    # Ładowanie danych w zależności od trybu
+    if words_only:
+        info("   Tryb: TYLKO data/phsf/words")
+        data = load_phsf_words(
+            words_dir=os.path.join(DATA_DIR, "phsf", "words") if DATA_DIR else "./data/phsf/words",
+            gen_words_dir=None  # Nie ładuj gen_words
         )
-
-        info(f"4. Dataset załadowany: {len(dataset)} obrazów łącznie")
-        
-        train_size = int(0.8 * len(dataset))
-        val_size = len(dataset) - train_size
-        info(f"5. Splitting: {train_size} trening, {val_size} walidacja")
-        train_dataset, val_dataset = torch.utils.data.random_split(dataset, [train_size, val_size])
-        
-        info("6. Tworzenie DataLoader...")
-        train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True, collate_fn=collate_fn)
-        val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=batch_size, shuffle=False, collate_fn=collate_fn)
-        
-        info("7. Inicjalizacja lub ładowanie modelu...")
-        # init albo load
-        if GLOBAL_MODEL is None:
-            init_or_load_model(len(CHARS) + 1, model_path, info)
-        
-
-        info("8. Rozpoczynanie treningu...")
-        info("\n" + "="*60)
-        info("  NIESKOŃCZONY TRENING OCR")
-        info("="*60)
-        info(f"  Urządzenie: {GLOBAL_DEVICE}")
-        info(f"  Batch size: {batch_size}")
-        info(f"  Klasy: {len(CHARS) + 1}")
-        info(f"  Próbki treningowe: {len(train_dataset)}")
-        info(f"  Próbki walidacyjne: {len(val_dataset)}")
-        info(f"  Checkpoint co: {checkpoint_interval} epok")
-        info("-"*60)
-        info("  Naciśnij Ctrl+C aby wstrzymać i wyświetlić menu")
-        info("="*60 + "\n")
-        
-        total_steps = len(train_loader)
-        start_time = datetime.now()
-        
-        epoch = GLOBAL_EPOCH
-        while not TRAINING_STOP:
-            # Sprawdź czy pauza
-            if TRAINING_PAUSED:
-                should_continue = show_infinite_menu(info)
-                if not should_continue:
-                    break
-                continue
-            
+    else:
+        info("   Tryb: PEŁNY trening (words + gen_words)")
+        data = load_phsf_words(
+            words_dir="./data/phsf/words",
+            gen_words_dir="./data/phsf/gen_words",
+        )
+    
+    if not data:
+        info("BŁĄD: Brak danych do treningu. Sprawdź czy foldery words/gen_words zawierają dane.")
+        print(data)
+        return
+    
+    info(f"   Załadowano: {len(data)} wyrazów")
+    
+    dataset = OCRDataset(
+        json_data=data,
+        images_dir=None,
+        transform=get_train_transform(args, denoise_prob=denoise_prob, max_padding=max_padding)
+    )
+    
+    info(f"2. Dataset załadowany: {len(dataset)} obrazów łącznie")
+    
+    train_size = int(0.8 * len(dataset))
+    val_size = len(dataset) - train_size
+    info(f"3. Splitting: {train_size} trening, {val_size} walidacja")
+    train_dataset, val_dataset = torch.utils.data.random_split(dataset, [train_size, val_size])
+    
+    info("4. Tworzenie DataLoader...")
+    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True, collate_fn=collate_fn)
+    val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=batch_size, shuffle=False, collate_fn=collate_fn)
+    
+    info("5. Inicjalizacja lub ładowanie modelu...")
+    if GLOBAL_MODEL is None:
+        init_or_load_model(len(CHARS) + 1, model_path, info)
+        if not np.isfinite(GLOBAL_BEST_ACC) or GLOBAL_BEST_ACC <= 0:
+            GLOBAL_BEST_ACC = float("inf")
+    info("6. Rozpoczynanie treningu CRNN na wyrazach...")
+    total_steps = len(train_loader)
+    training_start = time.time()
+    target_epoch = GLOBAL_EPOCH + epochs
+    
+    info("\n" + "=" * 70)
+    info("  TRENING CRNN NA WYRAZACH (PHSF)")
+    info("=" * 70)
+    info(f"  Urządzenie: {GLOBAL_DEVICE}")
+    info(f"  Batch size: {batch_size}")
+    info(f"  Epoki do wykonania: {epochs}")
+    info(f"  Zakres epok: {GLOBAL_EPOCH + 1} -> {target_epoch}")
+    if words_only:
+        info("  Tryb: TYLKO words")
+    else:
+        info("  Tryb: PEŁNY (words + gen_words)")
+    info("=" * 70 + "\n")
+    
+    try:
+        for epoch in range(GLOBAL_EPOCH, target_epoch):
             epoch_start = time.time()
             GLOBAL_MODEL.train()
             running_loss = 0.0
             
             for step, (images, targets, target_lengths) in enumerate(train_loader, start=1):
-                # Sprawdź czy pauza w trakcie epoki
-                if TRAINING_PAUSED:
-                    break
-                    
                 images = images.to(GLOBAL_DEVICE)
                 targets = targets.to(GLOBAL_DEVICE)
                 target_lengths = target_lengths.to(GLOBAL_DEVICE)
                 
                 GLOBAL_OPTIMIZER.zero_grad(set_to_none=True)
-                outputs = GLOBAL_MODEL(images)
+                
+                outputs = GLOBAL_MODEL(images)  # (T, B, C)
                 log_probs = outputs.log_softmax(2)
                 
                 input_lengths = torch.full(
@@ -1410,33 +1030,23 @@ def infinite_train(batch_size=32, model_path=None, checkpoint_interval=5, info=N
                     dtype=torch.long,
                     device=GLOBAL_DEVICE,
                 )
-
+                
                 loss = GLOBAL_CRITERION(
                     log_probs,
                     targets,
                     input_lengths,
                     target_lengths
                 )
+                
                 loss.backward()
                 GLOBAL_OPTIMIZER.step()
                 
                 running_loss += loss.item()
                 
-                # log co 50 kroków
-                if step % 50 == 0 or step == total_steps:
-                    elapsed = datetime.now() - start_time
-
-                    info(f"Epoch [{epoch+1}] Step [{step}/{total_steps}] "
-                         f"Loss: {loss.item():.4f} | Czas: {elapsed}")
-
-                # Zwolnij referencje po każdym kroku dla stabilności długiego treningu.
-                del outputs, loss, images, targets, target_lengths, log_probs, input_lengths
-                
-            # Jeśli pauza podczas kroku - wróć do początku pętli
-            if TRAINING_PAUSED:
-                continue
+                if step % 50 == 0:
+                    info(f"Epoch {epoch+1} Step {step}/{total_steps} Loss: {loss.item():.4f}")
             
-            # walidacja
+            # WALIDACJA
             GLOBAL_MODEL.eval()
             val_loss = 0.0
             
@@ -1455,67 +1065,162 @@ def infinite_train(batch_size=32, model_path=None, checkpoint_interval=5, info=N
                         dtype=torch.long,
                         device=GLOBAL_DEVICE,
                     )
-
+                    
                     loss = GLOBAL_CRITERION(
                         log_probs,
                         targets,
                         input_lengths,
                         target_lengths
                     )
-
+                    
                     val_loss += loss.item()
-                    del outputs, log_probs, input_lengths, images, targets, target_lengths
             
-            val_loss /= len(val_loader)
-
             epoch_time = time.time() - epoch_start
-            avg_loss = running_loss / total_steps
+            avg_train_loss = running_loss / total_steps
+            avg_val_loss = val_loss / len(val_loader) if len(val_loader) > 0 else 0
+            
+            GLOBAL_VAL_ACCURACY = _compute_val_char_accuracy(GLOBAL_MODEL, val_loader, GLOBAL_DEVICE)
 
-            info(f"\n>>> Epoch [{epoch+1}] zakończona")
-            info(f"    Train Loss: {avg_loss:.4f} | Val Loss: {val_loss:.4f} | Czas: {epoch_time:.1f}s")
+            info(f"Epoch {epoch+1}: avg_train_loss={avg_train_loss:.4f}, avg_val_loss={avg_val_loss:.4f}, val_accuracy={GLOBAL_VAL_ACCURACY:.2f}%, time={epoch_time:.1f}s")
 
-            GLOBAL_EPOCH = epoch + 1
-            epoch = GLOBAL_EPOCH
-
-            # Zapisz najlepszy model jeśli poprawa (mniejszy loss)
-            if val_loss < GLOBAL_BEST_ACC:  # GLOBAL_BEST_ACC przechowuje teraz best_loss
-                old_best = GLOBAL_BEST_ACC
-                GLOBAL_BEST_ACC = val_loss
-                capture_best_model()
-                info(f"    [NEW BEST] Poprawa loss: {old_best:.4f} -> {val_loss:.4f}")
-
-            # Okresowy checkpoint
-            if epoch % checkpoint_interval == 0:
-                save_model(CHECKPOINT_PATH)
-                info(f"    [CHECKPOINT] Zapisano checkpoint (epoka {epoch})")
-
-            info("")
-
-            if torch.cuda.is_available():
-                torch.cuda.empty_cache()
+            # Zapis modelu jeśli poprawiła się dokładność
+            if avg_val_loss < GLOBAL_BEST_ACC:
+                GLOBAL_BEST_ACC = avg_val_loss
+                capture_best_model(info, path=effective_save_path)
+                info(f"  Nowy najlepszy model zapisany (val_loss={avg_val_loss:.4f})")
+            
+            GLOBAL_EPOCH += 1
             gc.collect()
-
-
         
-        # Końcowa dokładność znakowa po zakończeniu pętli
-        info("\nObliczanie końcowej dokładności znakowej...")
-        final_acc = _compute_val_char_accuracy(GLOBAL_MODEL, val_loader, GLOBAL_DEVICE)
-        GLOBAL_VAL_ACCURACY = final_acc
-
-        # Podsumowanie końcowe
-        total_time = datetime.now() - start_time
-        info("\n" + "="*60)
-        info("  TRENING ZAKOŃCZONY")
-        info("="*60)
-        info(f"  Całkowity czas: {total_time}")
+        total_time = time.time() - training_start
+        info("\n" + "=" * 70)
+        info("  TRENING UKOŃCZONY")
+        info("=" * 70)
+        info(f"  Całkowity czas: {total_time:.1f}s")
         info(f"  Epoki: {GLOBAL_EPOCH}")
         info(f"  Najlepszy loss: {GLOBAL_BEST_ACC:.4f}")
         info(f"  Dokładność znakowa (val): {GLOBAL_VAL_ACCURACY:.2f}%")
-        info("="*60)
-
+        info("=" * 70)
+    
     except Exception as e:
         info(f"\nBłąd podczas treningu: {e}")
         import traceback
         info(traceback.format_exc())
-    finally:
-        signal.signal(signal.SIGINT, handler)
+
+
+def evaluate_saved_crnn(
+    model_path,
+    args,
+    batch_size=64,
+    samples_to_show=20,
+):
+
+    info("   Tryb: TYLKO data/phsf/words")
+    data = load_phsf_words(
+        words_dir=os.path.join(DATA_DIR, "phsf", "words") if DATA_DIR else "./data/phsf/words",
+        gen_words_dir=None  # Nie ładuj gen_words
+    )
+
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    model = MainModel(num_classes=len(CHARS) + 1).to(device)
+
+    checkpoint = torch.load(model_path, map_location=device)
+
+    if "model_state_dict" in checkpoint:
+        model.load_state_dict(checkpoint["model_state_dict"])
+        stored_acc = checkpoint.get("val_char_accuracy", None)
+    else:
+        model.load_state_dict(checkpoint)
+        stored_acc = None
+
+    model.eval()
+
+    dataset = OCRDataset(
+        json_data=data,
+        images_dir=None,
+        transform=get_inf_transform(args)
+    )
+
+    train_size = int(0.8 * len(dataset))
+    val_size = len(dataset) - train_size
+
+    _, val_dataset = torch.utils.data.random_split(
+        dataset,
+        [train_size, val_size]
+    )
+
+    val_loader = torch.utils.data.DataLoader(
+        val_dataset,
+        batch_size=batch_size,
+        shuffle=False,
+        collate_fn=collate_fn
+    )
+
+    acc = _compute_val_char_accuracy(
+        model,
+        val_loader,
+        device
+    )
+
+    print(f"Stored accuracy : {stored_acc}")
+    print(f"Computed accuracy: {acc:.2f}%")
+
+    idx2char = {i + 1: c for i, c in enumerate(CHARS)}
+
+    shown = 0
+
+    with torch.inference_mode():
+        for images, targets, target_lengths in val_loader:
+            images = images.to(device)
+            dump_tensor_stats(
+                "VAL_IMAGE",
+                images[0]
+            )
+            print("\nVAL MODEL INPUT")
+            print(images[0, 0, :10, :20])
+            
+            outputs = model(images)
+            preds = outputs.argmax(2)
+
+            target_offset = 0
+
+            for b in range(images.size(0)):
+                tl = target_lengths[b].item()
+
+                gt_indices = targets[
+                    target_offset:target_offset + tl
+                ].tolist()
+
+                target_offset += tl
+
+                gt_text = ''.join(
+                    idx2char.get(i, '')
+                    for i in gt_indices
+                )
+
+                prev = 0
+                pred_chars = []
+
+                for t in range(preds.size(0)):
+                    p = int(preds[t, b])
+
+                    if p != 0 and p != prev:
+                        pred_chars.append(
+                            idx2char.get(p, '')
+                        )
+
+                    prev = p
+
+                pred_text = ''.join(pred_chars)
+
+                print(f"GT   : {gt_text}")
+                print(f"PRED : {pred_text}")
+                print()
+
+                shown += 1
+
+                if shown >= samples_to_show:
+                    return acc
+
+    return acc

@@ -155,6 +155,18 @@
         "auto-archived"
       ],
       "size_bytes": 38447883
+    },
+    {
+      "filename": "model_20260606_181416.pth",
+      "original_path": "models/model_ocr.pth",
+      "timestamp": "20260606_181416",
+      "datetime": "2026-06-06T18:14:16.070597",
+      "accuracy": 0.03520056012774574,
+      "epoch": 2,
+      "tags": [
+        "auto-archived"
+      ],
+      "size_bytes": 38447883
     }
   ]
 }

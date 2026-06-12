@@ -7,7 +7,14 @@ Narzędzia pomocnicze:
 """
 
 import os
+try:
+    import pyphen
+    PYPHEN_AVAILABLE = True
+except ModuleNotFoundError:
+    pyphen = None  # type: ignore
+    PYPHEN_AVAILABLE = False
 import re
+import csv
 import math
 from datetime import date
 from pathlib import Path
@@ -32,7 +39,6 @@ import torch
 import torch.nn as nn
 from torchvision import transforms
 import torchvision.transforms.functional as F
-import csv
 from datetime import datetime
 from typing import Any
 from datetime import date
@@ -40,10 +46,19 @@ from datetime import date
 from pathlib import Path
 import matplotlib.pyplot as plt
 import itertools
-from .config import IMAGE_SIZE, MEAN, STD, CHARS, AuxCHARS, MODEL_PATH, NUM_CLASSES, char2idx, idx2char, VERSION_RE, ÐICT_PATH
+from .config import IMAGE_SIZE, MEAN, STD, CHARS, AuxCHARS, MODEL_PATH, PHSF_DATA_DIR, NUM_CLASSES, char2idx, idx2char, VERSION_RE, ÐICT_PATH
 from .model import MainModel, AuxModel
 from .bbox_annotator import load_boxes_from_annotations, sort_boxes_reading_order, detect_word_boxes_auto, edit_boxes_interactive
 from . import info
+
+
+if PYPHEN_AVAILABLE:
+    try:
+        dic = pyphen.Pyphen(lang="pl_PL")
+    except Exception:
+        dic = None
+else:
+    dic = None
 
 def load_dictionary(json_path: str = ÐICT_PATH) -> list[str]:
     with open(json_path, "r", encoding="utf-8") as f:
@@ -53,6 +68,164 @@ def load_dictionary(json_path: str = ÐICT_PATH) -> list[str]:
         raise ValueError("JSON musi zawierać listę stringów")
 
     return [str(word) for word in data]
+
+
+def _load_char_folder_map(numeracja_path: str) -> dict:
+    mapping = {}
+    try:
+        with open(numeracja_path, newline="", encoding="utf-8") as f:
+            reader = csv.reader(f)
+
+            for row_num, row in enumerate(reader, start=1):
+                left = row[1]
+                right = row[0]
+                folder_id = left.strip()
+                syl = right.strip()
+                if folder_id and syl:
+                    mapping[syl] = folder_id
+    except OSError:
+        return {}
+    return mapping
+
+def dump_tensor_stats(name, tensor):
+    t = tensor.detach().cpu()
+
+    print(f"\n===== {name} =====")
+    print("shape:", tuple(t.shape))
+    print("dtype:", t.dtype)
+
+    print("min :", float(t.min()))
+    print("max :", float(t.max()))
+    print("mean:", float(t.mean()))
+    print("std :", float(t.std()))
+
+    flat = t.flatten()
+
+    print("first 50:")
+    print(flat[:50])
+
+    print("last 50:")
+    print(flat[-50:])
+
+    print("===================")
+
+    
+def word_to_folder_paths(word: str, data_root: str = "data", info: callable = None) -> list:
+    numeracja_path = os.path.join(data_root, "numeracja.csv")
+    if not os.path.exists(numeracja_path):
+        numeracja_path = os.path.join(data_root, "phsf", "syllables", "numeracja.csv")
+    base_dir = os.path.join(data_root, "syllables")
+    if not os.path.exists(base_dir):
+        base_dir = os.path.join(data_root, "phsf", "syllables")
+    char_map = _load_char_folder_map(numeracja_path)
+
+    # pojedynczy wyraz
+    _log(info, f"\nFoldery znakow dla slowa: {word}")
+    results = _word_to_folder_syllables(word, char_map, base_dir)
+    print(results)
+    for char, path in results:
+        if path:
+            _log(info, f"{char} -> {path}")
+        else:
+            _log(info, f"{char} -> BRAK")
+    return results
+
+
+def _word_to_folder_syllables(word: str, char_map: dict, base_dir: str) -> list:
+    results = []
+    if dic is not None:
+        try:
+            syllables = dic.inserted(word).split("-")
+        except Exception:
+            syllables = [word]
+    else:
+        syllables = [word]
+    for syllab in syllables:
+        folder_id = char_map.get(syllab)
+        if not folder_id:
+            results.append((syllab, None))
+            continue
+        folder_path = os.path.join(base_dir, folder_id)
+        results.append((syllab, folder_path))
+    return results
+
+def generate_word_samples(word, pairs, samples_count=100):
+
+    tails = set("gjpqyąę")
+    output_dir= PHSF_DATA_DIR
+    words_dir = os.path.join(output_dir, "words", word)
+    os.makedirs(words_dir, exist_ok=True)
+
+    for sample_idx in range(samples_count):
+        has_tails = []
+        images = []
+        for syl, syl_dir in pairs:
+            print(syl_dir)
+            
+            has_tails = any(c.lower() in tails for c in syl)
+            
+            candidates = [
+                os.path.join(syl_dir, f)
+                for f in os.listdir(syl_dir)
+                if f.lower().endswith(".png")
+            ]
+
+            img_path = random.choice(candidates)
+            images.append((Image.open(img_path).convert("RGBA"), syl))
+
+        total_width = sum(img.width for img, syl in images)
+        max_height = max(img.height for img, syl in images)
+
+        result = Image.new(
+            "RGB",
+            (total_width, max_height),
+            (255, 255, 255)
+        )
+
+        
+        x = 0
+        for img, syl in images:
+            y = max_height - img.height
+
+            if has_tails and not any(c.lower() in tails for c in syl):
+                y -= 10
+                
+            result.paste(img, (x, y), img)
+            x += img.width
+
+        angle = random.uniform(-3, 3)
+        result = result.rotate(angle, expand=True, fillcolor=(255, 255, 255))
+
+        # Dodanie lekkiego szumu (Gaussian noise)
+        img_arr = np.array(result, dtype=np.float32)
+        noise = np.random.normal(loc=0, scale=10, size=img_arr.shape)
+        noisy_arr = np.clip(img_arr + noise, 0, 255).astype(np.uint8)
+        result = Image.fromarray(noisy_arr)
+
+        words_dir = Path(words_dir)
+        
+        max_id = 0
+
+        for file in words_dir.glob("*.png"):
+            m = re.match(r".*_(\d+)\.png$", file.name)
+            if m:
+                max_id = max(max_id, int(m.group(1)))
+
+        next_id = max_id + 1
+        
+        result.save(
+            os.path.join(
+                words_dir,
+                f"{word}_{next_id:06d}.png"
+            )
+        )
+
+
+def _log(info: callable, msg: str):
+    if info:
+        info(msg)
+
+
 # ── Transformacje ──────────────────────────────────────────────────────────────
 
 def aux_transform():
@@ -503,6 +676,124 @@ def load_phsf_znaki(phsf_dir: str) -> list:
 
     return items
 
+
+def load_folder8(root_dir: str) -> list:
+    """
+    Ładuje dataset ze struktury folder8 (podfolderów 1-174).
+
+    Każdy podfolder zawiera obrazy słów i plik labels.txt
+    w formacie: 'nazwa_pliku<TAB>słowo' (jedna para na linię).
+    Zwraca listę {"image_path": ..., "text": ...} gotową dla OCRDataset.
+    """
+    items = []
+    if not os.path.isdir(root_dir):
+        return items
+
+    for subfolder in os.listdir(root_dir):
+        subfolder_path = os.path.join(root_dir, subfolder)
+        if not os.path.isdir(subfolder_path):
+            continue
+
+        labels_path = os.path.join(subfolder_path, "labels.txt")
+        if not os.path.exists(labels_path):
+            continue
+
+        with open(labels_path, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.rstrip("\n")
+                if "\t" not in line:
+                    continue
+                fname, text = line.split("\t", 1)
+                fname = fname.strip()
+                text = text.strip()
+                if not fname or not text:
+                    continue
+                img_path = os.path.join(subfolder_path, fname)
+                if os.path.exists(img_path):
+                    items.append({"image_path": img_path, "text": text})
+
+    return items
+
+
+def load_phsf_words(words_dir: str = None, gen_words_dir: str = None) -> list:
+    """
+    Ładuje dataset wyrazów PHSF z folderów words i gen_words.
+
+    Struktura words/: podfolderów nazwanych słowem (np. words/boi/boi_000000.png).
+    Struktura gen_words/: numerowane podfolderów z labels.txt (nazwa<TAB>słowo).
+
+    Args:
+        words_dir: ścieżka do folderu words; None = ./data/phsf/words
+        gen_words_dir: ścieżka do gen_words; None = ./data/phsf/gen_words (pominięte gdy None)
+
+    Returns:
+        Lista {"image_path": str, "text": str} gotowa dla OCRDataset
+    """
+    if words_dir is None:
+        words_dir = "./data/phsf/words"
+
+    items = []
+    skipped_words: set[str] = set()
+
+    # -- words/: subfolder name = słowo, wszystkie PNG w podfolderze należą do tego słowa
+    if os.path.isdir(words_dir):
+        loaded_words = 0
+        skipped_w = 0
+        for word_folder in os.listdir(words_dir):
+            word_path = os.path.join(words_dir, word_folder)
+            if not os.path.isdir(word_path):
+                continue
+            text = word_folder  # nazwa folderu = transkrypcja
+            valid = all(c in char2idx for c in text.lower())
+            if not valid:
+                skipped_words.add(text)
+                skipped_w += 1
+                continue
+            for fname in os.listdir(word_path):
+                if fname.lower().endswith(".png"):
+                    items.append({"image_path": os.path.join(word_path, fname), "text": text})
+                    loaded_words += 1
+        print(f"[load_phsf_words] words: załadowano {loaded_words} obrazów, pominięto {skipped_w} słów")
+
+    # -- gen_words/: numerowane podfolderów z labels.txt (filename<TAB>słowo)
+    if gen_words_dir is not None:
+        if gen_words_dir == "":
+            gen_words_dir = "./data/phsf/gen_words"
+        if os.path.isdir(gen_words_dir):
+            loaded_gen = 0
+            skipped_gen = 0
+            for subfolder in os.listdir(gen_words_dir):
+                subfolder_path = os.path.join(gen_words_dir, subfolder)
+                if not os.path.isdir(subfolder_path):
+                    continue
+                labels_path = os.path.join(subfolder_path, "labels.txt")
+                if not os.path.exists(labels_path):
+                    continue
+                with open(labels_path, "r", encoding="utf-8") as f:
+                    for line in f:
+                        line = line.rstrip("\n")
+                        if "\t" not in line:
+                            continue
+                        fname, text = line.split("\t", 1)
+                        fname, text = fname.strip(), text.strip()
+                        if not fname or not text:
+                            continue
+                        if not all(c in char2idx for c in text.lower()):
+                            skipped_words.add(text)
+                            skipped_gen += 1
+                            continue
+                        img_path = os.path.join(subfolder_path, fname)
+                        if os.path.exists(img_path):
+                            items.append({"image_path": img_path, "text": text})
+                            loaded_gen += 1
+            print(f"[load_phsf_words] gen_words: załadowano {loaded_gen} obrazów, pominięto {skipped_gen} wpisów")
+
+    if skipped_words:
+        print(f"[load_phsf_words] Pominięto słowa z nieobsługiwanymi znakami: {len(skipped_words)} typów")
+    print(f"[load_phsf_words] Łącznie załadowano: {len(items)} wyrazów")
+    return items
+
+
 # ── Zapis do folderu z datą ────────────────────────────────────────────────────
 
 def get_today_folder() -> str:
@@ -672,14 +963,32 @@ def load_model(model_path: str = MODEL_PATH, device: torch.device = None, info=N
 
 def load_transcription(path, return_dict=False):
     """
-    word_000 nic
-    word_001 dwa
+    Obsługuje dwa formaty:
+
+    1.
+    word_000 ala
+    word_001 ma
+    word_002 kota
+
+    2.
+    ala ma kota
     """
 
-    pairs = []
-
     with open(path, "r", encoding="utf-8") as f:
-        for line in f:
+        lines = f.readlines()
+
+    # znajdź pierwszą niepustą linię
+    first_line = next((line.strip() for line in lines if line.strip()), "")
+
+    is_word_format = False
+    if first_line:
+        first_word = first_line.split(maxsplit=1)[0]
+        is_word_format = re.fullmatch(r"word_\d+", first_word) is not None
+
+    if is_word_format:
+        pairs = []
+
+        for line in lines:
             line = line.strip()
 
             if not line:
@@ -696,10 +1005,21 @@ def load_transcription(path, return_dict=False):
 
             pairs.append((key, text))
 
-    if return_dict:
-        return dict(pairs)
+        if return_dict:
+            return dict(pairs)
 
-    return [text for _, text in pairs]
+        return [text for _, text in pairs]
+
+    # zwykły tekst rozdzielony spacjami / nowymi liniami
+    words = " ".join(line.strip() for line in lines if line.strip()).split()
+
+    if return_dict:
+        return {
+            f"word_{i:03d}": word
+            for i, word in enumerate(words)
+        }
+
+    return words
 
 def save_aligned_boxes_jsonl(
     page_path,
@@ -819,7 +1139,7 @@ def convert_aligned_to_ttdata(
     out_dir = os.path.join(ttdata_dir, File)
     out_dir = os.path.join("data", out_dir)
     os.makedirs(out_dir, exist_ok=True)
-
+    
     img = cv2.imdecode(np.fromfile(page_image_path, dtype=np.uint8), cv2.IMREAD_COLOR)
     if img is None:
         raise ValueError(f"Nie udało się wczytać obrazu: {page_image_path}")
@@ -830,8 +1150,12 @@ def convert_aligned_to_ttdata(
 
     img_h, img_w = img.shape[:2]
     
+    clear_path = os.path.join(out_dir, "crops.jsonl")
+    print(clear_path)
+    print(os.path.isdir(clear_path))
+    print(os.path.isfile(clear_path))
     jsonl_path = os.path.join(out_dir, "boxes.jsonl")
-
+    open(clear_path, "w", encoding="utf-8").close()
     written = 0
     with open(jsonl_path, "w", encoding="utf-8") as f:
         for entry in entries:
@@ -869,6 +1193,20 @@ def convert_aligned_to_ttdata(
             }
             f.write(json.dumps(record, ensure_ascii=False) + "\n")
             written += 1
+
+            jsonl_path = os.path.join(out_dir, "crops.jsonl")
+            with open(jsonl_path, "a", encoding="utf-8") as c:
+                
+                if not text:
+                    continue
+
+                c_record = {
+                    "word_id": word_id,
+                    "text": text,
+                    "crop_path": crop_path,
+                }
+
+                c.write(json.dumps(c_record, ensure_ascii=False) + "\n")
 
     print(f"[ttData] {out_dir}  ({written} wpisów)")
     return out_dir
@@ -1006,15 +1344,16 @@ def select_models(models):
 
 
 DEFAULT_MODELS = [
-    "v4", "v4.1", "v4.4",
-    "v6.2", "v6.5",
-    "v7.2", "v7.4", "v7.5",
-    "v8.2",
-    "v10.2", "v10.3", "v10.4", "v10.5",
-    "v11.1", "v11.2", "v11.3", "v11.4", "v11.5",
+##    "v4", "v4.1", "v4.4",
+##    "v6.2", "v6.5",
+##    "v7.2", "v7.4", "v7.5",
+##    "v8.2",
+##    "v10.2", "v10.3", "v10.4", "v10.5",
+##    "v33", "v31", "v34",
+      "v40", "v41","v33", "v31",
 ]
 
-DEFAULT_MODEL = "v11.5"
+DEFAULT_MODEL = "v40"
 
 
 def auto_select_models(models_dir: str, version: str | None = None):
@@ -1183,274 +1522,80 @@ def save_results_csv(rows, path="results.csv"):
                 "confidence": r["confidence"],
                 "accuracy": r["accuracy"]
             })
-# ── Embedding-based autokorekta HTR ──────────────────────────────────────────
-
-_EMBED_DIM = 2048
-_NGRAM_SIZES = (2, 3)
-
-# Cache słownikowych embeddingów (ładowany raz na sesję)
-_embed_cache: tuple[str, list[str], np.ndarray] | None = None
-
-# Mapowanie polskich diakrytyków na ASCII — używane przed embeddingiem
-# żeby HTR-owe "sloce" trafiało w to samo przestrzeń co słownikowe "słońce"
-_DIACRITIC_MAP = str.maketrans(
-    "ąćęłńóśźżĄĆĘŁŃÓŚŹŻ",
-    "acelnoszzACELNOSZZ",
-)
-
-
-def _to_ascii(word: str) -> str:
-    """Usuwa polskie diakrytyki: 'słońce' → 'slonce', 'życiem' → 'zyciem'."""
-    return word.translate(_DIACRITIC_MAP)
-
-
-def _stable_hash(s: str, mod: int) -> int:
-    """Deterministyczny hash stringa (niezależny od PYTHONHASHSEED)."""
-    h = 0
-    for c in s:
-        h = (h * 31 + ord(c)) % mod
-    return h
-
-
-def _word_embedding(word: str, dim: int = _EMBED_DIM) -> np.ndarray:
-    """
-    Zamienia słowo na wektor character n-gram (styl FastText).
-    Przed embeddingiem normalizuje diakrytyki do ASCII, dzięki czemu
-    HTR-owe 'sloce' i słownikowe 'słońce' trafiają w podobną przestrzeń.
-    """
-    normalized = _to_ascii(word.lower())
-    padded = f"<{normalized}>"
-    vec = np.zeros(dim, dtype=np.float32)
-    for n in _NGRAM_SIZES:
-        for i in range(len(padded) - n + 1):
-            gram = padded[i : i + n]
-            vec[_stable_hash(gram, dim)] += 1.0
-    norm = float(np.linalg.norm(vec))
-    if norm > 0.0:
-        vec /= norm
-    return vec
-
-
-def _get_dict_embeddings(dict_path: str = ÐICT_PATH) -> tuple[list[str], np.ndarray]:
-    """
-    Zwraca (words, matrix) z cache'em na poziomie modułu.
-    matrix[i] to L2-znormalizowany embedding words[i].
-    """
-    global _embed_cache
-    if _embed_cache is not None and _embed_cache[0] == dict_path:
-        return _embed_cache[1], _embed_cache[2]
-
-    words = load_dictionary(dict_path)
-    matrix = np.stack([_word_embedding(w) for w in words])  # (N, dim)
-    _embed_cache = (dict_path, words, matrix)
-    return words, matrix
-
-
-def _rerank_score(candidate: str, query: str, embed_sim: float) -> float:
-    """
-    Drugi etap scoringu (reranking) łączący kilka sygnałów:
-      - cosine similarity z fazy 1 (embedding)
-      - SequenceMatcher (dokładniejsze porównanie znaków)
-      - podobieństwo długości
-      - bonus za zgodność pierwszego znaku
-    """
-    # Porównanie po ASCII — żeby 'sloce' vs 'słońce' miało wysokie seq_sim
-    q_ascii = _to_ascii(query.lower())
-    c_ascii = _to_ascii(candidate.lower())
-    seq_sim = SequenceMatcher(None, q_ascii, c_ascii).ratio()
-    lq, lc = len(query), len(candidate)
-    len_sim = 1.0 - abs(lq - lc) / max(lq, lc, 1)
-    prefix = 0.1 if (q_ascii and c_ascii and q_ascii[0] == c_ascii[0]) else 0.0
-    return 0.40 * embed_sim + 0.40 * seq_sim + 0.15 * len_sim + prefix
-
-
-def _score_candidate_with_vectors(
-    candidate: str,
-    letter_vectors: list,
-) -> float:
-    """
-    Ocenia kandydata ze słownika używając wektorów prawdopodobieństwa modelu.
-
-    Używa DTW (Dynamic Time Warping) do optymalnego wyrównania liter modelu
-    do liter kandydata — działa poprawnie nawet gdy długości się różnią
-    (HTR odczytał za mało lub za dużo liter).
-
-    letter_vectors: lista (litera, np.ndarray kształtu C) z predict_letter()
-    Zwraca: score w zakresie (-inf, 0] — wyższy = lepszy kandydat
-    """
-    if not letter_vectors:
-        return -999.0
-
-    n_obs  = len(letter_vectors)
-    n_cand = len(candidate)
-
-    # Odrzuć kandydatów drastycznie różniących się długością (>2x)
-    if n_cand == 0 or n_obs / n_cand > 2.5 or n_cand / max(n_obs, 1) > 2.5:
-        return -999.0
-
-    # Macierz kosztu: cost[i][j] = -log P(candidate[j] | wektor timestep i)
-    cost = np.empty((n_obs, n_cand), dtype=np.float32)
-    for i, (_, prob_vec) in enumerate(letter_vectors):
-        for j in range(n_cand):
-            c = candidate[j]
-            c_ascii = _to_ascii(c)
-            p = 1e-9
-            for ch in (c, c_ascii, c.upper(), c_ascii.upper()):
-                idx = char2idx.get(ch)
-                if idx is not None and idx < len(prob_vec):
-                    p = max(p, float(prob_vec[idx]))
-            cost[i, j] = -math.log(p)
-
-    # DTW: dp[i][j] = minimalny koszt wyrównania obs[0..i] → cand[0..j]
-    dp = np.full((n_obs + 1, n_cand + 1), np.inf, dtype=np.float64)
-    dp[0, 0] = 0.0
-    for i in range(1, n_obs + 1):
-        for j in range(1, n_cand + 1):
-            dp[i, j] = cost[i - 1, j - 1] + min(
-                dp[i - 1, j - 1],   # dopasowanie 1:1
-                dp[i - 1, j],       # pominięcie obserwowanej litery (HTR za dużo)
-                dp[i, j - 1],       # pominięcie litery kandydata (HTR za mało)
-            )
-
-    path_len = max(n_obs, n_cand)
-    return -dp[n_obs, n_cand] / path_len  # normalizacja do [-inf, 0]
-
-
-# ── Częstość słów polskich (prior językowy) ───────────────────────────────────
-# Wartości znormalizowane do [0, 1]: 1.0 = najczęstsze słowa funkcyjne,
-# 0.65 = częste słowa treściowe, 0.35 = umiarkowanie częste.
-# Słowa spoza listy domyślnie: 0.05 (obecne w słowniku, ale rzadkie).
-_WORD_FREQ: dict[str, float] = {
-    # Tier 1 — stopwords i słowa funkcyjne (~60 słów)
-    **{w: 1.0 for w in [
-        "nie", "się", "to", "jest", "jak", "co", "do", "na", "że", "już",
-        "też", "ale", "po", "tak", "czy", "go", "mi", "mu", "jej", "jego",
-        "ich", "nas", "je", "tam", "tu", "ze", "przy", "przez", "dla", "we",
-        "od", "za", "bo", "sobie", "wszystko", "kiedy", "gdzie", "jeszcze",
-        "tylko", "więc", "bardzo", "tego", "tej", "ten", "ta", "te", "sam",
-        "być", "mieć", "i", "w", "z", "o", "a", "u", "ni", "nic", "kto",
-        "pan", "pani", "temu", "tą", "tych", "tymi", "tego",
-    ]},
-    # Tier 2 — częste słowa treściowe (~100 słów)
-    **{w: 0.65 for w in [
-        "dom", "człowiek", "rok", "czas", "dzień", "noc", "życie", "świat",
-        "ręka", "głowa", "oko", "słowo", "droga", "serce", "praca", "woda",
-        "ziemia", "ludzie", "chwila", "myśl", "twarz", "drzwi", "okno",
-        "niebo", "nikt", "coś", "ktoś", "każdy", "razem", "teraz", "właśnie",
-        "może", "pewnie", "chyba", "naprawdę", "jeden", "dwa", "trzy", "raz",
-        "miejsce", "kraj", "miasto", "las", "góra", "morze", "księżyc",
-        "słońce", "gwiazda", "kwiat", "drzewo", "ptak", "ryba", "kot", "pies",
-        "miał", "mówić", "widzieć", "powiedzieć", "robić", "wziąć", "dać",
-        "iść", "stać", "siedzieć", "czuć", "myśleć", "znać", "wracać",
-        "nowe", "stare", "duże", "małe", "dobre", "złe", "wielkie", "długie",
-        "pierwsze", "drugie", "całe", "własne", "ludzkie", "inne", "same",
-        "często", "zawsze", "nigdy", "wszędzie", "gdzieś", "kiedyś", "czegoś",
-        "domu", "czasu", "dnia", "nocy", "życia", "świata", "ręki", "głowy",
-        "oczu", "słów", "drogi", "serca", "pracy", "wody", "ziemi", "ludzi",
-        "chwili", "myśli", "twarzy", "nieba", "słońca", "gwiazd", "kwiatów",
-    ]},
-    # Tier 3 — umiarkowanie częste (~80 słów)
-    **{w: 0.35 for w in [
-        "przyczyna", "przyczyny", "przyczynie", "przyczynę",
-        "zdarzać", "zdarza", "zdarzył", "zdarzyła", "zdarzyć", "zdarzę",
-        "słoneczna", "słoneczny", "słoneczne", "słonecznej",
-        "prawa", "prawem", "prawny", "prawo", "prawem", "prawda", "prawdy",
-        "wróbel", "wróble", "wróbli", "wróblom",
-        "drzewo", "drzewa", "drzewem", "drzew",
-        "morze", "morza", "morzem", "mórz",
-        "góra", "góry", "górze", "gór",
-        "rzeka", "rzeki", "rzece", "rzek",
-        "kamień", "kamienia", "kamieniu", "kamieni",
-        "ogień", "ognia", "ogniu", "ogniem",
-        "powietrze", "powietrza", "powietrzem",
-        "cisza", "ciszy", "ciszą", "ciszę",
-        "radość", "radości", "radością",
-        "smutek", "smutku", "smutkiem",
-        "miłość", "miłości", "miłością",
-        "wieczór", "wieczoru", "wieczorem",
-        "ranek", "ranka", "rankiem",
-        "wiatr", "wiatru", "wiatrem",
-        "deszcz", "deszczu", "deszczem",
-        "śnieg", "śniegu", "śniegiem",
-    ]},
-}
-
-
-def _freq_score(word: str) -> float:
-    """Zwraca znormalizowaną częstość słowa [0, 1]. Default 0.05 dla słów spoza listy."""
-    return _WORD_FREQ.get(word.lower(), 0.05)
-
-
 #--- Autokorekta------
 def DictCorrect(
     text: str,
-    confidence: float = 100.0,
-    threshold: float = 0.55,
-    top_k: int = 30,
-    letter_vectors: list | None = None,
+    threshold: float = 0.8,
 ) -> str:
     """
-    Pipeline autokorekty HTR:
-      embedding → cosine similarity → TOP-5 → reranking → wybór najlepszego.
-
-    Etapy rerankingu (w kolejności priorytetu):
-      1. _score_candidate_with_vectors — używa wektorów prawdopodobieństwa
-         modelu per litera (jeśli letter_vectors dostarczone i długości zgodne)
-      2. _rerank_score — embedding + SequenceMatcher + długość (fallback)
-
-    confidence (0-100): pewność modelu HTR.
-    letter_vectors: lista (litera, np.ndarray) z predict_letter() — opcjonalna.
+    Szuka najbardziej podobnego słowa w słowniku.
+    
+    Jeśli podobieństwo >= threshold:
+        zwraca słowo ze słownika
+    W przeciwnym razie:
+        zwraca oryginalny tekst
     """
+    dictionary = load_dictionary()
     text = text.strip()
+
     if not text:
         return text
 
-    # Jeśli słowo jest już w słowniku — nie ma co korygować
-    words_check, _ = _get_dict_embeddings()
-    if text.lower() in {w.lower() for w in words_check}:
-        return text
+    best_match = None
+    best_score = 0.0
 
-    # 1. Embedding słowa wejściowego (HTR output)
-    query_vec = _word_embedding(text)
+    text_lower = text.lower()
 
-    # 2. Porównanie ze słownikiem przez cosine similarity
-    words, dict_matrix = _get_dict_embeddings()
-    similarities = dict_matrix @ query_vec  # (N,) — szybki iloczyn macierzowy
+    for word in dictionary:
+        score = SequenceMatcher(
+            None,
+            text_lower,
+            word.lower()
+        ).ratio()
 
-    # 3. TOP-K kandydatów według embeddingu
-    k = min(top_k, len(words))
-    top_idx = np.argpartition(similarities, -k)[-k:]
-    top_idx = top_idx[np.argsort(similarities[top_idx])[::-1]]
-    top_candidates = [(words[i], float(similarities[i])) for i in top_idx]
+        if score > best_score:
+            best_score = score
+            best_match = word
 
-    # 4. Reranking: jeśli mamy letter_vectors — używamy wektorów modelu
-    #    W przeciwnym razie fallback do SequenceMatcher + embedding
-    use_vectors = bool(letter_vectors)
+    if best_score >= threshold:
+        return best_match
 
-    def _combined_score(word: str, embed_sim: float) -> float:
-        freq = _freq_score(word)
-        if use_vectors:
-            vec_score = _score_candidate_with_vectors(word, letter_vectors)
-            if vec_score > -999.0:
-                vec_norm = math.exp(vec_score)
-                return 0.46 * vec_norm + 0.27 * embed_sim + 0.18 * _rerank_score(word, text, embed_sim) + 0.09 * freq
-        return _rerank_score(word, text, embed_sim) + 0.09 * freq
-
-    reranked = sorted(
-        top_candidates,
-        key=lambda x: _combined_score(x[0], x[1]),
-        reverse=True,
-    )
-
-    # 5. Wybór najlepszego słowa z uwzględnieniem confidence modelu HTR
-    conf_factor = confidence / 100.0
-    effective_threshold = threshold + (0.90 - threshold) * conf_factor
-
-    best_word, best_embed_sim = reranked[0]
-    best_score = _combined_score(best_word, best_embed_sim)
-
-    if best_score >= effective_threshold:
-        if text and text[0].isupper():
-            best_word = best_word[0].upper() + best_word[1:]
-        return best_word
     return text
+
+
+def save_predictions_to_boxes_jsonl(folder_path, results, info=None):
+    """Aktualizuje boxes.jsonl z predykcjami OCR."""
+    if info is None:
+        info = print
+    
+    jsonl_path = os.path.join(folder_path, "boxes.jsonl")
+    if not os.path.exists(jsonl_path):
+        info(f"Nie znaleziono {jsonl_path}")
+        return
+    
+    entries = []
+    with open(jsonl_path, "r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            entries.append(json.loads(line))
+    
+    pred_idx = 0
+    for entry in entries:
+        if pred_idx < len(results):
+            r = results[pred_idx]
+            pred_idx += 1
+            
+            if "error" not in r:
+                entry["prediction"] = r.get("text", "")
+                entry["confidence"] = r.get("confidence", 0.0)
+            else:
+                entry["prediction"] = f"ERROR: {r['error']}"
+                entry["confidence"] = 0.0
+    
+    with open(jsonl_path, "w", encoding="utf-8") as f:
+        for entry in entries:
+            f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    
+    info(f"Zapisano predykcje do: {jsonl_path}")

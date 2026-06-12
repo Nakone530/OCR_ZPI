@@ -1,3 +1,0 @@
-epoch: 60
-ratio: 0.6
-model_version: v5.2
